@@ -1,0 +1,23 @@
+{
+  "name": "gcloud-launcher",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neo-technology/gcloud-launcher.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/neo-technology/gcloud-launcher/issues"
+  },
+  "homepage": "https://github.com/neo-technology/gcloud-launcher#readme",
+  "dependencies": {
+    "bluebird": "^3.5.1",
+    "neo4j-driver": "^1.5.3"
+  }
+}

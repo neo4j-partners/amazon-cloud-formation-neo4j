@@ -15,7 +15,7 @@ export EXTERNAL_IP_ADDR=$(curl -s -H "Metadata-Flavor: Google" \
 #      valid_lft forever preferred_lft forever
 # So we're pulling just the 10.138.0.4 part.
 
-export IP_ADDR=$(ip addr | grep brd | grep eth0 | cut -d ' ' -f 8)
+export INTERNAL_IP_ADDR=$(ip addr | grep brd | grep eth0 | cut -d ' ' -f 8)
 
 # Run substitutions to make sure we have the right address.
 envsubst < /tmp/neo4j.template > /tmp/neo4j.conf

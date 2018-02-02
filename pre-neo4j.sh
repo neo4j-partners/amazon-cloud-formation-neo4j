@@ -23,6 +23,3 @@ envsubst < /tmp/neo4j.template > /tmp/neo4j.conf
 echo "Setting up configuration"
 sudo cp /tmp/neo4j.conf /etc/neo4j/neo4j.conf
 
-echo "Restarting neo4j"
-sudo service neo4j restart
-echo "Done"

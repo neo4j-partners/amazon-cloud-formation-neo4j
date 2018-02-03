@@ -4,6 +4,9 @@ This is a default GCP Debian 9 based image, with the neo4j enterprise
 package installed.  To make configuration of CC easy, a number of shell
 add-ons have been installed.
 
+A CC is deployed by creating 3 instances of the same VM, each with identical
+configuration.  See the `deployment-manager-template` directory.
+
 # Google Image Metadata
 
 Google deploy manager jinja templates allow us to configure key/values on the image.  This metadata in turn can be fetched inside of the VM from a metadata server.

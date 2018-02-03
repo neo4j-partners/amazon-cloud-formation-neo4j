@@ -1,8 +1,17 @@
 #!/bin/bash
-
+#
+# Google Compute Metadata API Docs:
+# https://cloud.google.com/compute/docs/storing-retrieving-metadata
+#
 # Get our external IP from the google metadata catalog.
+
+export INSTANCE_API=http://metadata.google.internal/computeMetadata/v1/instance
+
 export EXTERNAL_IP_ADDR=$(curl -s -H "Metadata-Flavor: Google" \
-   http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip)
+   $INSTANCE_API/network-interfaces/0/access-configs/0/external-ip)
+
+export INTERNAL_HOSTNAME=$(curl -s -H "Metadata-Flavor: Google" \
+   $INSTANCE_API/hostname) 
 
 # Google VMs don't have ifconfig.
 # Output of ip addr looks like this:

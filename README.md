@@ -34,3 +34,22 @@ Normally, the command for the neo4j service is `neo4j console`.  That has been p
 Make sure also that `/usr/share/neo4j/conf/neo4j.conf` is a symlink to `/etc/neo4j/neo4j.conf`
 
 So the system service profile (`systemctl edit --full neo4j.service`) instead calls `pre-neo4j.sh`.   This part is critical to be maintained between service maintenance and package upgrades.
+
+# Limitations and TODO
+
+## Network Locality
+
+Currently, all node instances must be deployed in the same subnet, same zone/region on GCP.
+This is because they find each other by local and GCP internal DNS name resolution. This can
+be overcome if you set up separate DNS or static IP addresses for new nodes, and then ensure
+that the `causal_clustering_initial_discovery_members` metadata setting contains the right hosts.
+
+## Cluster Size
+
+The deployment manager templates are going to be wired to deploy 3 nodes.  Because things are 
+configurable from the outside though, it should be straightforward to deploy any size or topology,
+because you can pass dbms.MODE, expected cluster size, initial cluster members, and so on in from
+the outside with metadata.
+
+Yet uncertain, whether google provides tools to build GUIs to solicit these parameters and then
+use those in the template.

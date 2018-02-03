@@ -1,0 +1,6 @@
+imports:
+- path: solution-name.jinja
+
+resources:
+- name: solution-name
+  type: solution-name.jinja

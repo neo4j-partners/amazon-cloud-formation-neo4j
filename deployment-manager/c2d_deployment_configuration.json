@@ -1,0 +1,7 @@
+{
+  "defaultDeploymentType": "SINGLE_VM",
+  "imageName": "neo4j-cc-node-v3",
+  "projectId": "launcher-development-191917",
+  "templateName": "nonexistent_template",
+  "useSolutionPackage": true
+}

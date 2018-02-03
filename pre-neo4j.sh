@@ -8,6 +8,52 @@ echo "pre-neo4j.sh: Fetching GCP instance metadata"
 
 export INSTANCE_API=http://metadata.google.internal/computeMetadata/v1/instance
 
+# Settings and defaults
+# Bash associative array docs: https://www.artificialworlds.net/blog/2012/10/17/bash-associative-array-examples/
+# Idea here is to permit customization of neo4j.conf attributes via instance metadata registered with
+# google.
+declare -A NEO4J_SETTINGS
+NEO4J_SETTINGS[dbms_connector_https_enabled]=true
+NEO4J_SETTINGS[dbms_connector_http_enabled]=true
+NEO4J_SETTINGS[dbms_connector_bolt_enabled]=true
+NEO4J_SETTINGS[dbms_backup_enabled]=true
+NEO4J_SETTINGS[causal_clustering_initial_discovery_members]=node1:5000,node2:5000,node3:5000
+NEO4J_SETTINGS[causal_clustering_expected_core_cluster_size]=3
+NEO4J_SETTINGS[dbms_connectors_default_listen_address]=0.0.0.0
+NEO4J_SETTINGS[dbms_mode]=CORE
+NEO4J_SETTINGS[causal_clustering_discovery_listen_address]=0.0.0.0:5000
+
+# Get a google metadata key, returning a default value
+# if it is not defined
+getMetadata() {
+   # Metadata key: $1
+   # Default value: $2
+   # Return: modify $METADATA_REQUEST
+   # echo "Looking for key $1 with default value $2"
+   published=$(curl -s -S -f -H "Metadata-Flavor: Google" \
+      "$INSTANCE_API/attributes/$1" 2>/dev/null)
+   # echo "Actual value of $1 was '$published'"
+   if [ -z "$published" ]; then
+      METADATA_REQUEST=$2
+   else
+      METADATA_REQUEST=$published
+   fi 
+   # echo "Returning value $METADATA_REQUEST"
+}
+
+# For each config item, set an env var to the appropriate
+# metadata value or default value.  This sets us up for envsubst
+for setting in "${!NEO4J_SETTINGS[@]}" ; do
+   # echo "SETTING " $setting " DEFAULT " ${NEO4J_SETTINGS[$setting]};
+   getMetadata $setting ${NEO4J_SETTINGS[$setting]}
+   echo "Setting $setting to $METADATA_REQUEST"
+   echo ""
+
+   # Set the variable named setting to the result.
+   # See: https://stackoverflow.com/questions/9714902/how-to-use-a-variables-value-as-another-variables-name-in-bash
+   eval export $setting=$METADATA_REQUEST
+done
+
 export EXTERNAL_IP_ADDR=$(curl -s -H "Metadata-Flavor: Google" \
    $INSTANCE_API/network-interfaces/0/access-configs/0/external-ip)
 
@@ -17,16 +63,6 @@ export INTERNAL_HOSTNAME=$(curl -s -H "Metadata-Flavor: Google" \
    $INSTANCE_API/hostname) 
 
 echo "pre-neo4j.sh Internal hostname $INTERNAL_HOSTNAME"
-
-# Fetch cluster members metadata.  If this isn't defined, it will return HTML
-# error.  Grep for the expected port to make sure the var is empty if the metadata
-# isn't defined.
-export MEMBERS=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-members | grep :5000)
-
-# Ensure cluster members are defined no matter what, with a reasonable default.
-export CLUSTER_MEMBERS=${MEMBERS:-neo4j1:5000,neo4j2:5000,neo4j3:5000}
-
-echo "pre-neo4j.sh: configured members $CLUSTER_MEMBERS"
 
 # Google VMs don't have ifconfig.
 # Output of ip addr looks like this:
@@ -38,13 +74,15 @@ echo "pre-neo4j.sh: configured members $CLUSTER_MEMBERS"
 #   inet6 fe80::4001:aff:fe8a:4/64 scope link 
 #      valid_lft forever preferred_lft forever
 # So we're pulling just the 10.138.0.4 part.
-
 export INTERNAL_IP_ADDR=$(ip addr | grep brd | grep eth0 | cut -d ' ' -f 8)
 
 echo "pre-neo4j.sh internal IP $INTERNAL_IP_ADDR"
 
-echo "pre-neo4j.sh: setting up configuration"
-# Run substitutions to make sure we have the right address.
+echo "pre-neo4j.sh environment for configuration setup"
+env
+
+# These substitutions guarantee that the declared google metadata
+# impacts what the server sees on startup.
 envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
 
 echo "pre-neo4j.sh: Starting neo4j console..."

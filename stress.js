@@ -6,12 +6,12 @@ const Promise = require('bluebird');
 
 const concurrency = { concurrency: 100 };
 const ips = [
- '35.199.177.201',
- '35.203.178.57',
- '35.227.186.48',
+  '35.196.168.249',
+  '35.196.95.129',
+  '35.196.54.155',
 ];
 
-const url = 'bolt+routing://' + ips[1] + ':7687';
+const url = 'bolt+routing://' + ips[0] + ':7687';
 console.log('Connecting to ', url);
 
 const driver = neo4j.driver(url,

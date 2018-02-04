@@ -2,7 +2,7 @@
 #
 # Install local working copy of the neo4j template to the VM.
 #
-for machine in 'cc-core-follower' ; do
+for machine in 'n1' 'n2' 'n3' ; do
   echo "Installing to " $machine
   gcloud compute scp README.md $machine:/tmp/README.md
   gcloud compute ssh $machine --command="sudo cp /tmp/README.md /etc/neo4j/README.md"

@@ -7,7 +7,14 @@ add-ons have been installed.
 A CC is deployed by creating 3 instances of the same VM, each with identical
 configuration.  See the `deployment-manager-template` directory.
 
-# Google Image Metadata
+# Google Image
+
+## Source
+
+Look for the `neo4j-cc-node-v*` images in the family `neo4j-cc` within
+the development project.
+
+## Metadata
 
 Google deploy manager jinja templates allow us to configure key/values on the image.  This metadata in turn can be fetched inside of the VM from a metadata server.
 

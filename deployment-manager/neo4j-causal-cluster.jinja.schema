@@ -78,17 +78,27 @@ outputs:
     type: string
   password:
     type: string
-  vmId:
+  vm1Id:
     type: string
-  vmInternalIP:
+  vm1URL:
     type: string
-  vmExternalIP:
+  vm1Name:
     type: string
-  vmName:
+  vm1SelfLink:
     type: string
-  vmSelfLink1:
+  vm2Id:
     type: string
-  vmSelfLink2:
+  vm2URL:
     type: string
-  vmSelfLink3:
+  vm2Name:
+    type: string
+  vm2SelfLink:
+    type: string
+  vm3Id:
+    type: string
+  vm3URL:
+    type: string
+  vm3Name:
+    type: string
+  vm3SelfLink:
     type: string

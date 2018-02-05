@@ -89,17 +89,27 @@ outputs:
     value: neo4j
   - name: password
     value: $(ref.generated-password.password)
-  - name: vmId
+  - name: vm1Id
     value: $(ref.{{ instanceName }}-1.id)
-  - name: vmInternalIP
-    value: "not yet specified"
-  - name: vmExternalIP
-    value: "not yet specified"
-  - name: vmName
+  - name: vm1URL
+    value: https://$(ref.{{ instanceName }}-1.networkInterfaces[0].accessConfigs[0].natIP):7473/
+  - name: vm1Name
     value: {{ instanceName }}-1
-  - name: vmSelfLink1
+  - name: vm1SelfLink
     value: $(ref.{{ instanceName }}-1.selfLink)
-  - name: vmSelfLink2
+  - name: vm2Id
+    value: $(ref.{{ instanceName }}-2.id)
+  - name: vm2URL
+    value: https://$(ref.{{ instanceName }}-2.networkInterfaces[0].accessConfigs[0].natIP):7473/
+  - name: vm2Name
+    value: {{ instanceName }}-2
+  - name: vm2SelfLink
     value: $(ref.{{ instanceName }}-2.selfLink)
-  - name: vmSelfLink3
+  - name: vm3Id
+    value: $(ref.{{ instanceName }}-3.id)
+  - name: vm3URL
+    value: https://$(ref.{{ instanceName }}-3.networkInterfaces[0].accessConfigs[0].natIP):7473/
+  - name: vm3Name
+    value: {{ instanceName }}-3
+  - name: vm3SelfLink
     value: $(ref.{{ instanceName }}-3.selfLink)

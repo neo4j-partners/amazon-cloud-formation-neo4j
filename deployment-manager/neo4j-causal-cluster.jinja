@@ -1,0 +1,110 @@
+{% import "path_utils.jinja" as path_utils with context %}
+
+{% set project = env["project"] %}
+{% set deployment = env["deployment"] %}
+{% set name = "%s-vm-tmpl" % env["name"] %}
+{% set instanceName = "%s-vm" % deployment %}
+{% set zone = properties["zone"] %}
+{% set machineType = properties["machineType"] %}
+{% set network = path_utils.networkPath(properties["network"]) %}
+{% set subnetwork = properties["subnetwork"] %}
+{% set bootDiskType = properties["bootDiskType"] %}
+{% set bootDiskSizeGb = properties["bootDiskSizeGb"] %}
+{% set hasExternalIP = properties["externalIP"] != "None" %}
+{# Software status only works if the VM has an external IP. #}
+{% set enableStatusWaiter = hasExternalIP %}
+
+resources:
+  - name: {{ name }}-1
+    type: vm_instance.py
+    properties:
+      instanceName: {{ instanceName }}
+      sourceImage: https://www.googleapis.com/compute/v1/projects/launcher-development-191917/global/images/neo4j-cc-node-v4
+      zone: {{ zone }}
+      machineType: {{ machineType }}
+      network: {{ network }}
+      {% if subnetwork %}
+      subnetwork: {{ subnetwork }}
+      {% endif %}
+      bootDiskType: {{ bootDiskType }}
+      bootDiskSizeGb: {{ bootDiskSizeGb }}
+      hasExternalIP: {{ hasExternalIP }}
+      serviceAccounts:
+        - email: default
+          scopes:
+            - 'https://www.googleapis.com/auth/cloud.useraccounts.readonly'
+            - 'https://www.googleapis.com/auth/devstorage.read_only'
+            - 'https://www.googleapis.com/auth/logging.write'
+            - 'https://www.googleapis.com/auth/monitoring.write'
+  - name: {{ name }}-2
+    type: vm_instance.py
+    properties:
+      instanceName: {{ instanceName }}
+      sourceImage: https://www.googleapis.com/compute/v1/projects/launcher-development-191917/global/images/neo4j-cc-node-v4
+      zone: {{ zone }}
+      machineType: {{ machineType }}
+      network: {{ network }}
+      {% if subnetwork %}
+      subnetwork: {{ subnetwork }}
+      {% endif %}
+      bootDiskType: {{ bootDiskType }}
+      bootDiskSizeGb: {{ bootDiskSizeGb }}
+      hasExternalIP: {{ hasExternalIP }}
+      serviceAccounts:
+        - email: default
+          scopes:
+            - 'https://www.googleapis.com/auth/cloud.useraccounts.readonly'
+            - 'https://www.googleapis.com/auth/devstorage.read_only'
+            - 'https://www.googleapis.com/auth/logging.write'
+            - 'https://www.googleapis.com/auth/monitoring.write'
+  - name: {{ name }}-3
+    type: vm_instance.py
+    properties:
+      instanceName: {{ instanceName }}
+      sourceImage: https://www.googleapis.com/compute/v1/projects/launcher-development-191917/global/images/neo4j-cc-node-v4
+      zone: {{ zone }}
+      machineType: {{ machineType }}
+      network: {{ network }}
+      {% if subnetwork %}
+      subnetwork: {{ subnetwork }}
+      {% endif %}
+      bootDiskType: {{ bootDiskType }}
+      bootDiskSizeGb: {{ bootDiskSizeGb }}
+      hasExternalIP: {{ hasExternalIP }}
+      serviceAccounts:
+        - email: default
+          scopes:
+            - 'https://www.googleapis.com/auth/cloud.useraccounts.readonly'
+            - 'https://www.googleapis.com/auth/devstorage.read_only'
+            - 'https://www.googleapis.com/auth/logging.write'
+            - 'https://www.googleapis.com/auth/monitoring.write'
+
+outputs:
+  - name: deployment
+    value: {{ deployment }}
+  - name: project
+    value: {{ project }}
+  - name: vmId1
+    value: $(ref.{{ instanceName }}-1.id)
+  - name: vmInternalIP1
+    value: $(ref.{{ name }}-1.internalIP)
+  - name: vmName1
+    value: {{ instanceName }}-1
+  - name: vmSelfLink1
+    value: $(ref.{{ instanceName }}-1.selfLink)
+  - name: vmId2
+    value: $(ref.{{ instanceName }}-2.id)
+  - name: vmInternalIP2
+    value: $(ref.{{ name }}-2.internalIP)
+  - name: vmName2
+    value: {{ instanceName }}-2
+  - name: vmSelfLink2
+    value: $(ref.{{ instanceName }}-2.selfLink)
+  - name: vmId3
+    value: $(ref.{{ instanceName }}-3.id)
+  - name: vmInternalIP3
+    value: $(ref.{{ name }}-3.internalIP)
+  - name: vmName3
+    value: {{ instanceName }}-3
+  - name: vmSelfLink3
+    value: $(ref.{{ instanceName }}-3.selfLink)

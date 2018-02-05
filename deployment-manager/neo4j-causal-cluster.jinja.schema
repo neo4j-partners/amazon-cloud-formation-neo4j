@@ -72,11 +72,27 @@ outputs:
     type: string
   project:
     type: string
-  vmId:
+  vmId1:
     type: string
-  vmInternalIP:
+  vmInternalIP1:
     type: string
-  vmName:
+  vmName1:
     type: string
-  vmSelfLink:
+  vmSelfLink1:
+    type: string
+  vmId2:
+    type: string
+  vmInternalIP2:
+    type: string
+  vmName2:
+    type: string
+  vmSelfLink2:
+    type: string
+  vmId3:
+    type: string
+  vmInternalIP3:
+    type: string
+  vmName3:
+    type: string
+  vmSelfLink3:
     type: string

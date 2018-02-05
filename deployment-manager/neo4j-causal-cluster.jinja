@@ -17,9 +17,15 @@
 {% set enableStatusWaiter = hasExternalIP %}
 
 resources:
+  - name: generated-password
+    type: password.py
+    properties:
+      length: 16
+      includeSymbols: false
   - name: {{ name }}
     type: vm_multiple_instances.py
     properties:
+      password: $(ref.generated-password.password)
       tags:
         items:
         - neo4j
@@ -53,12 +59,9 @@ resources:
                 # Loop waiting for neo4j service to start.
                 if curl -s -I http://localhost:7474 | grep "200 OK"; then
                     echo "Neo4j is up; changing default password" >>/tmp/vmdeploy.txt 2>&1 
-                    # Tmp testing.
-                    adminPassword=testdrive
 
-                    # Change default password.
                     curl -v -H "Content-Type: application/json" \
-                            -XPOST -d '{"password":"foobar"}' \
+                            -XPOST -d '{"password":"$(ref.generated-password.password)"}' \
                             -u neo4j:admin \
                             http://localhost:7474/user/neo4j/password \
                             >>/tmp/vmdeploy.txt 2>&1 
@@ -82,6 +85,10 @@ outputs:
     value: {{ deployment }}
   - name: project
     value: {{ project }}
+  - name: username
+    value: neo4j
+  - name: password
+    value: $(ref.generated-password.password)
   - name: vmId
     value: $(ref.{{ instanceName }}-1.id)
   - name: vmInternalIP

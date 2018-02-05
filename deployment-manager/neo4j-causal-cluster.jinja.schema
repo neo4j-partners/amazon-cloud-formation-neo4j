@@ -74,6 +74,10 @@ outputs:
     type: string
   project:
     type: string
+  username:
+    type: string
+  password:
+    type: string
   vmId:
     type: string
   vmInternalIP:

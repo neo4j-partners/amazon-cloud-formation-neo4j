@@ -4,8 +4,15 @@ This is a default GCP Debian 9 based image, with the neo4j enterprise
 package installed.  To make configuration of CC easy, a number of shell
 add-ons have been installed.
 
+# Quickstart / Deploy Instructions
+
 A CC is deployed by creating 3 instances of the same VM, each with identical
-configuration.  See the `deployment-manager-template` directory.
+configuration. 
+
+```
+gcloud deployment-manager deployments create my-cluster \
+    --template deployment-manager/neo4j-causal-cluster.jinja
+```
 
 # Google Image
 

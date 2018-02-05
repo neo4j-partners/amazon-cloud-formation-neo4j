@@ -21,8 +21,8 @@ while true; do
 
         # Change default password.
         curl -v -H "Content-Type: application/json" \
-                -XPOST -d '{"password":"admin"}' \
-                -u neo4j:neo4j \
+                -XPOST -d '{"password":"foobar"}' \
+                -u neo4j:admin \
                 http://localhost:7474/user/neo4j/password
         echo "Done"
         break

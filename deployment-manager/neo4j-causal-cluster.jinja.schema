@@ -9,6 +9,8 @@ imports:
     path: common/path_utils.jinja
   - name: vm_instance.py
     path: common/vm_instance.py
+  - name: vm_multiple_instances.py
+    path: common/vm_multiple_instances.py
 
 info:
   version: '1.0'
@@ -24,12 +26,12 @@ required:
 properties:
   zone:
     type: string
-    default: us-central1-f
+    default: us-east1-b
     x-googleProperty:
       type: GCE_ZONE
   machineType:
     type: string
-    default: f1-micro
+    default: n1-standard-4
     x-googleProperty:
       type: GCE_MACHINE_TYPE
       zoneProperty: zone
@@ -72,27 +74,17 @@ outputs:
     type: string
   project:
     type: string
-  vmId1:
+  vmId:
     type: string
-  vmInternalIP1:
+  vmInternalIP:
     type: string
-  vmName1:
+  vmExternalIP:
+    type: string
+  vmName:
     type: string
   vmSelfLink1:
     type: string
-  vmId2:
-    type: string
-  vmInternalIP2:
-    type: string
-  vmName2:
-    type: string
   vmSelfLink2:
-    type: string
-  vmId3:
-    type: string
-  vmInternalIP3:
-    type: string
-  vmName3:
     type: string
   vmSelfLink3:
     type: string

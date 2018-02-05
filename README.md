@@ -10,6 +10,8 @@ A CC is deployed by creating 3 instances of the same VM, each with identical
 configuration. 
 
 ```
+gcloud config set project my-project-id
+
 gcloud deployment-manager deployments create my-cluster \
     --template deployment-manager/neo4j-causal-cluster.jinja
 ```

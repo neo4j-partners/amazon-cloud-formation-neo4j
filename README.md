@@ -21,7 +21,9 @@ gcloud deployment-manager deployments create my-cluster \
 ## Source
 
 Look for the `neo4j-cc-node-v*` images in the family `neo4j-cc` within
-the development project.
+the development project.  **Images must be in the neo4j-cc image family**.  This property means
+that when we do maintenance, we just publish a new image to that family, and the deployment
+infrastructure keeps everything else up to date.
 
 ## Metadata
 

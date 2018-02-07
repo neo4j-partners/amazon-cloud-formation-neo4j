@@ -1,7 +1,5 @@
 {% import "path_utils.jinja" as path_utils with context %}
 
-{% set node_image = "https://www.googleapis.com/compute/v1/projects/launcher-development-191917/global/images/neo4j-cc-node-v4" %}
-
 {% set project = env["project"] %}
 {% set deployment = env["deployment"] %}
 {% set name = "%s-vm-tmpl" % env["name"] %}
@@ -15,6 +13,12 @@
 {% set hasExternalIP = properties["externalIP"] != "None" %}
 {# Software status only works if the VM has an external IP. #}
 {% set enableStatusWaiter = hasExternalIP %}
+
+{# 
+ # Which image to use for all 3 nodes of the cluster? 
+ # Do this by image to ensure the latest is always taken.
+ #}
+{% set imageFamily = "neo4j-cc" %}
 
 resources:
   - name: generated-password
@@ -32,7 +36,7 @@ resources:
         - neo4j-cc
       instanceName: {{ instanceName }}
       numberOfVMReplicas: 3
-      sourceImage: {{ node_image }}
+      sourceImage: https://www.googleapis.com/compute/v1/projects/{{ env["project"] }}/global/images/family/{{ imageFamily }}
       zone: {{ zone }}
       machineType: {{ machineType }}
       network: {{ network }}
@@ -45,31 +49,33 @@ resources:
       {# SEE README.md IN THIS REPO -- This is where all neo4j CC config goes #}
       metadata:
         items:
+        - key: initial-password
+          value: $(ref.generated-password.password)
         - key: causal_clustering_initial_discovery_members
           value: {{instanceName}}-1:5000,{{instanceName}}-2:5000,{{instanceName}}-3:5000
         - key: startup-script
           value: |
-            echo "Post-startup script " `whoami` >> /tmp/vmdeploy.txt
-            /bin/systemctl stop neo4j.service >>/tmp/vmdeploy.txt 2>&1 
-            /usr/bin/neo4j-admin unbind >>/tmp/vmdeploy.txt 2>&1 
-            /bin/rm -rf /var/lib/neo4j/data/databases/graph.db/ >>/tmp/vmdeploy.txt 2>&1 
-            /bin/systemctl start neo4j.service >>/tmp/vmdeploy.txt 2>&1 
+            echo "Post-startup script " `whoami` 2>&1 | tee -a /tmp/vmdeploy.txt
+            /bin/systemctl stop neo4j.service >>/tmp/vmdeploy.txt 2>&1 | tee -a /tmp/vmdeploy.txt
+            /usr/bin/neo4j-admin unbind >>/tmp/vmdeploy.txt 2>&1 | tee -a /tmp/vmdeploy.txt
+            /bin/rm -rf /var/lib/neo4j/data/databases/graph.db/ 2>&1 | tee -a /tmp/vmdeploy.txt
+            /bin/systemctl start neo4j.service 2>&1 | tee -a /tmp/vmdeploy.txt
 
             while true; do
                 # Loop waiting for neo4j service to start.
                 if curl -s -I http://localhost:7474 | grep "200 OK"; then
-                    echo "Neo4j is up; changing default password" >>/tmp/vmdeploy.txt 2>&1 
+                    echo "Neo4j is up; changing default password" 2>&1 | tee -a /tmp/vmdeploy.txt
 
                     curl -v -H "Content-Type: application/json" \
                             -XPOST -d '{"password":"$(ref.generated-password.password)"}' \
                             -u neo4j:admin \
                             http://localhost:7474/user/neo4j/password \
-                            >>/tmp/vmdeploy.txt 2>&1 
-                    echo "Done" >>/tmp/vmdeploy.txt 2>&1 
+                            2>&1 | tee -a /tmp/vmdeploy.txt
+                    echo "Done with post-startup script" 2>&1 | tee -a /tmp/vmdeploy.txt
                     break
                 fi
 
-                echo "Waiting for neo4j to come up" >>/tmp/vmdeploy.txt 2>&1 
+                echo "Waiting for neo4j to come up" 2>&1 | tee -a /tmp/vmdeploy.txt
                 sleep 1
             done        
       serviceAccounts:

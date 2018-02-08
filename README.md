@@ -4,6 +4,14 @@ This is a default GCP Debian 9 based image, with the neo4j enterprise
 package installed.  To make configuration of CC easy, a number of shell
 add-ons have been installed.
 
+# GCloud API Requirements
+
+```
+gcloud services enable runtimeconfig.googleapis.com
+gcloud services enable compute.googleapis.com
+gcloud services enable deploymentmanager.googleapis.com
+```
+
 # Quickstart / Deploy Instructions
 
 A CC is deployed by creating 3 instances of the same VM, each with identical

@@ -39,6 +39,7 @@ SERVICE_ACCOUNTS = default.SERVICE_ACCOUNTS
 SRCIMAGE = default.SRCIMAGE
 TAGS = default.TAGS
 ZONE = default.ZONE
+SCOPES = default.SCOPES
 AUTODELETE_BOOTDISK = 'bootDiskAutodelete'
 STATIC_IP = 'staticIP'
 NAT_IP = 'natIP'
@@ -51,11 +52,14 @@ DEFAULT_MACHINETYPE = 'n1-standard-1'
 DEFAULT_NETWORK = 'default'
 DEFAULT_PROVIDE_BOOT = True
 DEFAULT_BOOTDISKSIZE = 10
-DEFAULT_AUTODELETE_BOOTDISK = False
+
+# Important for data preservation.
+DEFAULT_AUTODELETE_BOOTDISK = True
 DEFAULT_STATIC_IP = False
 DEFAULT_HAS_EXTERNAL_IP = True
 DEFAULT_DATADISKSIZE = 500
 DEFAULT_ZONE = 'us-central1-f'
+DEFAULT_SCOPES = ['https://www.googleapis.com/auth/cloudruntimeconfig']
 DEFAULT_PERSISTENT = 'PERSISTENT'
 DEFAULT_SERVICE_ACCOUNT = [{
     'email': 'default',
@@ -64,6 +68,7 @@ DEFAULT_SERVICE_ACCOUNT = [{
         'https://www.googleapis.com/auth/devstorage.read_only',
         'https://www.googleapis.com/auth/logging.write',
         'https://www.googleapis.com/auth/monitoring.write',
+        'https://www.googleapis.com/auth/cloudruntimeconfig',
     ]
 }]
 
@@ -122,6 +127,7 @@ def GenerateComputeVM(context, create_disks_separately=True):
   provide_boot = prop.setdefault(PROVIDE_BOOT, DEFAULT_PROVIDE_BOOT)
   tags = prop.setdefault(TAGS, dict([('items', [])]))
   zone = prop.setdefault(ZONE, DEFAULT_ZONE)
+  scopes = prop.setdefault(SCOPES, DEFAULT_SCOPES)
   has_external_ip = prop.get(HAS_EXTERNAL_IP, DEFAULT_HAS_EXTERNAL_IP)
   static_ip = prop.get(STATIC_IP, DEFAULT_STATIC_IP)
   nat_ip = prop.get(NAT_IP, None)
@@ -190,6 +196,7 @@ def GenerateComputeVM(context, create_disks_separately=True):
       'type': default.INSTANCE,
       'properties': {
           'zone': zone,
+          'scopes': scopes,
           'machineType': machine_type,
           'canIpForward': can_ip_fwd,
           'disks': disks,

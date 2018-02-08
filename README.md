@@ -16,6 +16,26 @@ gcloud deployment-manager deployments create my-cluster \
     --template deployment-manager/neo4j-causal-cluster.jinja
 ```
 
+# Removing a Deployment
+
+Removing the deployment autokills/deletes the underlying VMs.
+**But not their disks** since we've marked the disks to be persistent
+by default.
+
+Note the disk delete statement here is risky, make sure you don't have
+clashing named disks.  This is quick instruction only, take care when
+deleting disks.
+
+```
+# Kill/delete VMs.
+gcloud deployment-manager deployments delete my-cluster
+
+# Remove persistent disks.
+for disk in `gcloud compute disks list --filter="name:my-cluster-vm-*" --format="get(name)"` ; do 
+  gcloud compute disks delete "$disk" ; 
+done
+```
+
 # Google Image
 
 ## Source

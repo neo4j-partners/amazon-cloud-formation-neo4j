@@ -11,6 +11,8 @@ imports:
     path: common/vm_instance.py
   - name: vm_multiple_instances.py
     path: common/vm_multiple_instances.py
+  - name: waiter.jinja
+    path: waiter.jinja  
 
 info:
   version: '1.0'

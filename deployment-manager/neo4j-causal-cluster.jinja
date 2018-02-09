@@ -16,7 +16,12 @@
 {# 
  # Template configuration options specific to neo4j deploy 
  #}
-{% set clusterNodes = 3 %} {# Value must be >= 3 #}
+{% if env.has_key("clusterNodes") %}
+   {% set clusterNodes = env["clusterNodes"] %}
+{% else %}
+   {% set clusterNodes = 3 %} {# Value must be >= 3 #}
+{% endif %}
+
 {% set passwordLength = 16 %}
 {% set imageFamily = "neo4j-cc" %}
 

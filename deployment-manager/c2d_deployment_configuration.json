@@ -1,6 +1,6 @@
 {
-  "defaultDeploymentType": "SINGLE_VM",
-  "imageName": "neo4j-cc-node-v3",
+  "defaultDeploymentType": "MULTI_VM",
+  "imageName": "neo4j-cc-node-v4",
   "projectId": "launcher-development-191917",
   "templateName": "nonexistent_template",
   "useSolutionPackage": true

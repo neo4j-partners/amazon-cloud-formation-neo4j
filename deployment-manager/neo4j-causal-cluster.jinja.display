@@ -28,6 +28,16 @@ input:
   properties:
     - name: zone
       title: Zone
+    - name: clusterNodes
+      title: Number of Nodes in Cluster
+      section: CLUSTER_CONFIGURATION
+      enumLabels: 
+        '0': '3'
+        '1': '4'
+        '2': '5'
+        '3': '6'
+        '4': '7'
+        '5': '8'
     - name: machineType
       title: Machine type
     - name: bootDiskType
@@ -48,6 +58,9 @@ input:
       section: NETWORKING
       level: 1
   sections:
+    - name: CLUSTER_CONFIGURATION
+      title: Cluster Configuration
+      tooltip: Choose properties of your Neo4j Enterprise Causal Cluster
     - name: BOOT_DISK
       title: Boot Disk
       tooltip: Each instance requires a disk to boot from.
@@ -81,7 +94,7 @@ runtime:
       showIf: '{{ properties().externalIP == "Ephemeral" }}'
 
 annotations:
-  autogenSpecType: 'SINGLE_VM'
-  vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-development-191917/global/images/neo4j-cc-node-v3
+  autogenSpecType: 'MULTI_VM'
+  vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-development-191917/global/images/neo4j-cc-node-v4
 
 metadata_version: v1

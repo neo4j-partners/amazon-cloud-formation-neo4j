@@ -21,6 +21,7 @@ info:
 required:
   - zone
   - machineType
+  - clusterNodes
   - network
   - bootDiskType
   - bootDiskSizeGb
@@ -31,6 +32,16 @@ properties:
     default: us-east1-b
     x-googleProperty:
       type: GCE_ZONE
+  clusterNodes:
+    type: string
+    enum: 
+      - '0'
+      - '1'
+      - '2'
+      - '3'
+      - '4'
+      - '5'
+    default: '0'
   machineType:
     type: string
     default: n1-standard-4

@@ -78,8 +78,8 @@ resources:
             fi
 
             # gcloud components necessary to signal to waiter when VM setup complete.
-            gcloud components update -q 2>&1 | tee -a $LOGFILE
-            gcloud components install beta -q 2>&1 | tee -a $LOGFILE
+            sudo apt-get update 2>&1 | tee -a $LOGFILE
+            sudo apt-get --only-upgrade install google-cloud-sdk 2>&1 | tee -a $LOGFILE
 
             # Stop database, delete underlying data, remove cluster binding, restart.
             # Guarantees clean consistent startup state, first-time discovery, and a 

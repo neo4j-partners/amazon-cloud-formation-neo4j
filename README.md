@@ -24,6 +24,28 @@ gcloud deployment-manager deployments create my-cluster \
     --template deployment-manager/neo4j-causal-cluster.jinja
 ```
 
+# A Warning
+
+Google's launcher documentation isn't great in spots, and there are a bunch of small
+WTFs.  Our technical POC was Emily Bates <emilybates@google.com> who was super helpful,
+and can answer technical questions.
+
+# Important Deployment Files
+
+- `neo4j-causal-cluster.jinja` is the entrypoint for how a cluster gets deployed.
+- `neo4j-causal-cluster.jinja.display` contains instructions to Google's Launcher app on how to lay out the UI, what users can pick, etc.
+- `neo4j-causal-cluster.jinja.schema` contains the visual elements users get asked to provide, plus defines inputs/outputs for the entire deploy process.  This is also where you do things like specify options for how many nodes could be deployed, set a minimum machine type, etc.
+
+# Preparing a new Image (i.e. upgrading all of this)
+
+- Inside of the running image you're creating, make sure neo4j password is set to `admin`
+because the startup script in deployment manager expects this when changing to random
+strong password.
+- [Prepare the image like this](https://cloud.google.com/launcher/docs/partners/technical-components#create_the_base_solution_vm).
+- Update the image you want to use in several places: `c2d_deployment_configuration.json`, 
+and the main solution jinja template.   Google does not support "in place updates", so you
+cannot replace the existing VM without changing the deployment template.
+
 # Removing a Deployment
 
 Removing the deployment autokills/deletes the underlying VMs.
@@ -49,9 +71,8 @@ done
 ## Source
 
 Look for the `neo4j-cc-node-v*` images in the family `neo4j-cc` within
-the development project.  **Images must be in the neo4j-cc image family**.  This property means
-that when we do maintenance, we just publish a new image to that family, and the deployment
-infrastructure keeps everything else up to date.
+the development project.  In the public project, there are corresponding "live"
+images.
 
 ## Metadata
 

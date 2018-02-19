@@ -102,6 +102,7 @@ TAGS = 'tags'
 TYPE = 'type'
 VM_TEMPLATE = 'instanceTemplate'
 ZONE = 'zone'
+SCOPES = 'scopes'
 
 # Zone specific VM properties
 VM_ZONE_PROPERTIES = [DISKTYPE, MACHINETYPE, BOOTDISK]

@@ -1,0 +1,183 @@
+{% import "path_utils.jinja" as path_utils with context %}
+
+{% set project = env["project"] %}
+{% set deployment = env["deployment"] %}
+{% set name = "%s-multivm-tmpl" % env["name"] %}
+{% set zone = properties["zone"] %}
+{% set machineType = properties["machineType"] %}
+{% set network = path_utils.networkPath(properties["network"]) %}
+{% set subnetwork = properties["subnetwork"] %}
+{% set bootDiskType = properties["bootDiskType"] %}
+{% set bootDiskSizeGb = properties["bootDiskSizeGb"] %}
+{% set hasExternalIP = properties["externalIP"] != "None" %}
+{# Software status only works if the VM has an external IP. #}
+{% set enableStatusWaiter = hasExternalIP %}
+
+{# 
+ # Template configuration options specific to neo4j deploy 
+ # Param will come as a string, take care to use goofy jinja int filter,
+ # since jinja wants us to feel pain and doesn't expose python int(). :)
+ #}
+{% if properties.has_key("clusterNodes") %}
+   {% set clusterNodes = properties["clusterNodes"] | int %}
+{% else %}
+   {% set clusterNodes = 3 | int %} {# Value must be >= 3 #}
+{% endif %}
+
+{% set passwordLength = 16 %}
+
+{# Image must be hardcoded, and must be tied to launcher-public for correct perms.
+ # Remember to update in c2d_deployment_configuration.json too!
+ #}
+{% set vmImage = "https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-cc-3-3-3-v1" %}
+
+{# This is a prefix only. For n nodes, this template deploys
+ # {{instanceName}}-1, {{instanceName}}-2, ... n.
+ #}
+{% set instanceName = "%s-vm" % deployment %}
+
+resources:
+  - name: generated-password
+    type: password.py
+    properties:
+      length: {{ passwordLength }}
+      includeSymbols: false
+
+  - name: {{ name }}
+    type: vm_multiple_instances.py
+    properties:
+      password: $(ref.generated-password.password)
+      tags:
+        items:
+        - neo4j
+        - neo4j-cc
+      instanceName: {{ instanceName }}
+      numberOfVMReplicas: {{ clusterNodes }}
+      sourceImage: {{ vmImage }}
+      zone: {{ zone }}      
+      machineType: {{ machineType }}
+      network: {{ network }}
+      {% if subnetwork %}
+      subnetwork: {{ subnetwork }}
+      {% endif %}
+      bootDiskType: {{ bootDiskType }}
+      bootDiskSizeGb: {{ bootDiskSizeGb }}
+      hasExternalIP: {{ hasExternalIP }}
+      {# SEE README.md IN THIS REPO -- This is where all neo4j CC config goes #}
+      metadata:
+        items:
+        - key: initial-password
+          value: $(ref.generated-password.password)
+        - key: causal_clustering_initial_discovery_members
+          value: {% for i in range(1, clusterNodes+1) %}{{instanceName}}-{{i}}:5000{% if not loop.last %},{% endif %}{% endfor %}
+        - key: causal_clustering_expected_core_cluster_size
+          value: {{ clusterNodes }}
+        - key: startup-script
+          value: |
+            export LOGFILE=/root/vmdeploy-log.txt
+            date | tee -a $LOGFILE
+            echo "Post-startup script " `whoami` 2>&1 | tee -a $LOGFILE
+            
+            export UUID=$(cat /proc/sys/kernel/random/uuid)
+            if [ -z $UUID ]; then
+               export UUID=defaultuuid
+            fi
+
+            # gcloud components necessary to signal to waiter when VM setup complete.
+            sudo apt-get update 2>&1 | tee -a $LOGFILE
+            sudo apt-get --only-upgrade install google-cloud-sdk 2>&1 | tee -a $LOGFILE
+
+            # Stop database, delete underlying data, remove cluster binding, restart.
+            # Guarantees clean consistent startup state, first-time discovery, and a 
+            # unique store ID for UDC reporting.
+            /bin/systemctl stop neo4j.service 2>&1 | tee -a $LOGFILE
+            /usr/bin/neo4j-admin unbind 2>&1 | tee -a $LOGFILE
+            /bin/rm -rf /var/lib/neo4j/data/databases/graph.db/ 2>&1 | tee -a $LOGFILE
+            /bin/systemctl start neo4j.service 2>&1 | tee -a $LOGFILE
+
+            # Loop waiting for neo4j service to start.
+            while true; do
+                if curl -s -I http://localhost:7474 | grep "200 OK"; then
+                    echo "Neo4j is up; changing default password" 2>&1 | tee -a $LOGFILE
+
+                    curl -v -H "Content-Type: application/json" \
+                            -XPOST -d '{"password":"$(ref.generated-password.password)"}' \
+                            -u neo4j:admin \
+                            http://localhost:7474/user/neo4j/password \
+                            2>&1 | tee -a $LOGFILE
+                    echo "Password reset, signaling success" 2>&1 | tee -a $LOGFILE
+
+                    # Signal to waiter we're all set up.
+                    # Example: https://github.com/GoogleCloudPlatform/deploymentmanager-samples/tree/master/examples/v2/waiter
+                    # Service account must have scope: 'https://www.googleapis.com/auth/cloudruntimeconfig'
+                    # UUID here is important so multiple VM keys don't clash.
+                    gcloud beta runtime-config configs variables set \
+                      success/{{name}}-$UUID success \
+                      --config-name $(ref.cluster-waiter.configName) 2>&1 | tee -a $LOGFILE
+
+                    break
+                fi
+
+                echo "Waiting for neo4j to come up" 2>&1 | tee -a $LOGFILE
+                sleep 1
+            done
+
+            echo "VM setup complete." 2>&1 | tee -a $LOGFILE
+            date | tee -a $LOGFILE
+  
+      serviceAccounts:
+        - email: default
+          scopes:
+            - 'https://www.googleapis.com/auth/cloud.useraccounts.readonly'
+            - 'https://www.googleapis.com/auth/devstorage.read_only'
+            - 'https://www.googleapis.com/auth/logging.write'
+            - 'https://www.googleapis.com/auth/monitoring.write'
+            - 'https://www.googleapis.com/auth/cloudruntimeconfig'
+
+  {# 
+   # Wait on signaled success of VM deploys before returning.
+   # Each VM writes a runtime config var under a random UUID.  We 
+   # want to see <successCardinality> of these before signaling the
+   # deployment finished.  Clock on the timeout doesn't start until
+   # the first VM (instanceName) is up.
+   #}
+  - name: cluster-waiter
+    type: waiter.jinja
+    properties: 
+      instanceName: {{ instanceName }}-1
+      successCardinality: {{ clusterNodes }}
+
+
+outputs:
+  - name: deployment
+    value: {{ deployment }}
+  - name: project
+    value: {{ project }}
+  - name: username
+    value: neo4j
+  - name: password
+    value: $(ref.generated-password.password)
+  - name: vm1Id
+    value: $(ref.{{ instanceName }}-1.id)
+  - name: vm1URL
+    value: https://$(ref.{{ instanceName }}-1.networkInterfaces[0].accessConfigs[0].natIP):7473/
+  - name: vm1Name
+    value: {{ instanceName }}-1
+  - name: vm1SelfLink
+    value: $(ref.{{ instanceName }}-1.selfLink)
+  - name: vm2Id
+    value: $(ref.{{ instanceName }}-2.id)
+  - name: vm2URL
+    value: https://$(ref.{{ instanceName }}-2.networkInterfaces[0].accessConfigs[0].natIP):7473/
+  - name: vm2Name
+    value: {{ instanceName }}-2
+  - name: vm2SelfLink
+    value: $(ref.{{ instanceName }}-2.selfLink)
+  - name: vm3Id
+    value: $(ref.{{ instanceName }}-3.id)
+  - name: vm3URL
+    value: https://$(ref.{{ instanceName }}-3.networkInterfaces[0].accessConfigs[0].natIP):7473/
+  - name: vm3Name
+    value: {{ instanceName }}-3
+  - name: vm3SelfLink
+    value: $(ref.{{ instanceName }}-3.selfLink)

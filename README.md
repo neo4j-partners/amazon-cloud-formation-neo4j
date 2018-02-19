@@ -49,9 +49,9 @@ cannot replace the existing VM without changing the deployment template.
 Crucial step with partner tools to create new image:
 
 ```
-   $ python3 image_creator.py --project launcher-development-191917 \
+   $ python2.7 image_creator.py --project launcher-development-191917 \
       --disk my-cluster-vm-1 \
-      --name neo4j-cc-3-3-3-v1 \
+      --name neo4j-cc-3-3-3-vWHATEVER \
       --description "Neo4j Enterprise 3.3.3 Causal Cluster" \
       --destination-project launcher-public \
       --license launcher-public/neo4j-enterprise-causal-cluster

@@ -16,7 +16,7 @@ imports:
 
 info:
   version: '1.0'
-  title: Neo4j Enterprise Template
+  title: Neo4j Enterprise Causal Cluster Template
 
 required:
   - zone
@@ -35,13 +35,13 @@ properties:
   clusterNodes:
     type: string
     enum: 
-      - '0'
-      - '1'
-      - '2'
       - '3'
       - '4'
       - '5'
-    default: '0'
+      - '6'
+      - '7'
+      - '8'
+    default: '3'
   machineType:
     type: string
     default: n1-standard-4   

@@ -4,7 +4,19 @@ This is a default GCP Debian 9 based image, with the neo4j enterprise
 package installed.  To make configuration of CC easy, a number of shell
 add-ons have been installed.
 
+# A Warning
+
+Google's launcher documentation isn't great in spots, and there are a bunch of small
+WTFs.  Our technical POC was Emily Bates <emilybates@google.com> who was super helpful,
+and can answer technical questions.
+
+Read this entire README carefully, there is a lot of info on gotchas and specific instructions
+that you won't be able to find via google.
+
 # GCloud API Requirements
+
+Needed if you're trying to replicate in a different google project. If you're using
+the two provided google projects, you can skip this.
 
 ```
 gcloud services enable runtimeconfig.googleapis.com
@@ -24,11 +36,17 @@ gcloud deployment-manager deployments create my-cluster \
     --template deployment-manager/neo4j-causal-cluster.jinja
 ```
 
-# A Warning
+This does the same that Google Launcher does, without the GUI config.
 
-Google's launcher documentation isn't great in spots, and there are a bunch of small
-WTFs.  Our technical POC was Emily Bates <emilybates@google.com> who was super helpful,
-and can answer technical questions.
+If you want to test drive the GUI config, after uploading the package to the solution portal
+(just ZIP the deployment manager directory and upload it), then you need to use this URL.
+
+```
+https://console.cloud.google.com/launcher/details/neo4j-public/neo4j-enterprise-causal-cluster?preview=neo4j-public%2Fneo4j-enterprise-causal-cluster&project=launcher-development-191917
+```
+
+Undocumented gotcha -- note the project ID in the URL.  The public launcher project has no
+quota, so launching VMs into it will fail every time.  It's only there to house public images.
 
 # Important Deployment Files
 
@@ -79,7 +97,7 @@ done
 
 # Google Image
 
-## Source
+## Images for Development
 
 Look for the `neo4j-cc-node-v*` images in the family `neo4j-cc` within
 the development project.  In the public project, there are corresponding "live"

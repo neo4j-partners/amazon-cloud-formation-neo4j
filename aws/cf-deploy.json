@@ -39,6 +39,13 @@
         }
     },
     "Parameters": {
+        "ClusterName": {
+            "Description": "name for your deployment",
+            "Type": "String",
+            "MinLength": 1,
+            "MaxLength": 40,
+            "Default": "neo4j-enteprise"
+        },
         "InstanceType": {
             "Description": "EC2 instance type",
             "Type": "String",
@@ -150,6 +157,15 @@
                     {
                         "Key": "Name",
                         "Value": "Neo4j on AWS"
+                    },
+                    {
+                        "Key": "InstanceID",
+                        "Value": {
+                            "Fn::Join": [
+                                { "Ref": "ClusterName" },
+                                "1"
+                            ]
+                        }
                     }
                 ],
                 "UserData": {

@@ -1,13 +1,12 @@
 ## Overview
 
-Test drive in Amazon land is called "Quick Start".
-
-[Entry point to docs is here](https://aws-quickstart.github.io/)
+Amazon Marketplace entry
 
 ## Dependencies
 
 * `brew install packer`
 * Install AWS CLI and authenticate
+* `pipenv install`
 
 ## Build Neo4j Enterprise AMI
 
@@ -23,6 +22,16 @@ packer build \
 ```
 
 Check the variables at the top of the JSON file for other options you can override/set.
+
+## Generate CloudFormation Template
+
+The CloudFormation stack is a jinja template which evaluates to a CloudFormation JSON file.
+
+`pipenv run python3 generate.py > neo4j-enterprise-stack.json`
+
+Validate (in development) the local generated template:
+
+`aws cloudformation validate-template --template-body file://neo4j-enterprise-stack.json`
 
 ## List AMIs
 

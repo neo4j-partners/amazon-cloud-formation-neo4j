@@ -40,6 +40,6 @@ Deregister example: `aws ec2 deregister-image --image-id ami-650be718 --region u
 ```
 aws cloudformation create-stack \
    --stack-name myteststack \
-   --template-body file://cf-template.yml \
+   --template-body file://cf-deploy.json \
    --parameters ParameterKey=KeyPairName,ParameterValue=TestKey ParameterKey=SubnetIDs,ParameterValue=SubnetID1\\,SubnetID2
 ```

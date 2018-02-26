@@ -61,6 +61,13 @@
             ],
             "ConstraintDescription": "Must be a valid EC2 instance type."
         },
+        "ClusterNodes": {
+            "Description": "Number of VMs in the cluster",
+            "Type": "Number",
+            "Default": 3,
+            "MinValue": 3,
+            "MaxValue": 8
+        },
         "SSHKeyName": {
             "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instances",
             "Type": "AWS::EC2::KeyPair::KeyName"
@@ -73,6 +80,14 @@
             "Default": "0.0.0.0/0",
             "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
             "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+        },
+        "Password": {
+            "NoEcho": true,
+            "Description": "initial neo4j password (uppercase, lowercase, and numbers only)",
+            "Type": "String",
+            "MinLength": 8,
+            "MaxLength": 40,
+            "AllowedPattern" : "^[a-zA-Z0-9\\.-]+$"
         }
     },
     "Resources": {
@@ -129,56 +144,7 @@
                             "",
                             [
                                 "#!/bin/bash -v\n",
-                                "# Make the filesystem for the database\n",
-                                "mkdir -p /var/lib/neo4j\n",
-                                "mkfs.ext4 /dev/sdb\n",
-                                "mount /dev/sdb /var/lib/neo4j\n",
-                                "echo '/dev/sdb /var/lib/neo4j auto defaults 0 0' >> /etc/fstab\n",
-                                "wget -O - http://debian.neo4j.org/neotechnology.gpg.key| apt-key add -\n",
-                                "echo 'deb http://debian.neo4j.org/repo stable/' > /etc/apt/sources.list.d/neo4j.list\n",
-                                "apt-get update -y\n",
-                                "apt-get install -y openjdk-8-jre neo4j-enterprise haproxy\n",
-                                "cat <<EOF > /etc/haproxy/haproxy.cfg\n",
-                                "global\n",
-                                "    daemon\n",
-                                "    maxconn 256\n",
-                                "\n",
-                                "defaults\n",
-                                "    mode http\n",
-                                "    timeout connect 5000ms\n",
-                                "    timeout client 50000ms\n",
-                                "    timeout server 50000ms\n",
-                                "",
-                                "frontend http-in\n",
-                                "    bind *:80\n",
-                                "    default_backend neo4j\n",
-                                "",
-                                "\n",
-                                "backend neo4j\n",
-                                "    server s1 127.0.0.1:7474 maxconn 32\n",
-                                "\n",
-                                "listen admin\n",
-                                "    bind *:8080\n",
-                                "    stats enable\n",
-                                "EOF\n",
-                                "# install the packages \n",
-                                "# tweak the config\n",
-                                "sed -i 's/ENABLED=0/ENABLED=1/' /etc/default/haproxy\n",
-                                "echo 'dbms.connector.bolt.address=0.0.0.0:7687' >> /etc/neo4j/neo4j.conf\n",
-                                "echo 'wrapper.java.additional=-Dneo4j.ext.udc.source=ec2neo' >> /etc/neo4j/neo4j-wrapper.conf\n",
-                                "service neo4j restart\n",
-                                "service haproxy restart\n",
-                                "cat <<EOF > /etc/cron.daily/neo4j_backup\n",
-                                "#!/bin/bash\n",
-                                "set -e\n",
-                                "backup_dir='/var/tmp/neo4j_backup'\n",
-                                "backup_archive='/mnt'\n",
-                                "neo4j-backup --from single://localhost -to \\${backup_dir}\n",
-                                "tar -czf \\${backup_archive}//neo4j_backup.\\$(date +%FT%T).tgz \\${backup_dir}\n",
-                                "rm -rf \\${backup_dir}\n",
-                                "EOF\n",
-                                "chown root:root /etc/cron.daily/neo4j_backup\n",
-                                "chmod 0755 /etc/cron.daily/neo4j_backup\n"
+                                "echo `date` >>/tmp/foo.log"
                             ]
                         ]
                     }
@@ -263,7 +229,7 @@
             "Value": "neo4j"
         },
         "Password": {
-            "Value": "neo4j"
+            "Value": { "Ref" : "Password" }
         },
         "SshAccess": {
             "Value": {

@@ -87,7 +87,21 @@
             "Type": "String",
             "MinLength": 8,
             "MaxLength": 40,
-            "AllowedPattern" : "^[a-zA-Z0-9\\.-]+$"
+            "AllowedPattern": "^[a-zA-Z0-9\\.-]+$"
+        }
+    },
+    "Conditions": {
+        "Create4th": {
+            "Fn::Or": [
+                {
+                    "Fn:Equals": [
+                        {
+                            "Ref": "ClusterNodes"
+                        },
+                        4
+                    ]
+                }
+            ]
         }
     },
     "Resources": {
@@ -229,7 +243,9 @@
             "Value": "neo4j"
         },
         "Password": {
-            "Value": { "Ref" : "Password" }
+            "Value": {
+                "Ref": "Password"
+            }
         },
         "SshAccess": {
             "Value": {

@@ -77,6 +77,8 @@ runtime:
         value: '{{ properties().zone }}'
       - label: Instance machine type
         value: '{{ properties().machineType }}'
+      - label: URL
+        value: '{{ outputs().vm1URL }}'
       - label: Initial Neo4j Username
         value: '{{ outputs().username }}'
       - label: Initial Neo4j Password

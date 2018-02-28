@@ -9,6 +9,7 @@
 ######################################################################################
 echo "pre-neo4j.sh: Fetching AWS instance metadata"
 
+# Documentation: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html
 export API=http://169.254.169.254/latest/
 export MAC_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/)
 export INTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/local-ipv4s)
@@ -49,6 +50,8 @@ tags_to_env "$instance_tags"
 
 # At this point all env vars are in place, we only need to fill out those missing
 # with defaults provided below.
+# Defaults are provided under the assumption that we're running a single node enterprise
+# deploy.
 
 # HTTPS
 echo "dbms_connector_https_enabled" "${dbms_connector_https_enabled:=true}"
@@ -69,8 +72,8 @@ echo "dbms_backup_address" "${dbms_backup_enabled:=localhost:6362}"
 
 # Causal Clustering
 echo "causal_clustering_discovery_type" "${causal_clustering_discovery_type:=LIST}"
-echo "causal_clustering_initial_discovery_members" "${causal_clustering_initial_discovery_members:=node1:5000,node2:5000,node3:5000}"
-echo "causal_clustering_expected_core_cluster_size" "${causal_clustering_expected_core_cluster_size:=3}"
+echo "causal_clustering_initial_discovery_members" "${causal_clustering_initial_discovery_members:=localhost:5000}"
+echo "causal_clustering_expected_core_cluster_size" "${causal_clustering_expected_core_cluster_size:=1}"
 
 echo "dbms_connectors_default_listen_address" "${dbms_connectors_default_listen_address:=0.0.0.0}"
 echo "dbms_mode" "${dbms_mode:=CORE}"

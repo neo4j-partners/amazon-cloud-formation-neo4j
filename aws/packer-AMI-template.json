@@ -31,7 +31,12 @@
       "instance_type": "t2.micro",
       "ssh_username": "ubuntu",
       "ami_name": "neo4j-{{user `neo4j_edition`}}-{{user `neo4j_version` | clean_ami_name}} {{isotime \"2006-01-02T03_04_05Z\"}}",
-      "ami_regions": ["us-east-2", "us-east-1"]
+      "ami_regions": ["us-east-2", "us-east-1"],
+      "tags": {
+        "neo4j-install-date": "{{isotime \"2006-01-02T03:04:05Z\"}}",
+        "neo4j-version": "{{user `neo4j_version`}}",
+        "neo4j-edition": "{{user `neo4j_edition`}}"
+      }
     }
   ],
   "provisioners": [

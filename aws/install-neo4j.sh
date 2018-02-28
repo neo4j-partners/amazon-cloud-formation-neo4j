@@ -16,6 +16,9 @@ else
     sudo apt-get --yes install neo4j-enterprise=$neo4j_version
 fi
 
+# Install ancillary tools necessary for config/monitoring.
+apt-get --yes install jq awscli
+
 sudo systemctl enable neo4j
 sudo systemctl start neo4j
 

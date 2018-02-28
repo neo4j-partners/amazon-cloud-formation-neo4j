@@ -37,6 +37,7 @@ ls /etc/systemd/system
 # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html#instancedata-data-retrieval
 curl --silent http://169.254.169.254/latest/meta-data/public-hostname
 
+echo ''
 echo '#########################################'
 echo '########## NEO4J POST-INSTALL ###########'
 echo '#########################################'
@@ -58,7 +59,9 @@ sudo systemctl restart neo4j
 sleep 20
 echo "After re-configuration, service status"
 sudo systemctl status neo4j
+sudo journalctl -u neo4j -b
 
+echo ''
 echo '#########################################'
 echo '########## NEO4J SETUP COMPLETE #########'
 echo '#########################################'

@@ -1,5 +1,9 @@
 #!/bin/bash
 
+echo '#########################################'
+echo '########## NEO4J POST-INSTALL ###########'
+echo '#########################################'
+
 # Provisioned copy of conf needs to be put in place.
 sudo cp /home/ubuntu/neo4j.conf /etc/neo4j/neo4j.template
 sudo cp /home/ubuntu/pre-neo4j.sh /etc/neo4j/pre-neo4j.sh
@@ -13,3 +17,6 @@ sudo sed -i 's/ExecStart=.*$/ExecStart=\/etc\/neo4j\/pre-neo4j.sh/' /etc/systemd
 sudo systemctl daemon-reload
 sudo systemctl restart neo4j
 
+sleep 20
+echo "After re-configuration, service status"
+sudo systemctl status neo4j

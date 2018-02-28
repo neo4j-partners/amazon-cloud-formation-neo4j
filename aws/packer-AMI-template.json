@@ -41,14 +41,6 @@
   ],
   "provisioners": [
     {
-      "type": "shell",
-      "script": "./install-neo4j.sh",
-      "environment_vars": [
-        "neo4j_version={{ user `neo4j_version` }}",
-        "neo4j_edition={{ user `neo4j_edition` }}"
-      ]
-    },
-    {
       "type": "file",
       "source": "./neo4j.conf",
       "destination": "/home/ubuntu/neo4j.conf"
@@ -57,10 +49,14 @@
       "type": "file",
       "source": "./pre-neo4j.sh",
       "destination": "/home/ubuntu/pre-neo4j.sh"
-    },   
+    },
     {
       "type": "shell",
-      "script": "./neo4j-postinstall.sh"
+      "script": "./install-neo4j.sh",
+      "environment_vars": [
+        "neo4j_version={{ user `neo4j_version` }}",
+        "neo4j_edition={{ user `neo4j_edition` }}"
+      ]
     }
   ]
 }

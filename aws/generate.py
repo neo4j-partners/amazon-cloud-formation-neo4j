@@ -1,4 +1,4 @@
-from jinja2 import Environment, Template, BaseLoader
+from jinja2 import Environment, Template, BaseLoader, TemplateNotFound
 from os.path import join, exists, getmtime 
 
 class FileLoader(BaseLoader):
@@ -15,5 +15,5 @@ class FileLoader(BaseLoader):
       return source, path, lambda: mtime == getmtime(path)
 
 env = Environment(loader=FileLoader('./'))
-template = env.get_template('cf-deploy.template')
+template = env.get_template('deploy.jinja')
 print(template.render())

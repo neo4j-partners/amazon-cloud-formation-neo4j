@@ -1,5 +1,10 @@
 {
-    {# Defaults #}
+    {#
+     # This file is a Jinja template, and not a regular cloudformation template, because Amazon
+     # makes it difficult to deploy a variable number of EC2 resources.  For full discussion of
+     # why, see this: https://stackoverflow.com/a/41539208/2920686
+     # This file is approach 2, template preprocessor with conditions.
+     #}
     {% if max_nodes is not defined %}
       {% set max_nodes = 8 %}
     {% endif %}
@@ -10,12 +15,6 @@
       {% set default_machine = "m3.medium" %}
     {% endif %}
 
-    {#
-     # This file is a Jinja template, and not a regular cloudformation template, because Amazon
-     # makes it difficult to deploy a variable number of EC2 resources.  For full discussion of
-     # why, see this: https://stackoverflow.com/a/41539208/2920686
-     # This file is approach 2, template preprocessor with conditions.
-     #}
     "Description": "Neo4j on AWS - creates an EC2 Ubuntu machine, EBS volume, static IP address, and deploys the Neo4j Graph Database on it.  **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
     "AWSTemplateFormatVersion": "2010-09-09",
     "Mappings": {        

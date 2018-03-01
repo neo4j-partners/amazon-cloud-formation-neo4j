@@ -68,7 +68,10 @@ env.globals['jsonizeFile'] = jsonizeFile
 
 template = env.get_template('deploy.jinja')
 tmpl_content = template.render()
-# print(tmpl_content)
+
+with open('generated.json', 'w') as f:
+      f.write(tmpl_content)
+      f.close()
 
 # Re-parse and export pretty-printed, since template jinja mixture gets ugly
 # and hard to read fast.

@@ -15,42 +15,42 @@
       {% set default_machine = "m3.medium" %}
     {% endif %}
 
-    "Description": "Neo4j on AWS - creates an EC2 Ubuntu machine, EBS volume, static IP address, and deploys the Neo4j Graph Database on it.  **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
+    "Description": "Neo4j on AWS - creates a variable number of EC2 Ubuntu machines, a VPC, elastic IP addresses, and deploys the Neo4j Graph Database cluster on it.  **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
     "AWSTemplateFormatVersion": "2010-09-09",
     "Mappings": {        
         "AWSRegionArch2AMI": {
             "us-east-1": {
-                "64": "ami-3727ce4a"
+                "64": "NOT_YET"
             },
             "us-east-2": {
-                "64": "ami-ad0433c8"
+                "64": "NOT_YET"
             },
             "us-west-2": {
-                "64": "ami-d463eaac"
+                "64": "ami-25ce455d"
             },
             "us-west-1": {
-                "64": "ami-2afbde4aXXX"
+                "64": "NOT_YET"
             },
             "eu-west-1": {
-                "64": "ami-47a23a30XXX"
+                "64": "NOT_YET"
             },
             "ca-central-1": {
-                "64": "ami-b3d965d7XXX"
+                "64": "NOT_YET"
             },
             "eu-central-1": {
-                "64": "ami-060cde69XXX"
+                "64": "NOT_YET"
             },
             "ap-southeast-1": {
-                "64": "ami-8fcc75ecXXX"
+                "64": "NOT_YET"
             },
             "ap-southeast-2": {
-                "64": "ami-96666ff5XXX"
+                "64": "NOT_YET"
             },
             "ap-northeast-1": {
-                "64": "ami-afb09dc8XXX"
+                "64": "NOT_YET"
             },
             "sa-east-1": {
-                "64": "ami-4090f22cXXX"
+                "64": "NOT_YET"
             }
         }
     },
@@ -130,6 +130,121 @@
         {% endfor %}
     },
     "Resources": {
+        "VPC" : {
+            "Type" : "AWS::EC2::VPC",
+            "Properties" : {
+                "CidrBlock" : "10.0.0.0/16",
+                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+            }
+        },
+
+        "Subnet" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+                "VpcId" : { "Ref" : "VPC" },
+                "CidrBlock" : "10.0.0.0/16",
+                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+            }
+        },
+
+        "InternetGateway" : {
+            "Type" : "AWS::EC2::InternetGateway",
+            "Properties" : {
+                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+            }
+        },
+
+        "AttachGateway" : {
+            "Type" : "AWS::EC2::VPCGatewayAttachment",
+            "Properties" : {
+                "VpcId" : { "Ref" : "VPC" },
+                "InternetGatewayId" : { "Ref" : "InternetGateway" }
+            }
+        },
+
+        "RouteTable" : {
+            "Type" : "AWS::EC2::RouteTable",
+            "Properties" : {
+                "VpcId" : {"Ref" : "VPC"},
+                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+            }
+        },
+
+        "Route" : {
+            "Type" : "AWS::EC2::Route",
+            "DependsOn" : "AttachGateway",
+            "Properties" : {
+                "RouteTableId" : { "Ref" : "RouteTable" },
+                "DestinationCidrBlock" : { "Ref": "NetworkWhitelist" },
+                "GatewayId" : { "Ref" : "InternetGateway" }
+            }
+        },
+
+        "SubnetRouteTableAssociation" : {
+            "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties" : {
+                "SubnetId" : { "Ref" : "Subnet" },
+                "RouteTableId" : { "Ref" : "RouteTable" }
+            }
+        },
+
+        "NetworkAcl" : {
+            "Type" : "AWS::EC2::NetworkAcl",
+            "Properties" : {
+                "VpcId" : {"Ref" : "VPC"},
+                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+            }
+        },
+
+        {% for reason, port in { "SSH": 22, "Bolt": 7689, "HTTPS": 7473 }.items() %}
+            "{{reason}}NetworkAclEntry": {
+                "Type" : "AWS::EC2::NetworkAclEntry",
+                "Properties" : {
+                    "NetworkAclId" : {"Ref" : "NetworkAcl"},
+                    "RuleNumber" : "100",
+                    "Protocol" : "6",
+                    "RuleAction" : "allow",
+                    "Egress" : "true",
+                    "CidrBlock" : { "Ref": "NetworkWhitelist" },
+                    "PortRange" : {"From" : "{{port}}", "To" : "{{port}}"}
+                }                
+            },
+        {% endfor %}
+
+        "InboundResponsePortsNetworkAclEntry" : {
+            "Type" : "AWS::EC2::NetworkAclEntry",
+            "Properties" : {
+                "NetworkAclId" : {"Ref" : "NetworkAcl"},
+                "RuleNumber" : "102",
+                "Protocol" : "6",
+                "RuleAction" : "allow",
+                "Egress" : "false",
+                "CidrBlock" : { "Ref": "NetworkWhitelist" },
+                "PortRange" : {"From" : "1024", "To" : "65535"}
+            }
+        },
+
+        "OutBoundResponsePortsNetworkAclEntry" : {
+            "Type" : "AWS::EC2::NetworkAclEntry",
+            "Properties" : {
+                "NetworkAclId" : {"Ref" : "NetworkAcl"},
+                "RuleNumber" : "102",
+                "Protocol" : "6",
+                "RuleAction" : "allow",
+                "Egress" : "true",
+                "CidrBlock" : { "Ref": "NetworkWhitelist" },
+                "PortRange" : {"From" : "1024", "To" : "65535"}
+            }
+        },
+
+        "SubnetNetworkAclAssociation" : {
+            "Type" : "AWS::EC2::SubnetNetworkAclAssociation",
+            "Properties" : {
+                "SubnetId" : { "Ref" : "Subnet" },
+                "NetworkAclId" : { "Ref" : "NetworkAcl" }
+            }
+        },
+
         "ReadOwnTags": {
             "Type": "AWS::IAM::Role",
             "Properties": {
@@ -149,12 +264,50 @@
                 }
             }
         },
+        "sgNeo4jEnterprise": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Neo4j Ports",
+                "SecurityGroupIngress": [
+                    {# STRICTLY INTERNAL PORTS #}
+                    {% for port in ["5000", "6000", "7000" ] %}
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "{{port}}",
+                        "ToPort": "{{port}}",
+                        "CidrIp": "10.0.0.0/16"
+                    },
+                    {% endfor %}
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "22",
+                        "ToPort": "22",
+                        "CidrIp": { "Ref": "NetworkWhitelist" }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "7687",
+                        "ToPort": "7687",
+                        "CidrIp": { "Ref": "NetworkWhitelist" }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "7473",
+                        "ToPort": "7473",
+                        "CidrIp": { "Ref": "NetworkWhitelist" }
+                    }
+                ]
+            }
+        },
+        
         {# Create all of the resources given the cluster size #}
         {% for i in range(1, (max_nodes + 1)) %}
         "ElasticIPNeo4j{{i}}": {
             "Type": "AWS::EC2::EIP",
             "Condition" : "CreateNode{{i}}",
+            "DependsOn" : "AttachGateway",
             "Properties": {
+                "Domain" : "vpc",
                 "InstanceId": { "Ref": "Neo4jServer{{i}}" }
             }
         },
@@ -168,11 +321,48 @@
                 "ImageId": {
                     "Fn::FindInMap": [ "AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "64" ]
                 },
+
+                "NetworkInterfaces" : [{
+                    "GroupSet"                 : [{ "Ref" : "sgNeo4jEnterprise" }],
+                    "AssociatePublicIpAddress" : "true",
+                    "DeviceIndex"              : "0",
+                    "DeleteOnTermination"      : "false",
+                    "SubnetId"                 : { "Ref" : "Subnet" }
+                }],
+                
                 "InstanceType": { "Ref": "InstanceType" },
                 "KeyName": { "Ref": "SSHKeyName" },
                 "Monitoring": "false",
-                "SecurityGroups": [ { "Ref": "sgNeo4jEnterprise" } ],
+
                 "Tags": [
+                    { "Key": "Application", "Value": { "Ref" : "AWS::StackId"} },
+                    { "Key": "neo4j_mode", "Value": "cluster" },
+                    {#
+                     # Per cluster team, irrespective of cluster size we set initial size
+                     # to 3 (the mininum) and initial discovery set to the first 3.  This
+                     # should form cluster appropriately, even if there are 8, because
+                     # 4 - 8 know to contact 1 - 3.
+                     # Requires the assumption that clusters are never < 3 nodes.
+                     #}
+                    { 
+                        "Key": "causal_clustering_expected_core_cluster_size", 
+                        "Value": "3"
+                    },
+                    { 
+                        "Key": "causal_clustering_initial_discovery_members",
+                        "Value": {
+                            "Fn::Join": [
+                                ",",
+                                [
+                                    "node1:5000", "node2:5000", "node3:5000"
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "initial_password",
+                        "Value": { "Ref": "Password" }
+                    },
                     { "Key": "Name", "Value": "Neo4j on AWS" },
                     { "Key": "InstanceID", "Value": { "Fn::Join": ["", [ { "Ref": "ClusterName" }, "{{i}}" ] ]} }
                 ],
@@ -208,38 +398,6 @@
             }
         },
         {% endfor %}
-        "sgNeo4jEnterprise": {
-            "Type": "AWS::EC2::SecurityGroup",
-            "Properties": {
-                "GroupDescription": "Neo4j Ports",
-                "SecurityGroupIngress": [
-                    {
-                        "IpProtocol": "tcp",
-                        "FromPort": "22",
-                        "ToPort": "22",
-                        "CidrIp": {
-                            "Ref": "NetworkWhitelist"
-                        }
-                    },
-                    {
-                        "IpProtocol": "tcp",
-                        "FromPort": "7687",
-                        "ToPort": "7687",
-                        "CidrIp": {
-                            "Ref": "NetworkWhitelist"
-                        }
-                    },
-                    {
-                        "IpProtocol": "tcp",
-                        "FromPort": "7473",
-                        "ToPort": "7473",
-                        "CidrIp": {
-                            "Ref": "NetworkWhitelist"
-                        }
-                    }
-                ]
-            }
-        }
     },
     "Outputs": {
         "Neo4jWebadmin": {

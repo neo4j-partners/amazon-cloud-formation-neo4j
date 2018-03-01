@@ -266,6 +266,14 @@
             }
         },
 
+        "instProfNeo4jEnterprise": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Roles": [{ "Ref": "ReadOwnTags"}],
+                "InstanceProfileName": {{ "read-own-tags-ip" | appendStack }}
+            }            
+        },
+
         "sgNeo4jEnterprise": {
             "Type": "AWS::EC2::SecurityGroup",
             "Properties": {
@@ -317,7 +325,7 @@
             "Type": "AWS::EC2::Instance",
             "Condition" : "CreateNode{{i}}",
             "Properties": {
-                "Roles": [{ "Ref": "ReadOwnTags"}],
+                "IamInstanceProfile": { "Ref": "instProfNeo4jEnterprise" },
                 "AvailabilityZone": { "Fn::Select": [ 0, { "Fn::GetAZs": "" } ] },
                 "DisableApiTermination": "FALSE",
                 "ImageId": {
@@ -328,7 +336,7 @@
                     "GroupSet"                 : [{ "Ref" : "sgNeo4jEnterprise" }],
                     "AssociatePublicIpAddress" : "true",
                     "DeviceIndex"              : "0",
-                    "DeleteOnTermination"      : "false",
+                    "DeleteOnTermination"      : "true",
                     "SubnetId"                 : { "Ref" : "Subnet" }
                 }],
                 

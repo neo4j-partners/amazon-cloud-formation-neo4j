@@ -87,6 +87,12 @@ echo "dbms_logs_security_level" "${dbms_logs_security_level:=INFO}"
 # Misc
 echo "dbms_security_allow_csv_import_from_file_urls" "${dbms_security_allow_csv_import_from_file_urls:=true}"
 
+# Neo4j mode.
+# Different template gets substituted depending on if we're
+# in standalone or cluster mode, because the CC attributes need
+# to be commented out in the conf file.
+echo "neo4j_mode" "${neo4j_mode:=standalone}"
+
 export dbms_connector_https_enabled \
     dbms_connector_https_listen_address \
     dbms_connector_http_enabled \
@@ -112,11 +118,18 @@ echo "pre-neo4j.sh internal IP $INTERNAL_IP_ADDR"
 echo "pre-neo4j.sh environment for configuration setup"
 env
 
-# These substitutions guarantee that the declared google metadata
-# impacts what the server sees on startup.
-envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
+if [ "$neo4j_mode" = "standalone" ] ; then
+  echo "STANDALONE"
+  envsubst < /etc/neo4j/neo4j-standalone.template > /etc/neo4j/neo4j.conf
+elif [ "$neo4j_mode" = "cluster" ] ; then
+  echo "CLUSTER"
+  envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
+else 
+  echo "UNRECOGNIZED neo4j_mode value; must be 'cluster' or 'standalone'.  Defaulting to cluster"
+  envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
+fi
 
 echo "pre-neo4j.sh: Starting neo4j console..."
 
 # This is the same command sysctl's service would have executed.
-# /usr/share/neo4j/bin/neo4j console
+/usr/share/neo4j/bin/neo4j console

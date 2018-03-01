@@ -47,6 +47,11 @@
     },
     {
       "type": "file",
+      "source": "./neo4j-standalone.conf",
+      "destination": "/home/ubuntu/neo4j-standalone.conf"
+    },
+    {
+      "type": "file",
       "source": "./pre-neo4j.sh",
       "destination": "/home/ubuntu/pre-neo4j.sh"
     },

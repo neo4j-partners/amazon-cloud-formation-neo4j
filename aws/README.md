@@ -34,6 +34,8 @@ Validate (in development) the local generated template:
 
 `aws cloudformation validate-template --template-body file://neo4j-enterprise-stack.json`
 
+This JSON file can be uploaded to CloudFormation and created as a stack.
+
 ## List AMIs
 
 ```
@@ -47,9 +49,11 @@ Deregister example: `aws ec2 deregister-image --image-id ami-650be718 --region u
 
 ## Create CloudFormation Stack
 
+Check needed parameters in the generated CF stack file first!
+
 ```
 aws cloudformation create-stack \
    --stack-name myteststack \
-   --template-body file://cf-deploy.json \
+   --template-body file://neo4j-enterprise-stack.json \
    --parameters ParameterKey=KeyPairName,ParameterValue=TestKey ParameterKey=SubnetIDs,ParameterValue=SubnetID1\\,SubnetID2
 ```

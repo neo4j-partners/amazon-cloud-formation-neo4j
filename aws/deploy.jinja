@@ -130,6 +130,25 @@
         {% endfor %}
     },
     "Resources": {
+        "ReadOwnTags": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "ec2-vm-read-own-tags",
+                "Description": "Permit VMs to inspect own tags",
+                "AssumeRolePolicyDocument": { 
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "ec2.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                }
+            }
+        },
         {# Create all of the resources given the cluster size #}
         {% for i in range(1, (max_nodes + 1)) %}
         "ElasticIPNeo4j{{i}}": {
@@ -143,6 +162,7 @@
             "Type": "AWS::EC2::Instance",
             "Condition" : "CreateNode{{i}}",
             "Properties": {
+                "Roles": [{ "Ref": "ReadOwnTags"}],
                 "AvailabilityZone": { "Fn::Select": [ 0, { "Fn::GetAZs": "" } ] },
                 "DisableApiTermination": "FALSE",
                 "ImageId": {

@@ -112,6 +112,19 @@
             "MinLength": 8,
             "MaxLength": 40,
             "AllowedPattern": "^[a-zA-Z0-9\\.-]+$"
+        },
+        "AvailabilityZone": {
+            "Type": "AWS::EC2::AvailabilityZone::Name",
+            "ConstraintDescription": "Must be a valid AWS availability zone."
+        },
+        "VMDiskSizeGB": {
+            "Description": "How much EBS storage is allocated to each cluster node, in GiB",
+            "Type": "Number",
+            "Default": "100",
+            "MinValue": "10",
+            "MaxValue": "1000",
+            "AllowedPattern": "([1-9][0-9]+)"
+            "ConstraintDescription": "Must be a valid EBS disk size in GiB."
         }
     },
     "Conditions": {
@@ -136,23 +149,36 @@
             "Type" : "AWS::EC2::VPC",
             "Properties" : {
                 "CidrBlock" : "10.0.0.0/16",
-                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+                "Tags" : [ 
+                    {
+                        "Key": "Name", 
+                        "Value": {{ "Neo4jVPC" | appendStack }}
+                    },
+                    {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
+                ]
             }
         },
 
         "Subnet" : {
             "Type" : "AWS::EC2::Subnet",
             "Properties" : {
+                "AvailabilityZone": { "Ref": "AvailabilityZone" },
                 "VpcId" : { "Ref" : "VPC" },
                 "CidrBlock" : "10.0.0.0/16",
-                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+                "Tags" : [ 
+                    {"Key": "Name", "Value": {{ "Neo4jSubnet" | appendStack }} },
+                    {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
+                ]
             }
         },
 
         "InternetGateway" : {
             "Type" : "AWS::EC2::InternetGateway",
-            "Properties" : {
-                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+            "Properties" : {                
+                "Tags" : [ 
+                    {"Key": "Name", "Value": {{ "Neo4jGateway" | appendStack }} },
+                    {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
+                ]
             }
         },
 
@@ -168,7 +194,10 @@
             "Type" : "AWS::EC2::RouteTable",
             "Properties" : {
                 "VpcId" : {"Ref" : "VPC"},
-                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+                "Tags" : [ 
+                    {"Key": "Name", "Value": {{ "Neo4jRouteTable" | appendStack }} },
+                    {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
+                ]
             }
         },
 
@@ -199,25 +228,44 @@
         },
 
         {% for reason, port in { "SSH": 22, "Bolt": 7689, "HTTPS": 7473 }.items() %}
+            {% set outer_loop = loop %}
+            {% for direction, egressBool in { "Ingress": False, "Egress": True }.items() %}
+                "{{reason}}{{direction}}NetworkAclEntry": {
+                    "Type" : "AWS::EC2::NetworkAclEntry",
+                    "Properties" : {
+                        "NetworkAclId" : {"Ref" : "NetworkAcl"},
+                        "RuleNumber" : "{{100 + (outer_loop.index * loop.index) }}",
+                        "Protocol" : "6", {# this means TCP #}
+                        "RuleAction" : "allow",
+                        "Egress" : "{{egressBool | string | lower }}",
+                        "CidrBlock" : { "Ref": "NetworkWhitelist" },
+                        "PortRange" : {"From" : "{{port}}", "To" : "{{port}}"}
+                    }                
+                },
+            {% endfor %}
+        {% endfor %}
+
+        {# Internal causal cluster ports #}
+        {% for reason, port in { "Int1": "5000", "Int2": "6000", "Int3": "7000" }.items() %}
             "{{reason}}NetworkAclEntry": {
                 "Type" : "AWS::EC2::NetworkAclEntry",
                 "Properties" : {
                     "NetworkAclId" : {"Ref" : "NetworkAcl"},
-                    "RuleNumber" : "{{100 + loop.index}}",
+                    "RuleNumber" : "{{200 + loop.index}}",
                     "Protocol" : "6", {# this means TCP #}
                     "RuleAction" : "allow",
                     "Egress" : "true",
-                    "CidrBlock" : { "Ref": "NetworkWhitelist" },
+                    "CidrBlock" : "10.0.0.0/16",
                     "PortRange" : {"From" : "{{port}}", "To" : "{{port}}"}
                 }                
-            },
+            },        
         {% endfor %}
 
         "InboundResponsePortsNetworkAclEntry" : {
             "Type" : "AWS::EC2::NetworkAclEntry",
             "Properties" : {
                 "NetworkAclId" : {"Ref" : "NetworkAcl"},
-                "RuleNumber" : "200",
+                "RuleNumber" : "300",
                 "Protocol" : "6",
                 "RuleAction" : "allow",
                 "Egress" : "false",
@@ -230,7 +278,7 @@
             "Type" : "AWS::EC2::NetworkAclEntry",
             "Properties" : {
                 "NetworkAclId" : {"Ref" : "NetworkAcl"},
-                "RuleNumber" : "201",
+                "RuleNumber" : "301",
                 "Protocol" : "6",
                 "RuleAction" : "allow",
                 "Egress" : "true",
@@ -262,7 +310,42 @@
                             "Action": "sts:AssumeRole"
                         }
                     ]
-                }
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "root",
+                        {# Taken from arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess #}
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "ec2:Describe*",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "elasticloadbalancing:Describe*",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "cloudwatch:ListMetrics",
+                                        "cloudwatch:GetMetricStatistics",
+                                        "cloudwatch:Describe*"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "autoscaling:Describe*",
+                                    "Resource": "*"
+                                }
+                            ]                            
+                        }
+                    }
+                ]
             }
         },
 
@@ -277,6 +360,7 @@
         "sgNeo4jEnterprise": {
             "Type": "AWS::EC2::SecurityGroup",
             "Properties": {
+                "VpcId" : { "Ref" : "VPC" },
                 "GroupDescription": "Neo4j Ports",
                 "SecurityGroupIngress": [
                     {# STRICTLY INTERNAL PORTS #}
@@ -312,6 +396,7 @@
         
         {# Create all of the resources given the cluster size #}
         {% for i in range(1, (max_nodes + 1)) %}
+{# 
         "ElasticIPNeo4j{{i}}": {
             "Type": "AWS::EC2::EIP",
             "Condition" : "CreateNode{{i}}",
@@ -321,12 +406,13 @@
                 "InstanceId": { "Ref": "Neo4jServer{{i}}" }
             }
         },
+#}
         "Neo4jServer{{i}}": {
             "Type": "AWS::EC2::Instance",
             "Condition" : "CreateNode{{i}}",
             "Properties": {
                 "IamInstanceProfile": { "Ref": "instProfNeo4jEnterprise" },
-                "AvailabilityZone": { "Fn::Select": [ 0, { "Fn::GetAZs": "" } ] },
+                "AvailabilityZone": { "Ref": "AvailabilityZone" },
                 "DisableApiTermination": "FALSE",
                 "ImageId": {
                     "Fn::FindInMap": [ "AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "64" ]
@@ -345,6 +431,15 @@
                 "Monitoring": "false",
 
                 "Tags": [
+                    { 
+                        "Key": "Name", 
+                        "Value": { 
+                            "Fn::Join": [
+                                "-",
+                                [ { "Ref": "ClusterName" }, "vm-{{i}}" ]
+                            ]
+                        }
+                    },                   
                     { "Key": "Application", "Value": { "Ref" : "AWS::StackId"} },
                     { "Key": "neo4j_mode", "Value": "cluster" },
                     {#
@@ -373,26 +468,17 @@
                         "Key": "initial_password",
                         "Value": { "Ref": "Password" }
                     },
-                    { "Key": "Name", "Value": "Neo4j on AWS" },
                     { "Key": "InstanceID", "Value": { "Fn::Join": ["", [ { "Ref": "ClusterName" }, "{{i}}" ] ]} }
                 ],
                 "UserData": {
-                    "Fn::Base64": {
-                        "Fn::Join": [
-                            "",
-                            [
-                                "#!/bin/bash -v\n",
-                                "echo `date` >>/tmp/foo.log"
-                            ]
-                        ]
-                    }
+                    "Fn::Base64": {{ jsonizeFile('vm-startup.sh') }}
                 },
                 "Volumes": [
                     {
                         "VolumeId": {
                             "Ref": "EBSVolumeNeo4j{{i}}"
                         },
-                        "Device": "/dev/sdj"
+                        "Device": "/dev/sdk"
                     }
                 ]
             }
@@ -401,12 +487,10 @@
             "Type": "AWS::EC2::Volume",
             "Condition" : "CreateNode{{i}}",
             "Properties": {
-                "AvailabilityZone": {
-                    "Fn::Select": [ 0, { "Fn::GetAZs": "" } ]
-                },
-                "Size": "100"
+                "AvailabilityZone": { "Ref": "AvailabilityZone" },
+                "Size": { "Ref": "VMDiskSizeGB" }
             }
-        },
+        }{% if not loop.last %},{% endif %}
         {% endfor %}
     },
     "Outputs": {
@@ -443,7 +527,7 @@
                     [
                         "ssh -i ${HOME}/.ssh/",
                         { "Ref": "SSHKeyName" },
-                        ".pem -l ubuntu ",
+                        ".pem -l ubuntu@",
                         {
                             "Fn::GetAtt": [
                                 "Neo4jServer1",

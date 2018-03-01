@@ -123,7 +123,6 @@
             "Default": "100",
             "MinValue": "10",
             "MaxValue": "1000",
-            "AllowedPattern": "([1-9][0-9]+)"
             "ConstraintDescription": "Must be a valid EBS disk size in GiB."
         }
     },
@@ -227,7 +226,8 @@
             }
         },
 
-        {% for reason, port in { "SSH": 22, "Bolt": 7689, "HTTPS": 7473 }.items() %}
+        {# outbound HTTPS must be permitted for awscli to work #}
+        {% for reason, port in { "SSH": 22, "Bolt": 7689, "Neo4jHTTPS": 7473, "HTTPS": "443" }.items() %}
             {% set outer_loop = loop %}
             {% for direction, egressBool in { "Ingress": False, "Egress": True }.items() %}
                 "{{reason}}{{direction}}NetworkAclEntry": {
@@ -396,17 +396,6 @@
         
         {# Create all of the resources given the cluster size #}
         {% for i in range(1, (max_nodes + 1)) %}
-{# 
-        "ElasticIPNeo4j{{i}}": {
-            "Type": "AWS::EC2::EIP",
-            "Condition" : "CreateNode{{i}}",
-            "DependsOn" : "AttachGateway",
-            "Properties": {
-                "Domain" : "vpc",
-                "InstanceId": { "Ref": "Neo4jServer{{i}}" }
-            }
-        },
-#}
         "Neo4jServer{{i}}": {
             "Type": "AWS::EC2::Instance",
             "Condition" : "CreateNode{{i}}",
@@ -478,7 +467,7 @@
                         "VolumeId": {
                             "Ref": "EBSVolumeNeo4j{{i}}"
                         },
-                        "Device": "/dev/sdk"
+                        "Device": "/dev/xvdc"
                     }
                 ]
             }

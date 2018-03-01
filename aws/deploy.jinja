@@ -6,7 +6,7 @@
      # This file is approach 2, template preprocessor with conditions.
      #}
     {% if max_nodes is not defined %}
-      {% set max_nodes = 8 %}
+      {% set max_nodes = 3 %}
     {% endif %}
     {% if min_nodes is not defined %}
       {% set min_nodes = 3 %}
@@ -117,6 +117,14 @@
             "Type": "AWS::EC2::AvailabilityZone::Name",
             "ConstraintDescription": "Must be a valid AWS availability zone."
         },
+        "VolumeType": {
+            "Description": "What kind of storage to attach",
+            "Type": "String",
+            "Default": "standard",
+            "AllowedValues": [
+                "standard", "io1", "gp2", "st1"
+            ]
+        },
         "VMDiskSizeGB": {
             "Description": "How much EBS storage is allocated to each cluster node, in GiB",
             "Type": "Number",
@@ -129,7 +137,7 @@
     "Conditions": {
         "CreateNode1": {"Fn::Equals" : [true, true]},
         "CreateNode2": {"Fn::Equals" : [true, true]},
-        "CreateNode3": {"Fn::Equals" : [true, true]},
+        "CreateNode3": {"Fn::Equals" : [true, true]}{% if max_nodes > 3 %},{% endif %}
         {% for i in range(4, (max_nodes + 1)) %}
         {#
         "CreateNode{{i}}": {
@@ -147,6 +155,9 @@
         "VPC" : {
             "Type" : "AWS::EC2::VPC",
             "Properties" : {
+                "EnableDnsSupport" : "true",
+                "EnableDnsHostnames" : "true",
+                "InstanceTenancy": "default",
                 "CidrBlock" : "10.0.0.0/16",
                 "Tags" : [ 
                     {
@@ -462,22 +473,16 @@
                 "UserData": {
                     "Fn::Base64": {{ jsonizeFile('vm-startup.sh') }}
                 },
-                "Volumes": [
+                "BlockDeviceMappings": [
                     {
-                        "VolumeId": {
-                            "Ref": "EBSVolumeNeo4j{{i}}"
-                        },
-                        "Device": "/dev/xvdc"
+                        "DeviceName": "/dev/sda1",
+                        "Ebs": {
+                            "VolumeType": { "Ref": "VolumeType" },
+                            "VolumeSize": { "Ref": "VMDiskSizeGB" },
+                            "DeleteOnTermination": "true"
+                        }
                     }
                 ]
-            }
-        },
-        "EBSVolumeNeo4j{{i}}": {
-            "Type": "AWS::EC2::Volume",
-            "Condition" : "CreateNode{{i}}",
-            "Properties": {
-                "AvailabilityZone": { "Ref": "AvailabilityZone" },
-                "Size": { "Ref": "VMDiskSizeGB" }
             }
         }{% if not loop.last %},{% endif %}
         {% endfor %}

@@ -15,6 +15,8 @@
       {% set default_machine = "m3.medium" %}
     {% endif %}
 
+    {% set INTERNAL_DNS_TLD = "neo4j" %}
+
     "Description": "Neo4j on AWS - creates a variable number of EC2 Ubuntu machines, a VPC, elastic IP addresses, and deploys the Neo4j Graph Database cluster on it.  **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
     "AWSTemplateFormatVersion": "2010-09-09",
     "Mappings": {        
@@ -167,6 +169,25 @@
                     {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
                 ]
             }
+        },
+
+        "DNSZone": {
+            "Type": "AWS::Route53::HostedZone",
+            "DependsOn" : "VPC",
+            "Properties": {
+                "HostedZoneConfig": {
+                    "Comment": "Zone to define private DNS for neo4j nodes"
+                },
+                "Name": "{{ INTERNAL_DNS_TLD }}",
+                "VPCs": [{
+                    "VPCId": { "Ref": "VPC" },
+                    "VPCRegion": { "Ref": "AWS::Region" }
+                }],
+                "HostedZoneTags" : [{
+                    "Key": "Name",
+                    "Value": {{ "Neo4jPrivateZone" | appendStack }}
+                }]
+            }            
         },
 
         "Subnet" : {
@@ -407,6 +428,26 @@
         
         {# Create all of the resources given the cluster size #}
         {% for i in range(1, (max_nodes + 1)) %}
+        "Neo4jServer{{i}}DNS": {
+            "Type": "AWS::Route53::RecordSet",
+            "Condition" : "CreateNode{{i}}",
+            "DependsOn" : "DNSZone",
+            "Properties": {
+                "HostedZoneId": { "Ref" : "DNSZone" },
+                "Comment" : "DNS names for neo4j node {{i}} of {{max_nodes}}.",  
+                "Name" : "node{{i}}.{{INTERNAL_DNS_TLD}}.",
+                "Type" : "A",
+                "TTL" : "900",
+                "ResourceRecords" : [
+                    {# Map DNS to **private IP** not PublicIp, this because
+                     # it's inside the VPC and cluster coord traffic isn't allowed
+                     # outside anyway.
+                     #}
+                    { "Fn::GetAtt" : [ "Neo4jServer{{i}}", "PrivateIp" ] }
+                ]
+            }
+        },
+        
         "Neo4jServer{{i}}": {
             "Type": "AWS::EC2::Instance",
             "Condition" : "CreateNode{{i}}",
@@ -459,7 +500,9 @@
                             "Fn::Join": [
                                 ",",
                                 [
-                                    "node1:5000", "node2:5000", "node3:5000"
+                                    "node1.neo4j:5000", 
+                                    "node2.neo4j:5000",
+                                    "node3.neo4j:5000"
                                 ]
                             ]
                         }

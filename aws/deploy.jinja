@@ -28,7 +28,7 @@
                 "64": "NOT_YET"
             },
             "us-west-2": {
-                "64": "ami-25ce455d"
+                "64": "ami-af49dcd7"
             },
             "us-west-1": {
                 "64": "NOT_YET"
@@ -57,13 +57,6 @@
         }
     },
     "Parameters": {
-        "ClusterName": {
-            "Description": "name for your deployment",
-            "Type": "String",
-            "MinLength": 1,
-            "MaxLength": 40,
-            "Default": "neo4j-enteprise"
-        },
         "InstanceType": {
             "Description": "EC2 instance type",
             "Type": "String",
@@ -115,19 +108,23 @@
             "MaxLength": 40,
             "AllowedPattern": "^[a-zA-Z0-9\\.-]+$"
         },
-        "AvailabilityZone": {
-            "Type": "AWS::EC2::AvailabilityZone::Name",
-            "ConstraintDescription": "Must be a valid AWS availability zone."
-        },
         "VolumeType": {
             "Description": "What kind of storage to attach",
             "Type": "String",
-            "Default": "standard",
+            "Default": "gp2",
             "AllowedValues": [
                 "standard", "io1", "gp2", "st1"
             ]
         },
-        "VMDiskSizeGB": {
+        "EncryptVolumes": {
+            "Description": "Should EBS storage be encrypted?",
+            "Type": "String",
+            "Default": "true",
+            "AllowedValues": [
+                "true", "false"
+            ]
+        },
+        "VolumeSizeGB": {
             "Description": "How much EBS storage is allocated to each cluster node, in GiB",
             "Type": "Number",
             "Default": "100",
@@ -137,10 +134,10 @@
         }
     },
     "Conditions": {
+        "CreateNode0": {"Fn::Equals" : [true, true]},
         "CreateNode1": {"Fn::Equals" : [true, true]},
-        "CreateNode2": {"Fn::Equals" : [true, true]},
-        "CreateNode3": {"Fn::Equals" : [true, true]}{% if max_nodes > 3 %},{% endif %}
-        {% for i in range(4, (max_nodes + 1)) %}
+        "CreateNode2": {"Fn::Equals" : [true, true]}{% if max_nodes > 3 %},{% endif %}
+        {% for i in range(3, max_nodes) %}
         {#
         "CreateNode{{i}}": {
             "Fn::Or": [
@@ -190,18 +187,43 @@
             }            
         },
 
-        "Subnet" : {
+        {# Create three sets of subnets; this is needed because you need DeleteOnTermination
+         # per AZ, with one route table association and network ACL association
+         # for each.  Nodes get distributed across the subnets simple round robin,
+         # meaning that node n goes into subnet n % 3 + 1.
+         #}
+        {% for i in range(0, 3) %}
+        "Subnet{{i}}" : {
             "Type" : "AWS::EC2::Subnet",
             "Properties" : {
-                "AvailabilityZone": { "Ref": "AvailabilityZone" },
+                "AvailabilityZone": {
+                    "Fn::Select": [ {{ i % 3 }}, { "Fn::GetAZs" : { "Ref": "AWS::Region" } }]
+                },                
                 "VpcId" : { "Ref" : "VPC" },
-                "CidrBlock" : "10.0.0.0/16",
+                "CidrBlock" : "10.0.{{i}}.0/24",
                 "Tags" : [ 
-                    {"Key": "Name", "Value": {{ "Neo4jSubnet" | appendStack }} },
+                    {"Key": "Name", "Value": {{ ("Neo4jSubnet%d" % i) | appendStack }} },
                     {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
                 ]
             }
         },
+
+        "SubnetRouteTableAssociation{{i}}" : {
+            "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties" : {
+                "SubnetId" : { "Ref" : "Subnet{{i}}" },
+                "RouteTableId" : { "Ref" : "RouteTable" }
+            }
+        },
+
+        "SubnetNetworkAclAssociation{{i}}" : {
+            "Type" : "AWS::EC2::SubnetNetworkAclAssociation",
+            "Properties" : {
+                "SubnetId" : { "Ref" : "Subnet{{i}}" },
+                "NetworkAclId" : { "Ref" : "NetworkAcl" }
+            }
+        },
+        {% endfor %}
 
         "InternetGateway" : {
             "Type" : "AWS::EC2::InternetGateway",
@@ -239,14 +261,6 @@
                 "RouteTableId" : { "Ref" : "RouteTable" },
                 "DestinationCidrBlock" : { "Ref": "NetworkWhitelist" },
                 "GatewayId" : { "Ref" : "InternetGateway" }
-            }
-        },
-
-        "SubnetRouteTableAssociation" : {
-            "Type" : "AWS::EC2::SubnetRouteTableAssociation",
-            "Properties" : {
-                "SubnetId" : { "Ref" : "Subnet" },
-                "RouteTableId" : { "Ref" : "RouteTable" }
             }
         },
 
@@ -316,14 +330,6 @@
                 "Egress" : "true",
                 "CidrBlock" : { "Ref": "NetworkWhitelist" },
                 "PortRange" : {"From" : "1024", "To" : "65535"}
-            }
-        },
-
-        "SubnetNetworkAclAssociation" : {
-            "Type" : "AWS::EC2::SubnetNetworkAclAssociation",
-            "Properties" : {
-                "SubnetId" : { "Ref" : "Subnet" },
-                "NetworkAclId" : { "Ref" : "NetworkAcl" }
             }
         },
 
@@ -427,7 +433,7 @@
         },
         
         {# Create all of the resources given the cluster size #}
-        {% for i in range(1, (max_nodes + 1)) %}
+        {% for i in range(0, max_nodes) %}
         "Neo4jServer{{i}}DNS": {
             "Type": "AWS::Route53::RecordSet",
             "Condition" : "CreateNode{{i}}",
@@ -453,7 +459,10 @@
             "Condition" : "CreateNode{{i}}",
             "Properties": {
                 "IamInstanceProfile": { "Ref": "instProfNeo4jEnterprise" },
-                "AvailabilityZone": { "Ref": "AvailabilityZone" },
+                "AvailabilityZone": {
+                    {# Round-robin distribute VMs across AZs #}
+                    "Fn::Select": [ {{ i % 3 }}, { "Fn::GetAZs" : { "Ref": "AWS::Region" } }]
+                },
                 "DisableApiTermination": "FALSE",
                 "ImageId": {
                     "Fn::FindInMap": [ "AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "64" ]
@@ -464,7 +473,7 @@
                     "AssociatePublicIpAddress" : "true",
                     "DeviceIndex"              : "0",
                     "DeleteOnTermination"      : "true",
-                    "SubnetId"                 : { "Ref" : "Subnet" }
+                    "SubnetId"                 : { "Ref" : "Subnet{{ i % 3 }}" }
                 }],
                 
                 "InstanceType": { "Ref": "InstanceType" },
@@ -477,7 +486,7 @@
                         "Value": { 
                             "Fn::Join": [
                                 "-",
-                                [ { "Ref": "ClusterName" }, "vm-{{i}}" ]
+                                [ { "Ref": "AWS::StackName" }, "vm-{{i}}" ]
                             ]
                         }
                     },                   
@@ -511,7 +520,7 @@
                         "Key": "initial_password",
                         "Value": { "Ref": "Password" }
                     },
-                    { "Key": "InstanceID", "Value": { "Fn::Join": ["", [ { "Ref": "ClusterName" }, "{{i}}" ] ]} }
+                    { "Key": "InstanceID", "Value": { "Fn::Join": ["", [ { "Ref": "AWS::StackName" }, "{{i}}" ] ]} }
                 ],
                 "UserData": {
                     "Fn::Base64": {"Fn::Join": [ "",
@@ -523,7 +532,7 @@
                         "DeviceName": "/dev/sda1",
                         "Ebs": {
                             "VolumeType": { "Ref": "VolumeType" },
-                            "VolumeSize": { "Ref": "VMDiskSizeGB" },
+                            "VolumeSize": { "Ref": "VolumeSizeGB" },
                             "DeleteOnTermination": "true"
                         }
                     }
@@ -533,6 +542,18 @@
         {% endfor %}
     },
     "Outputs": {
+        "Note": {
+            "Value": {
+                "Fn::Join": [
+                    "\n",
+                    [
+                        "Your cluster is deployed, and currently forming.",
+                        "Now is a good time to get a cup of coffee, the ",
+                        "URL below should be available within a few minutes"
+                    ]
+                ]
+            }
+        },
         "Neo4jWebadmin": {
             "Value": {
                 "Fn::Join": [
@@ -578,9 +599,10 @@
             },
             "Description": "This is how you gain remote access to the machine."
         },
-        "Note": {
-            "Value": "It takes a few minutes for your EC2 machines to finish booting and start Neo4j.  Coffee time! ☕",
-            "Description": ""
-        }
+        {% for i in range(0, 3) %}
+        "Node{{i}}Ip": {
+            "Value": { "Fn::GetAtt": [ "Neo4jServer{{i}}", "PublicIp" ] }
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
     }
 }

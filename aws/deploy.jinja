@@ -258,8 +258,8 @@
             }
         },
 
-        {# outbound HTTPS must be permitted for awscli to work #}
-        {% for reason, port in { "SSH": 22, "Bolt": 7689, "Neo4jHTTPS": 7473, "HTTPS": "443" }.items() %}
+        {# outbound HTTPS/HTTP must be permitted for awscli, package managers to work #}
+        {% for reason, port in { "SSH": 22, "Bolt": 7689, "Neo4jHTTPS": 7473, "HTTPS": "443", "HTTP": "80" }.items() %}
             {% set outer_loop = loop %}
             {% for direction, egressBool in { "Ingress": False, "Egress": True }.items() %}
                 "{{reason}}{{direction}}NetworkAclEntry": {

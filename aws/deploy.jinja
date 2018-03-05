@@ -514,7 +514,9 @@
                     { "Key": "InstanceID", "Value": { "Fn::Join": ["", [ { "Ref": "ClusterName" }, "{{i}}" ] ]} }
                 ],
                 "UserData": {
-                    "Fn::Base64": {{ jsonizeFile('vm-startup.sh') }}
+                    "Fn::Base64": {"Fn::Join": [ "",
+                        {% include 'vm-startup.snippet.jinja' %}
+                    ]}
                 },
                 "BlockDeviceMappings": [
                     {

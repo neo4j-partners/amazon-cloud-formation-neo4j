@@ -1,3 +1,6 @@
-- Engineer cfn-signal to not finish deploy until neo4j is up
+- TaskCat
+- Distribute VMs across multiple AZs
+- Use encryption on EBS volumes
 - Verify changed password on all nodes
 - Verify persistent disks after delete
+- Consider solid state disks / EBS

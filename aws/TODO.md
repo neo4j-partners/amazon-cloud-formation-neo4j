@@ -1,0 +1,3 @@
+- Engineer cfn-signal to not finish deploy until neo4j is up
+- Verify changed password on all nodes
+- Verify persistent disks after delete

@@ -30,6 +30,8 @@ The CloudFormation stack is a jinja template which evaluates to a CloudFormation
 
 `pipenv run python3 generate.py > neo4j-enterprise-stack.json`
 
+This generates a raw template to `generated.json` and sends a pretty-printed organized template to the output file.
+
 Validate (in development) the local generated template:
 
 `aws cloudformation validate-template --template-body file://neo4j-enterprise-stack.json`
@@ -49,11 +51,20 @@ Deregister example: `aws ec2 deregister-image --image-id ami-650be718 --region u
 
 ## Create CloudFormation Stack
 
-Check needed parameters in the generated CF stack file first!
+Check needed parameters in the generated CF stack file first, and do not copy/paste
+the below, but customize it.
 
 ```
 aws cloudformation create-stack \
    --stack-name myteststack \
    --template-body file://neo4j-enterprise-stack.json \
-   --parameters ParameterKey=KeyPairName,ParameterValue=TestKey ParameterKey=SubnetIDs,ParameterValue=SubnetID1\\,SubnetID2
+   --parameters ParameterKey=AvailabilityZone,ParameterValue=us-west-2a \
+                ParameterKey=ClusterName,ParameterValue=neo4j-enterprise \
+                ParameterKey=ClusterNodes,ParameterValue=3 \
+                ParameterKey=InstanceType,ParameterValue=m3.medium \
+                ParameterKey=NetworkWhitelist,ParameterValue=0.0.0.0 \
+                ParameterKey=Password,ParameterValue=s00pers3cret \
+                ParameterKey=SSHKeyName,ParameterValue=davidallen-aws-neo4j \
+                ParameterKey=VMDiskSizeGB,ParameterValue=10 \
+                ParameterKey=VolumeType,ParameterValue=standard
 ```

@@ -29,7 +29,7 @@ sudo systemctl start neo4j
 
 # Install ancillary tools necessary for config/monitoring.
 # python runtime needed for some aws internal tools, like cloudformation.
-sudo apt-get --yes install jq awscli python 
+sudo apt-get --yes install jq awscli python python-setuptools
 
 echo "Available system services"
 ls /etc/systemd/system

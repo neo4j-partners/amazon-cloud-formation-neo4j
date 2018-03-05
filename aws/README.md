@@ -56,15 +56,14 @@ the below, but customize it.
 
 ```
 aws cloudformation create-stack \
-   --stack-name myteststack \
+   --stack-name StackyMcGrapherston \
    --template-body file://neo4j-enterprise-stack.json \
-   --parameters ParameterKey=AvailabilityZone,ParameterValue=us-west-2a \
-                ParameterKey=ClusterName,ParameterValue=neo4j-enterprise \
-                ParameterKey=ClusterNodes,ParameterValue=3 \
+   --parameters ParameterKey=ClusterNodes,ParameterValue=3 \
                 ParameterKey=InstanceType,ParameterValue=m3.medium \
-                ParameterKey=NetworkWhitelist,ParameterValue=0.0.0.0 \
+                ParameterKey=NetworkWhitelist,ParameterValue=0.0.0.0/8 \
                 ParameterKey=Password,ParameterValue=s00pers3cret \
                 ParameterKey=SSHKeyName,ParameterValue=davidallen-aws-neo4j \
-                ParameterKey=VMDiskSizeGB,ParameterValue=10 \
-                ParameterKey=VolumeType,ParameterValue=standard
+                ParameterKey=VolumeSizeGB,ParameterValue=37 \
+                ParameterKey=VolumeType,ParameterValue=gp2 \
+  --capabilities CAPABILITY_NAMED_IAM
 ```

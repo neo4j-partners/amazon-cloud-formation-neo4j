@@ -148,7 +148,7 @@
             "Fn::Or": [
                 {% if i == max_nodes %}{ "Fn::Equals": [0, 1] },{% endif %}
                 {% for c in range(i, max_nodes + 1, 1) %}
-                { "Fn::Equals": [{ "Ref": "ClusterNodes" }, {{c}} ]}{% if not loop.last %},{% endif %}
+                { "Fn::Equals": [{ "Ref": "ClusterNodes" }, {{c - 1}} ]}{% if not loop.last %},{% endif %}
                 {% endfor %}                
             ]
         }

@@ -46,6 +46,11 @@ CloudFormation can then be given the S3 URL `https://s3.amazonaws.com/neo4j-clou
 This often doesn't work and comes with numerous limitations.  One on filesize
 (which doesn't apply to S3), another in that it doesn't validate everything.
 
+## Scanning Clusters after startup for debugging purposes
+
+Check the `scan-cluster.sh` script, which can gather metrics for everything
+in a deployed stack; useful if something is going wrong.
+
 ## List AMIs
 
 ```

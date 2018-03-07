@@ -12,7 +12,7 @@
      # - Creates a new VPC to house neo4j, with 3 subnets corresponding to the AZs in use.
      #}
     {% if max_nodes is not defined %}
-      {% set max_nodes = 3 %}
+      {% set max_nodes = 8 %}
     {% endif %}
     {% if min_nodes is not defined %}
       {% set min_nodes = 3 %}
@@ -144,16 +144,15 @@
         "CreateNode1": {"Fn::Equals" : [true, true]},
         "CreateNode2": {"Fn::Equals" : [true, true]}{% if max_nodes > 3 %},{% endif %}
         {% for i in range(3, max_nodes) %}
-        {#
         "CreateNode{{i}}": {
             "Fn::Or": [
-                {% if i == max_nodes %}{ "Fn::Equals": [0, 1 ] },{% endif %}
+                {% if i == max_nodes %}{ "Fn::Equals": [0, 1] },{% endif %}
                 {% for c in range(i, max_nodes + 1, 1) %}
                 { "Fn::Equals": [{ "Ref": "ClusterNodes" }, {{c}} ]}{% if not loop.last %},{% endif %}
                 {% endfor %}                
             ]
-        } #}
-        "CreateNode{{i}}": {"Fn::Equals" : [true, false]}{% if not loop.last %},{% endif %}
+        }
+        {% if not loop.last %},{% endif %}
         {% endfor %}
     },
     "Resources": {

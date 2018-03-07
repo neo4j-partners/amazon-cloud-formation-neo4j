@@ -545,7 +545,7 @@
                         "Ebs": {
                             "VolumeType": { "Ref": "VolumeType" },
                             "VolumeSize": { "Ref": "VolumeSizeGB" },
-                            "Encrypted": "false"
+                            "Encrypted": { "Ref": "EncryptDataVolume" }
                         }
                     }
                 ]

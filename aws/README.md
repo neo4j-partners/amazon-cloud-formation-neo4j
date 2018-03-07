@@ -28,15 +28,23 @@ Check the variables at the top of the JSON file for other options you can overri
 
 The CloudFormation stack is a jinja template which evaluates to a CloudFormation JSON file.
 
-`pipenv run python3 generate.py > neo4j-enterprise-stack.json`
+Generate and copy to the right S3 bucket.  If the generate step fails due to a syntax
+error, check the intermediate `generated.json` file, which contains raw jinja substitutions
+before JSON parsing.
 
-This generates a raw template to `generated.json` and sends a pretty-printed organized template to the output file.
+```
+pipenv run python3 generate.py > neo4j-enterprise-stack.json && \
+s3cmd put neo4j-enterprise-stack.json s3://neo4j-cloudformation/
+```
 
-Validate (in development) the local generated template:
+CloudFormation can then be given the S3 URL `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-stack.json`
+
+### Validating a template locally
 
 `aws cloudformation validate-template --template-body file://neo4j-enterprise-stack.json`
 
-This JSON file can be uploaded to CloudFormation and created as a stack.
+This often doesn't work and comes with numerous limitations.  One on filesize
+(which doesn't apply to S3), another in that it doesn't validate everything.
 
 ## List AMIs
 

@@ -84,5 +84,7 @@ with open('generated.json', 'w') as f:
 # Re-parse and export pretty-printed, since template jinja mixture gets ugly
 # and hard to read fast.
 parsed = json.loads(tmpl_content.strip())
+# print(json.dumps(parsed))
+# Prettyprint
 print(json.dumps(parsed, indent=2, sort_keys=False))
 

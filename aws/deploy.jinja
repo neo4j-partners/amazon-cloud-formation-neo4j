@@ -4,6 +4,12 @@
      # makes it difficult to deploy a variable number of EC2 resources.  For full discussion of
      # why, see this: https://stackoverflow.com/a/41539208/2920686
      # This file is approach 2, template preprocessor with conditions.
+     #
+     # ASSUMPTIONS & DESIGN:
+     # - Can only be deployed to regions with >=3 availability zones, for redundancy.
+     # - Creates a separate EBS volume for /var/lib/neo4j, with adjustable size/encryption.
+     # - Requires AMI IDs as built by our packer template included in this repo.
+     # - Creates a new VPC to house neo4j, with 3 subnets corresponding to the AZs in use.
      #}
     {% if max_nodes is not defined %}
       {% set max_nodes = 3 %}
@@ -116,8 +122,8 @@
                 "standard", "io1", "gp2", "st1"
             ]
         },
-        "EncryptVolumes": {
-            "Description": "Should EBS storage be encrypted?",
+        "EncryptDataVolume": {
+            "Description": "Should EBS storage be encrypted?  Default is yes.",
             "Type": "String",
             "Default": "true",
             "AllowedValues": [
@@ -196,9 +202,7 @@
         "Subnet{{i}}" : {
             "Type" : "AWS::EC2::Subnet",
             "Properties" : {
-                "AvailabilityZone": {
-                    "Fn::Select": [ {{ i % 3 }}, { "Fn::GetAZs" : { "Ref": "AWS::Region" } }]
-                },                
+                "AvailabilityZone": {{ roundRobinAZ(i) }},
                 "VpcId" : { "Ref" : "VPC" },
                 "CidrBlock" : "10.0.{{i}}.0/24",
                 "Tags" : [ 
@@ -353,10 +357,15 @@
                 "Policies": [
                     {
                         "PolicyName": "root",
-                        {# Taken from arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess #}
+                        {# Adapted/customized from arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess #}
                         "PolicyDocument": {
                             "Version": "2012-10-17",
                             "Statement": [
+                                {  
+                                    "Effect": "Allow",
+                                    "Action": "ec2:CreateTags",
+                                    "Resource": "*"
+                                },
                                 {
                                     "Effect": "Allow",
                                     "Action": "ec2:Describe*",
@@ -454,16 +463,13 @@
                 ]
             }
         },
-        
+
         "Neo4jServer{{i}}": {
             "Type": "AWS::EC2::Instance",
             "Condition" : "CreateNode{{i}}",
             "Properties": {
                 "IamInstanceProfile": { "Ref": "instProfNeo4jEnterprise" },
-                "AvailabilityZone": {
-                    {# Round-robin distribute VMs across AZs #}
-                    "Fn::Select": [ {{ i % 3 }}, { "Fn::GetAZs" : { "Ref": "AWS::Region" } }]
-                },
+                "AvailabilityZone": {{ roundRobinAZ(i) }},
                 "DisableApiTermination": "FALSE",
                 "ImageId": {
                     "Fn::FindInMap": [ "AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "64" ]
@@ -483,13 +489,7 @@
 
                 "Tags": [
                     { 
-                        "Key": "Name", 
-                        "Value": { 
-                            "Fn::Join": [
-                                "-",
-                                [ { "Ref": "AWS::StackName" }, "vm-{{i}}" ]
-                            ]
-                        }
+                        "Key": "Name", "Value": {{ ("neo4j-vm-%s" % i) | appendStack }}
                     },                   
                     { "Key": "Application", "Value": { "Ref" : "AWS::StackId"} },
                     { "Key": "neo4j_mode", "Value": "cluster" },
@@ -506,7 +506,7 @@
                     },
                     { 
                         "Key": "causal_clustering_initial_discovery_members",
-                        "Value": {
+                        "Value": { 
                             "Fn::Join": [
                                 ",",
                                 [
@@ -533,8 +533,19 @@
                         "DeviceName": "/dev/sda1",
                         "Ebs": {
                             "VolumeType": { "Ref": "VolumeType" },
-                            "VolumeSize": { "Ref": "VolumeSizeGB" },
+                            "VolumeSize": "10",
                             "DeleteOnTermination": "true"
+                        }
+                    },
+                    {
+                        {# /dev/sdb will appear in the VM as /dev/xvdb, because reasons
+                         # This volume will be formatted/mounted by vm-startup.snippet.jinja 
+                         #}
+                        "DeviceName": "/dev/sdb",
+                        "Ebs": {
+                            "VolumeType": { "Ref": "VolumeType" },
+                            "VolumeSize": { "Ref": "VolumeSizeGB" },
+                            "Encrypted": "false"
                         }
                     }
                 ]

@@ -13,6 +13,13 @@ def appendStack(input):
             ]
       }""" % input
 
+def roundRobinAZ(someIndex, totalAZs=3):
+      """Evenly distribute resources across 3 AZs for avaialability"""
+      azIdx = someIndex % totalAZs
+      return """{
+            "Fn::Select": [ %d, { "Fn::GetAZs" : { "Ref": "AWS::Region" } }]
+      }""" % azIdx
+
 def jsonizeFile(filename):
       """
       AWS expects us to encode shell scripts as JSON, because JSON all the things.
@@ -65,6 +72,7 @@ env = Environment(loader=FileLoader('./'))
 
 env.filters['appendStack'] = appendStack
 env.globals['jsonizeFile'] = jsonizeFile
+env.globals['roundRobinAZ'] = roundRobinAZ
 
 template = env.get_template('deploy.jinja')
 tmpl_content = template.render()

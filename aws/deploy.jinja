@@ -1,0 +1,619 @@
+{
+    {#
+     # This file is a Jinja template, and not a regular cloudformation template, because Amazon
+     # makes it difficult to deploy a variable number of EC2 resources.  For full discussion of
+     # why, see this: https://stackoverflow.com/a/41539208/2920686
+     # This file is approach 2, template preprocessor with conditions.
+     #
+     # ASSUMPTIONS & DESIGN:
+     # - Can only be deployed to regions with >=3 availability zones, for redundancy.
+     # - Creates a separate EBS volume for /var/lib/neo4j, with adjustable size/encryption.
+     # - Requires AMI IDs as built by our packer template included in this repo.
+     # - Creates a new VPC to house neo4j, with 3 subnets corresponding to the AZs in use.
+     #}
+    {% if max_nodes is not defined %}
+      {% set max_nodes = 8 %}
+    {% endif %}
+    {% if min_nodes is not defined %}
+      {% set min_nodes = 3 %}
+    {% endif %}
+    {% if default_machine is not defined %}
+      {% set default_machine = "m3.medium" %}
+    {% endif %}
+
+    {% set INTERNAL_DNS_TLD = "neo4j" %}
+
+    "Description": "Neo4j on AWS - creates a variable number of EC2 Ubuntu machines, a VPC, elastic IP addresses, and deploys the Neo4j Graph Database cluster on it.  **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Mappings": {        
+        "AWSRegionArch2AMI": {
+            "us-east-1": {
+                "64": "NOT_YET"
+            },
+            "us-east-2": {
+                "64": "NOT_YET"
+            },
+            "us-west-2": {
+                "64": "ami-af49dcd7"
+            },
+            "us-west-1": {
+                "64": "NOT_YET"
+            },
+            "eu-west-1": {
+                "64": "NOT_YET"
+            },
+            "ca-central-1": {
+                "64": "NOT_YET"
+            },
+            "eu-central-1": {
+                "64": "NOT_YET"
+            },
+            "ap-southeast-1": {
+                "64": "NOT_YET"
+            },
+            "ap-southeast-2": {
+                "64": "NOT_YET"
+            },
+            "ap-northeast-1": {
+                "64": "NOT_YET"
+            },
+            "sa-east-1": {
+                "64": "NOT_YET"
+            }
+        }
+    },
+    "Parameters": {
+        "InstanceType": {
+            "Description": "EC2 instance type",
+            "Type": "String",
+            "Default": "{{default_machine}}",
+            "AllowedValues": [
+                "m1.medium",
+                "m1.large",
+                "t2.micro",
+                "t2.small",
+                "t2.medium",
+                "m1.xlarge",
+                "m2.xlarge",
+                "m2.2xlarge",
+                "m2.4xlarge",
+                "m3.medium",
+                "m3.xlarge",
+                "m3.2xlarge",
+                "c1.medium",
+                "c1.xlarge"
+            ],
+            "ConstraintDescription": "Must be a valid EC2 instance type."
+        },
+        "ClusterNodes": {
+            "Description": "Number of VMs in the cluster",
+            "Type": "Number",
+            "Default": {{ min_nodes }},
+            "MinValue": {{ min_nodes }},
+            "MaxValue": {{max_nodes}}
+        },
+        "SSHKeyName": {
+            "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "AllowedPattern": ".+"
+        },
+        "NetworkWhitelist": {
+            "Description": " The IP address range that can be used to connect to Neo4j",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "Default": "0.0.0.0/0",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+        },
+        "Password": {
+            "NoEcho": true,
+            "Description": "initial neo4j password (uppercase, lowercase, and numbers only)",
+            "Type": "String",
+            "MinLength": 8,
+            "MaxLength": 40,
+            "AllowedPattern": "^[a-zA-Z0-9\\.-]+$"
+        },
+        "VolumeType": {
+            "Description": "What kind of storage to attach",
+            "Type": "String",
+            "Default": "gp2",
+            "AllowedValues": [
+                "standard", "io1", "gp2", "st1"
+            ]
+        },
+        "EncryptDataVolume": {
+            "Description": "Should EBS storage be encrypted?  Default is yes.",
+            "Type": "String",
+            "Default": "true",
+            "AllowedValues": [
+                "true", "false"
+            ]
+        },
+        "VolumeSizeGB": {
+            "Description": "How much EBS storage is allocated to each cluster node, in GiB",
+            "Type": "Number",
+            "Default": "100",
+            "MinValue": "10",
+            "MaxValue": "1000",
+            "ConstraintDescription": "Must be a valid EBS disk size in GiB."
+        }
+    },
+    "Conditions": {
+        "CreateNode0": {"Fn::Equals" : [true, true]},
+        "CreateNode1": {"Fn::Equals" : [true, true]},
+        "CreateNode2": {"Fn::Equals" : [true, true]}{% if max_nodes > 3 %},{% endif %}
+        {% for i in range(3, max_nodes) %}
+        "CreateNode{{i}}": {
+            "Fn::Or": [
+                {% if i == max_nodes %}{ "Fn::Equals": [0, 1] },{% endif %}
+                {% for c in range(i, max_nodes + 1, 1) %}
+                { "Fn::Equals": [{ "Ref": "ClusterNodes" }, {{c - 1}} ]}{% if not loop.last %},{% endif %}
+                {% endfor %}                
+            ]
+        }
+        {% if not loop.last %},{% endif %}
+        {% endfor %}
+    },
+    "Resources": {
+        "VPC" : {
+            "Type" : "AWS::EC2::VPC",
+            "Properties" : {
+                "EnableDnsSupport" : "true",
+                "EnableDnsHostnames" : "true",
+                "InstanceTenancy": "default",
+                "CidrBlock" : "10.0.0.0/16",
+                "Tags" : [ 
+                    {
+                        "Key": "Name", 
+                        "Value": {{ "Neo4jVPC" | appendStack }}
+                    },
+                    {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
+                ]
+            }
+        },
+
+        "DNSZone": {
+            "Type": "AWS::Route53::HostedZone",
+            "DependsOn" : "VPC",
+            "Properties": {
+                "HostedZoneConfig": {
+                    "Comment": "Zone to define private DNS for neo4j nodes"
+                },
+                "Name": "{{ INTERNAL_DNS_TLD }}",
+                "VPCs": [{
+                    "VPCId": { "Ref": "VPC" },
+                    "VPCRegion": { "Ref": "AWS::Region" }
+                }],
+                "HostedZoneTags" : [{
+                    "Key": "Name",
+                    "Value": {{ "Neo4jPrivateZone" | appendStack }}
+                }]
+            }            
+        },
+
+        {# Create three sets of subnets; this is needed because you need one
+         # per AZ, with one route table association and network ACL association
+         # for each.  Nodes get distributed across the subnets simple round robin,
+         # meaning that node n goes into subnet n % 3 + 1.
+         #}
+        {% for i in range(0, 3) %}
+        "Subnet{{i}}" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+                "AvailabilityZone": {{ roundRobinAZ(i) }},
+                "VpcId" : { "Ref" : "VPC" },
+                "CidrBlock" : "10.0.{{i}}.0/24",
+                "Tags" : [ 
+                    {"Key": "Name", "Value": {{ ("Neo4jSubnet%d" % i) | appendStack }} },
+                    {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
+                ],
+                "MapPublicIpOnLaunch": "true"
+            }
+        },
+
+        "SubnetRouteTableAssociation{{i}}" : {
+            "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties" : {
+                "SubnetId" : { "Ref" : "Subnet{{i}}" },
+                "RouteTableId" : { "Ref" : "RouteTable" }
+            }
+        },
+
+        "SubnetNetworkAclAssociation{{i}}" : {
+            "Type" : "AWS::EC2::SubnetNetworkAclAssociation",
+            "Properties" : {
+                "SubnetId" : { "Ref" : "Subnet{{i}}" },
+                "NetworkAclId" : { "Ref" : "NetworkAcl" }
+            }
+        },
+        {% endfor %}
+
+        "InternetGateway" : {
+            "Type" : "AWS::EC2::InternetGateway",
+            "Properties" : {                
+                "Tags" : [ 
+                    {"Key": "Name", "Value": {{ "Neo4jGateway" | appendStack }} },
+                    {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
+                ]
+            }
+        },
+
+        "AttachGateway" : {
+            "Type" : "AWS::EC2::VPCGatewayAttachment",
+            "Properties" : {
+                "VpcId" : { "Ref" : "VPC" },
+                "InternetGatewayId" : { "Ref" : "InternetGateway" }
+            }
+        },
+
+        "RouteTable" : {
+            "Type" : "AWS::EC2::RouteTable",
+            "Properties" : {
+                "VpcId" : {"Ref" : "VPC"},
+                "Tags" : [ 
+                    {"Key": "Name", "Value": {{ "Neo4jRouteTable" | appendStack }} },
+                    {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
+                ]
+            }
+        },
+
+        "Route" : {
+            "Type" : "AWS::EC2::Route",
+            "DependsOn" : "AttachGateway",
+            "Properties" : {
+                "RouteTableId" : { "Ref" : "RouteTable" },
+                "DestinationCidrBlock" : { "Ref": "NetworkWhitelist" },
+                "GatewayId" : { "Ref" : "InternetGateway" }
+            }
+        },
+
+        "NetworkAcl" : {
+            "Type" : "AWS::EC2::NetworkAcl",
+            "Properties" : {
+                "VpcId" : {"Ref" : "VPC"},
+                "Tags" : [ {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } ]
+            }
+        },
+
+        {# outbound HTTPS/HTTP must be permitted for awscli, package managers to work #}
+        {% for reason, port in { "SSH": 22, "Bolt": 7689, "Neo4jHTTPS": 7473, "HTTPS": "443", "HTTP": "80" }.items() %}
+            {% set outer_loop = loop %}
+            {% for direction, egressBool in { "Ingress": False, "Egress": True }.items() %}
+                "{{reason}}{{direction}}NetworkAclEntry": {
+                    "Type" : "AWS::EC2::NetworkAclEntry",
+                    "Properties" : {
+                        "NetworkAclId" : {"Ref" : "NetworkAcl"},
+                        "RuleNumber" : "{{100 + (outer_loop.index * loop.index) }}",
+                        "Protocol" : "6", {# this means TCP #}
+                        "RuleAction" : "allow",
+                        "Egress" : "{{egressBool | string | lower }}",
+                        "CidrBlock" : { "Ref": "NetworkWhitelist" },
+                        "PortRange" : {"From" : "{{port}}", "To" : "{{port}}"}
+                    }                
+                },
+            {% endfor %}
+        {% endfor %}
+
+        {# Internal causal cluster ports #}
+        {% for reason, port in { "Int1": "5000", "Int2": "6000", "Int3": "7000" }.items() %}
+            "{{reason}}NetworkAclEntry": {
+                "Type" : "AWS::EC2::NetworkAclEntry",
+                "Properties" : {
+                    "NetworkAclId" : {"Ref" : "NetworkAcl"},
+                    "RuleNumber" : "{{200 + loop.index}}",
+                    "Protocol" : "6", {# this means TCP #}
+                    "RuleAction" : "allow",
+                    "Egress" : "true",
+                    "CidrBlock" : "10.0.0.0/16",
+                    "PortRange" : {"From" : "{{port}}", "To" : "{{port}}"}
+                }                
+            },        
+        {% endfor %}
+
+        "InboundResponsePortsNetworkAclEntry" : {
+            "Type" : "AWS::EC2::NetworkAclEntry",
+            "Properties" : {
+                "NetworkAclId" : {"Ref" : "NetworkAcl"},
+                "RuleNumber" : "300",
+                "Protocol" : "6",
+                "RuleAction" : "allow",
+                "Egress" : "false",
+                "CidrBlock" : { "Ref": "NetworkWhitelist" },
+                "PortRange" : {"From" : "1024", "To" : "65535"}
+            }
+        },
+
+        "OutBoundResponsePortsNetworkAclEntry" : {
+            "Type" : "AWS::EC2::NetworkAclEntry",
+            "Properties" : {
+                "NetworkAclId" : {"Ref" : "NetworkAcl"},
+                "RuleNumber" : "301",
+                "Protocol" : "6",
+                "RuleAction" : "allow",
+                "Egress" : "true",
+                "CidrBlock" : { "Ref": "NetworkWhitelist" },
+                "PortRange" : {"From" : "1024", "To" : "65535"}
+            }
+        },
+
+        "ReadOwnTags": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": {{ "work-with-tags" | appendStack }},
+                "AssumeRolePolicyDocument": { 
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "ec2.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyName": "root",
+                        {# Adapted/customized from arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess #}
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {  
+                                    "Effect": "Allow",
+                                    "Action": "ec2:CreateTags",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "ec2:Describe*",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "elasticloadbalancing:Describe*",
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "cloudwatch:ListMetrics",
+                                        "cloudwatch:GetMetricStatistics",
+                                        "cloudwatch:Describe*"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "autoscaling:Describe*",
+                                    "Resource": "*"
+                                }
+                            ]                            
+                        }
+                    }
+                ]
+            }
+        },
+
+        "instProfNeo4jEnterprise": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Roles": [{ "Ref": "ReadOwnTags"}],
+                "InstanceProfileName": {{ "read-own-tags-ip" | appendStack }}
+            }            
+        },
+
+        "sgNeo4jEnterprise": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId" : { "Ref" : "VPC" },
+                "GroupDescription": "Neo4j Ports",
+                "SecurityGroupIngress": [
+                    {# STRICTLY INTERNAL PORTS #}
+                    {% for port in ["5000", "6000", "7000" ] %}
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "{{port}}",
+                        "ToPort": "{{port}}",
+                        "CidrIp": "10.0.0.0/16"
+                    },
+                    {% endfor %}
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "22",
+                        "ToPort": "22",
+                        "CidrIp": { "Ref": "NetworkWhitelist" }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "7687",
+                        "ToPort": "7687",
+                        "CidrIp": { "Ref": "NetworkWhitelist" }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "7473",
+                        "ToPort": "7473",
+                        "CidrIp": { "Ref": "NetworkWhitelist" }
+                    }
+                ]
+            }
+        },
+        
+        {# Create all of the resources given the cluster size #}
+        {% for i in range(0, max_nodes) %}
+        "Neo4jServer{{i}}DNS": {
+            "Type": "AWS::Route53::RecordSet",
+            "Condition" : "CreateNode{{i}}",
+            "DependsOn" : "DNSZone",
+            "Properties": {
+                "HostedZoneId": { "Ref" : "DNSZone" },
+                "Comment" : "DNS names for neo4j node {{i}} of {{max_nodes}}.",  
+                "Name" : "node{{i}}.{{INTERNAL_DNS_TLD}}.",
+                "Type" : "A",
+                "TTL" : "900",
+                "ResourceRecords" : [
+                    {# Map DNS to **private IP** not PublicIp, this because
+                     # it's inside the VPC and cluster coord traffic isn't allowed
+                     # outside anyway.
+                     #}
+                    { "Fn::GetAtt" : [ "Neo4jServer{{i}}", "PrivateIp" ] }
+                ]
+            }
+        },
+
+        "Neo4jServer{{i}}": {
+            "Type": "AWS::EC2::Instance",
+            "Condition" : "CreateNode{{i}}",
+            "Properties": {
+                "IamInstanceProfile": { "Ref": "instProfNeo4jEnterprise" },
+                "AvailabilityZone": {{ roundRobinAZ(i) }},
+                "DisableApiTermination": "FALSE",
+                "ImageId": {
+                    "Fn::FindInMap": [ "AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "64" ]
+                },
+
+                "NetworkInterfaces" : [{
+                    "GroupSet"                 : [{ "Ref" : "sgNeo4jEnterprise" }],
+                    "AssociatePublicIpAddress" : "true",
+                    "DeviceIndex"              : "0",
+                    "DeleteOnTermination"      : "true",
+                    "SubnetId"                 : { "Ref" : "Subnet{{ i % 3 }}" }
+                }],
+                
+                "InstanceType": { "Ref": "InstanceType" },
+                "KeyName": { "Ref": "SSHKeyName" },
+                "Monitoring": "false",
+
+                "Tags": [
+                    { 
+                        "Key": "Name", "Value": {{ ("neo4j-vm-%s" % i) | appendStack }}
+                    },                   
+                    { "Key": "Application", "Value": { "Ref" : "AWS::StackId"} },
+                    { "Key": "neo4j_mode", "Value": "cluster" },
+                    {#
+                     # Per cluster team, irrespective of cluster size we set initial size
+                     # to 3 (the mininum) and initial discovery set to the first 3.  This
+                     # should form cluster appropriately, even if there are 8, because
+                     # 4 - 8 know to contact 1 - 3.
+                     # Requires the assumption that clusters are never < 3 nodes.
+                     #}
+                    { 
+                        "Key": "causal_clustering_expected_core_cluster_size", 
+                        "Value": "3"
+                    },
+                    { 
+                        "Key": "causal_clustering_initial_discovery_members",
+                        "Value": { 
+                            "Fn::Join": [
+                                ",",
+                                [
+                                    "node1.neo4j:5000", 
+                                    "node2.neo4j:5000",
+                                    "node3.neo4j:5000"
+                                ]
+                            ]
+                        }
+                    },
+                    {
+                        "Key": "initial_password",
+                        "Value": { "Ref": "Password" }
+                    },
+                    { "Key": "InstanceID", "Value": { "Fn::Join": ["", [ { "Ref": "AWS::StackName" }, "{{i}}" ] ]} }
+                ],
+                "UserData": {
+                    "Fn::Base64": {"Fn::Join": [ "",
+                        {% include 'vm-startup.snippet.jinja' %}
+                    ]}
+                },
+                "BlockDeviceMappings": [
+                    {
+                        "DeviceName": "/dev/sda1",
+                        "Ebs": {
+                            "VolumeType": { "Ref": "VolumeType" },
+                            "VolumeSize": "10",
+                            "DeleteOnTermination": "true"
+                        }
+                    },
+                    {
+                        {# /dev/sdb will appear in the VM as /dev/xvdb, because reasons
+                         # This volume will be formatted/mounted by vm-startup.snippet.jinja 
+                         #}
+                        "DeviceName": "/dev/sdb",
+                        "Ebs": {
+                            "VolumeType": { "Ref": "VolumeType" },
+                            "VolumeSize": { "Ref": "VolumeSizeGB" },
+                            "Encrypted": { "Ref": "EncryptDataVolume" }
+                        }
+                    }
+                ]
+            }
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    },
+    "Outputs": {
+        "Note": {
+            "Value": {
+                "Fn::Join": [
+                    "\n",
+                    [
+                        "Your cluster is deployed, and currently forming.",
+                        "Now is a good time to get a cup of coffee, the ",
+                        "URL below should be available within a few minutes"
+                    ]
+                ]
+            }
+        },
+        "Neo4jWebadmin": {
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "https://",
+                        {
+                            "Fn::GetAtt": [
+                                "Neo4jServer1",
+                                "PublicIp"
+                            ]
+                        },
+                        ":7473/"
+                    ]
+                ]
+            },
+            "Description": "This is the address of your Neo4j server web administration console."
+        },
+        "Username": {
+            "Value": "neo4j"
+        },
+        "Password": {
+            "Value": {
+                "Ref": "Password"
+            }
+        },
+        "SSH": {
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "ssh -i ${HOME}/.ssh/",
+                        { "Ref": "SSHKeyName" },
+                        ".pem -l ubuntu@",
+                        {
+                            "Fn::GetAtt": [
+                                "Neo4jServer1",
+                                "PublicIp"
+                            ]
+                        }
+                    ]
+                ]
+            },
+            "Description": "This is how you gain remote access to the machine."
+        },
+        {% for i in range(0, 3) %}
+        "Node{{i}}Ip": {
+            "Value": { "Fn::GetAtt": [ "Neo4jServer{{i}}", "PublicIp" ] }
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    }
+}

@@ -1,0 +1,1 @@
+- Verify testing procedure expected via Pratap

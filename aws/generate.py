@@ -1,6 +1,8 @@
 from jinja2 import Environment, Template, BaseLoader, TemplateNotFound
 from os.path import join, exists, getmtime 
 import json
+import argparse
+import sys
 import re
 
 # Custom filters to make generating templates less painful.
@@ -77,7 +79,16 @@ env.globals['roundRobinAZ'] = roundRobinAZ
 template = env.get_template('deploy.jinja')
 tmpl_content = template.render()
 
-with open('generated.json', 'w') as f:
+
+parser = argparse.ArgumentParser(description='Generate CloudFormation JSON from template')
+parser.add_argument('--template', type=str, help='template file')
+args = parser.parse_args()
+
+if args.template is None:
+      print("Template argument is required!")
+      sys.exit(1)
+
+with open(args.template, 'w') as f:
       f.write(tmpl_content)
       f.close()
 

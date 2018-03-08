@@ -32,8 +32,12 @@ Generate and copy to the right S3 bucket.  If the generate step fails due to a s
 error, check the intermediate `generated.json` file, which contains raw jinja substitutions
 before JSON parsing.
 
+There are two possible templates you can use:
+* `deploy.jinja` is for n-node causal clusters
+* `deploy-standalone.jinja` is for single-node deploys
+
 ```
-pipenv run python3 generate.py > neo4j-enterprise-stack.json && \
+pipenv run python3 generate.py --template deploy.jinja > neo4j-enterprise-stack.json && \
 s3cmd put neo4j-enterprise-stack.json s3://neo4j-cloudformation/
 ```
 

@@ -45,7 +45,6 @@ echo '#########################################'
 
 # Provisioned copy of conf needs to be put in place.
 sudo cp /home/ubuntu/neo4j.conf /etc/neo4j/neo4j.template
-sudo cp /home/ubuntu/neo4j-standalone.conf /etc/neo4j/neo4j-standalone.template
 sudo cp /home/ubuntu/pre-neo4j.sh /etc/neo4j/pre-neo4j.sh
 sudo chmod +x /etc/neo4j/pre-neo4j.sh
 

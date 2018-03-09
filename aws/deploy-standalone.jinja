@@ -3,8 +3,6 @@
       {% set default_machine = "m3.medium" %}
     {% endif %}
 
-    {% set INTERNAL_DNS_TLD = "neo4j" %}
-
     "Description": "Neo4j on AWS - creates a variable number of EC2 Ubuntu machines, a VPC, elastic IP addresses, and deploys the Neo4j Graph Database cluster on it.  **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
     "AWSTemplateFormatVersion": "2010-09-09",
     "Mappings": {        
@@ -131,7 +129,7 @@
                     "Fn::Select" : [ "0", { "Fn::GetAZs" : "" } ]
                 },
                 "VpcId" : { "Ref" : "VPC" },
-                "CidrBlock" : "10.0.{{i}}.0/24",
+                "CidrBlock" : "10.0.0.0/24",
                 "Tags" : [ 
                     {"Key": "Name", "Value": {{ ("Neo4jSubnet") | appendStack }} },
                     {"Key" : "Application", "Value" : { "Ref" : "AWS::StackId"} } 
@@ -388,8 +386,7 @@
                     {
                         "Key": "initial_password",
                         "Value": { "Ref": "Password" }
-                    },
-                    { "Key": "InstanceID", "Value": { "Fn::Join": ["", [ { "Ref": "AWS::StackName" }, "{{i}}" ] ]} }
+                    }
                 ],
                 "UserData": {
                     "Fn::Base64": {"Fn::Join": [ "",

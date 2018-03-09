@@ -39,17 +39,20 @@ const didStrategy = name => {
 const NAryTreeStrategy = require('./NAryTreeStrategy');
 const FatNodeAppendStrategy = require('./FatNodeAppendStrategy');
 const MergeWriteStrategy = require('./MergeWriteStrategy');
+const RawWriteStrategy = require('./RawWriteStrategy');
 
 const strategies = {
   nary: new NAryTreeStrategy({ n: 2 }),
   fatnode: new FatNodeAppendStrategy({}),
   mergewrite: new MergeWriteStrategy({ n: 1000000 }),
+  rawrite: new RawWriteStrategy({ n: 10 }),
 };
 
 const probabilityTable = [
-  [ 0.2, 'fatnode' ],
-  [ 0.4, 'mergewrite' ],
-  [ 1, 'nary' ],
+  [ 0.001, 'fatnode' ],
+  [ 0.002, 'nary' ],
+  [ 0.25, 'mergewrite' ],
+  [ 1, 'rawrite' ],
 ];
 
 const runStrategy = (driver) => {

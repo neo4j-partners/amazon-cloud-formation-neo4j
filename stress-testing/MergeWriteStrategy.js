@@ -6,7 +6,7 @@ class MergeWriteStrategy extends Strategy {
     constructor(props) {
         super(props);
         this.name = 'MergeWriteStrategy';
-        this.n = props.n || 10000000;
+        this.n = props.n || 100000000;
     }
 
     setup(driver) {

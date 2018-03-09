@@ -36,12 +36,23 @@ There are two possible templates you can use:
 * `deploy.jinja` is for n-node causal clusters
 * `deploy-standalone.jinja` is for single-node deploys
 
+Causal clusters:
+
 ```
 pipenv run python3 generate.py --template deploy.jinja > neo4j-enterprise-stack.json && \
 s3cmd put neo4j-enterprise-stack.json s3://neo4j-cloudformation/
 ```
 
-CloudFormation can then be given the S3 URL `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-stack.json`
+Standalone:
+
+```
+pipenv run python3 generate.py --template deploy-standalone.jinja > neo4j-enterprise-standalone-stack.json && \
+s3cmd put neo4j-enterprise-standalone-stack.json s3://neo4j-cloudformation/
+```
+
+CloudFormation can then be given these S3 URLs 
+* `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-stack.json`
+* `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-standalone-stack.json`
 
 ### Validating a template locally
 

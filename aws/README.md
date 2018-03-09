@@ -50,10 +50,21 @@ CloudFormation can then be given the S3 URL `https://s3.amazonaws.com/neo4j-clou
 This often doesn't work and comes with numerous limitations.  One on filesize
 (which doesn't apply to S3), another in that it doesn't validate everything.
 
-## Scanning Clusters after startup for debugging purposes
+## Testing Deployed Stacks
+
+### Scanning Clusters after startup for debugging purposes
 
 Check the `scan-cluster.sh` script, which can gather metrics for everything
 in a deployed stack; useful if something is going wrong.
+
+### Stress Tests
+
+Run the stress tests in this repo, and verify with the followers that they
+received all data.
+
+### NMap
+
+Run nmap to enumerate ports on the VMs and ensure that only bolt and HTTPS are open.
 
 ## List AMIs
 

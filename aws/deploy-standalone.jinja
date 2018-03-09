@@ -16,7 +16,7 @@
                 "64": "NOT_YET"
             },
             "us-west-2": {
-                "64": "ami-af49dcd7"
+                "64": "ami-afd84ed7"
             },
             "us-west-1": {
                 "64": "NOT_YET"
@@ -127,7 +127,9 @@
         "Subnet" : {
             "Type" : "AWS::EC2::Subnet",
             "Properties" : {
-                "AvailabilityZone": {{ roundRobinAZ(i) }},
+                "AvailabilityZone": {
+                    "Fn::Select" : [ "0", { "Fn::GetAZs" : "" } ]
+                },
                 "VpcId" : { "Ref" : "VPC" },
                 "CidrBlock" : "10.0.{{i}}.0/24",
                 "Tags" : [ 

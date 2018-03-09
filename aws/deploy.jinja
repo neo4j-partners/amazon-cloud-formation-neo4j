@@ -12,7 +12,7 @@
      # - Creates a new VPC to house neo4j, with 3 subnets corresponding to the AZs in use.
      #}
     {% if max_nodes is not defined %}
-      {% set max_nodes = 8 %}
+      {% set max_nodes = 7 %}
     {% endif %}
     {% if min_nodes is not defined %}
       {% set min_nodes = 3 %}
@@ -34,7 +34,7 @@
                 "64": "NOT_YET"
             },
             "us-west-2": {
-                "64": "ami-af49dcd7"
+                "64": "ami-afd84ed7"
             },
             "us-west-1": {
                 "64": "NOT_YET"
@@ -140,15 +140,24 @@
         }
     },
     "Conditions": {
+        {# Bear in mind minimum cluster size is 3, so nodes 0, 1, 2 are always deployed.
+         # CC deploys with < 3 nodes are not supported.
+         # Also, node counting starts at 0, so when user chooses 4 nodes, they should
+         # get 0, 1, 2, 3
+         #}
         "CreateNode0": {"Fn::Equals" : [true, true]},
         "CreateNode1": {"Fn::Equals" : [true, true]},
-        "CreateNode2": {"Fn::Equals" : [true, true]}{% if max_nodes > 3 %},{% endif %}
+        "CreateNode2": {"Fn::Equals" : [true, true]}{% if max_nodes > 3 %},{% endif %}        
         {% for i in range(3, max_nodes) %}
         "CreateNode{{i}}": {
-            "Fn::Or": [
-                {% if i == max_nodes %}{ "Fn::Equals": [0, 1] },{% endif %}
-                {% for c in range(i, max_nodes + 1, 1) %}
-                { "Fn::Equals": [{ "Ref": "ClusterNodes" }, {{c - 1}} ]}{% if not loop.last %},{% endif %}
+            "Fn::Or": [                
+                {% if i == (max_nodes - 1) %}
+                    {# Last loop case will only have one statement, ORs must have min 2 #}
+                    { "Fn::Equals": [0, 1] },
+                {% endif %}
+
+                {% for c in range(i, max_nodes, 1) %}
+                { "Fn::Equals": [{ "Ref": "ClusterNodes" }, {{c + 1}} ]}{% if not loop.last %},{% endif %}
                 {% endfor %}                
             ]
         }
@@ -492,6 +501,7 @@
                     },                   
                     { "Key": "Application", "Value": { "Ref" : "AWS::StackId"} },
                     { "Key": "neo4j_mode", "Value": "cluster" },
+                    { "Key": "dbms_mode", "Value": "CORE" },
                     {#
                      # Per cluster team, irrespective of cluster size we set initial size
                      # to 3 (the mininum) and initial discovery set to the first 3.  This

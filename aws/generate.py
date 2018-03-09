@@ -76,19 +76,18 @@ env.filters['appendStack'] = appendStack
 env.globals['jsonizeFile'] = jsonizeFile
 env.globals['roundRobinAZ'] = roundRobinAZ
 
-template = env.get_template('deploy.jinja')
-tmpl_content = template.render()
-
-
 parser = argparse.ArgumentParser(description='Generate CloudFormation JSON from template')
 parser.add_argument('--template', type=str, help='template file')
 args = parser.parse_args()
+
+template = env.get_template(args.template)
+tmpl_content = template.render()
 
 if args.template is None:
       print("Template argument is required!")
       sys.exit(1)
 
-with open(args.template, 'w') as f:
+with open('generated.json', 'w') as f:
       f.write(tmpl_content)
       f.close()
 

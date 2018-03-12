@@ -41,6 +41,7 @@ echo '#########################################'
 # Provisioned copy of conf needs to be put in place.
 sudo cp /home/ubuntu/neo4j.conf /etc/neo4j/neo4j.template
 sudo cp /home/ubuntu/pre-neo4j.sh /etc/neo4j/pre-neo4j.sh
+sudo cp -r /home/ubuntu/licensing /etc/neo4j/
 sudo chmod +x /etc/neo4j/pre-neo4j.sh
 
 # Edit startup profile for this system service to call our pre-neo4j wrapper (which in turn

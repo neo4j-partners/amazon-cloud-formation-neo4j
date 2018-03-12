@@ -23,15 +23,22 @@
           "name": "ubuntu/images/*ubuntu-xenial-16.04-amd64-server-*",
           "root-device-type": "ebs"
         },
-        "owners": [
-          "099720109477"
-        ],
+        "owners": ["099720109477"],
         "most_recent": true
       },
       "instance_type": "t2.micro",
       "ssh_username": "ubuntu",
       "ami_name": "neo4j-{{user `neo4j_edition`}}-{{user `neo4j_version` | clean_ami_name}} {{isotime \"2006-01-02T03_04_05Z\"}}",
-      "ami_regions": [],
+      "ami_regions": [
+        "eu-west-1",
+        "eu-central-1",
+        "ap-northeast-1",
+        "sa-east-1",
+        "ap-southeast-1",
+        "us-east-1",
+        "us-east-2",
+        "us-west-1"
+      ],
       "tags": {
         "neo4j-install-date": "{{isotime \"2006-01-02T03:04:05Z\"}}",
         "neo4j-version": "{{user `neo4j_version`}}",

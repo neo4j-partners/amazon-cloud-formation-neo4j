@@ -32,12 +32,27 @@ Generate and copy to the right S3 bucket.  If the generate step fails due to a s
 error, check the intermediate `generated.json` file, which contains raw jinja substitutions
 before JSON parsing.
 
+There are two possible templates you can use:
+* `deploy.jinja` is for n-node causal clusters
+* `deploy-standalone.jinja` is for single-node deploys
+
+Causal clusters:
+
 ```
-pipenv run python3 generate.py > neo4j-enterprise-stack.json && \
+pipenv run python3 generate.py --template deploy.jinja > neo4j-enterprise-stack.json && \
 s3cmd put neo4j-enterprise-stack.json s3://neo4j-cloudformation/
 ```
 
-CloudFormation can then be given the S3 URL `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-stack.json`
+Standalone:
+
+```
+pipenv run python3 generate.py --template deploy-standalone.jinja > neo4j-enterprise-standalone-stack.json && \
+s3cmd put neo4j-enterprise-standalone-stack.json s3://neo4j-cloudformation/
+```
+
+CloudFormation can then be given these S3 URLs 
+* `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-stack.json`
+* `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-standalone-stack.json`
 
 ### Validating a template locally
 
@@ -46,10 +61,21 @@ CloudFormation can then be given the S3 URL `https://s3.amazonaws.com/neo4j-clou
 This often doesn't work and comes with numerous limitations.  One on filesize
 (which doesn't apply to S3), another in that it doesn't validate everything.
 
-## Scanning Clusters after startup for debugging purposes
+## Testing Deployed Stacks
+
+### Scanning Clusters after startup for debugging purposes
 
 Check the `scan-cluster.sh` script, which can gather metrics for everything
 in a deployed stack; useful if something is going wrong.
+
+### Stress Tests
+
+Run the stress tests in this repo, and verify with the followers that they
+received all data.
+
+### NMap
+
+Run nmap to enumerate ports on the VMs and ensure that only bolt and HTTPS are open.
 
 ## List AMIs
 

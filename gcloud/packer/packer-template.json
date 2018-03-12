@@ -1,0 +1,39 @@
+{
+  "variables": {
+    "neo4j_version": "1:3.3.3",
+    "neo4j_edition": "enterprise",
+    "zone": "us-central1-a",
+    "gcp_service_account_credentials_file": "packer-sa.json",
+    "gcp_base_image": "ubuntu-1604-xenial-v20180306"
+  },
+  "builders": [
+    {
+      "type": "googlecompute",
+      "account_file": "{{user `gcp_service_account_credentials_file`}}",
+      "project_id": "test-drive-development",
+      "source_image": "{{user `gcp_base_image`}}",
+      "ssh_username": "ubuntu",
+      "zone": "{{user `zone`}}"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "file",
+      "source": "./neo4j.conf",
+      "destination": "/home/ubuntu/neo4j.conf"
+    },
+    {
+      "type": "file",
+      "source": "./pre-neo4j.sh",
+      "destination": "/home/ubuntu/pre-neo4j.sh"
+    },
+    {
+      "type": "shell",
+      "script": "./install-neo4j.sh",
+      "environment_vars": [
+        "neo4j_version={{ user `neo4j_version` }}",
+        "neo4j_edition={{ user `neo4j_edition` }}"
+      ]
+    }
+  ]
+}

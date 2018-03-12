@@ -28,15 +28,10 @@ echo "Starting neo4j..."
 sudo systemctl start neo4j
 
 # Install ancillary tools necessary for config/monitoring.
-# python runtime needed for some aws internal tools, like cloudformation.
-sudo apt-get --yes install jq awscli python python-setuptools
+sudo apt-get --yes install jq python python-setuptools
 
 echo "Available system services"
 ls /etc/systemd/system
-
-# Instance metadata:
-# https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html#instancedata-data-retrieval
-curl --silent http://169.254.169.254/latest/meta-data/public-hostname
 
 echo ''
 echo '#########################################'

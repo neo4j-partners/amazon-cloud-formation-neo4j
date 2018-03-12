@@ -16,7 +16,7 @@
       "zone": "{{user `zone`}}",
       "image_family": "neo4j",
       "image_name": "neo4j-{{user `neo4j_edition` | clean_image_name}}-{{user `neo4j_version` | clean_image_name}}",
-      "metadata": {
+      "image_labels": {
         "neo4j_package": "{{user `neo4j_version` | clean_image_name}}",
         "neo4j_edition": "{{user `neo4j_edition` | clean_image_name}}",
         "build_date": "{{isotime \"2006-01-02T03_04_05Z\" | clean_image_name}}"

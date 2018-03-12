@@ -33,7 +33,7 @@ NEO4J_SETTINGS[dbms_backup_address]=localhost:6362
 
 # Causal Clustering
 NEO4J_SETTINGS[causal_clustering_discovery_type]=LIST
-NEO4J_SETTINGS[causal_clustering_initial_discovery_members]=node1
+NEO4J_SETTINGS[causal_clustering_initial_discovery_members]=node1:5000
 NEO4J_SETTINGS[causal_clustering_expected_core_cluster_size]=1
 NEO4J_SETTINGS[dbms_connectors_default_listen_address]=0.0.0.0
 NEO4J_SETTINGS[dbms_mode]=SINGLE

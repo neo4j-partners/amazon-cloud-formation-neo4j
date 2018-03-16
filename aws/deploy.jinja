@@ -153,6 +153,26 @@
             "ConstraintDescription": "Must be a valid EBS disk size in GiB."
         }
     },
+
+    "Metadata": {
+        "AWS::CloudFormation::Interface": {
+            "ParameterGroups" : [
+                {
+                    "Label" : { "default" : "Cluster Configuration" },
+                    "Parameters" : [ "ClusterNodes", "ReadReplicas" ]
+                },
+                {
+                    "Label" : { "default": "Amazon EC2 Configuration" },
+                    "Parameters" : [ "InstanceType", "VolumeType", "VolumeSizeGB", "EncryptDataVolume" ]
+                },
+                {
+                    "Label": { "default": "Access Control" },
+                    "Parameters": [ "SSHKeyName", "NetworkWhitelist", "Password" ]
+                }
+            ]
+        }
+    },
+
     "Conditions": {
         {# Bear in mind minimum cluster size is 3, so nodes 0, 1, 2 are always deployed.
          # CC deploys with < 3 nodes are not supported.

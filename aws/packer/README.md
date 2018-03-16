@@ -19,3 +19,9 @@ packer build \
 ```
 
 Check the variables at the top of the JSON file for other options you can override/set.
+
+## Making them Public
+
+In the packer template, the `ami_groups` setting does this.  Because we're still testing, this hasn't been done yet.
+
+[AMI Groups Documentation](https://www.packer.io/docs/builders/amazon-ebs.html#ami_groups)

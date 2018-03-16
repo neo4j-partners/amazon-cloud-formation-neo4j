@@ -2,7 +2,7 @@
   "variables": {
     "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
     "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
-    "neo4j_version": "1:3.3.3",
+    "neo4j_version": "1:3.3.4",
     "neo4j_edition": "enterprise",
     "subnet_id": "subnet-e024e499",
     "security_group_id": "sg-cc0463b3",

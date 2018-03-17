@@ -9,14 +9,14 @@
 
 You should specify edition (community/enterprise) and version.  Because this is ubuntu based,
 versions should match what is in the debian package repo.  Watch out because of recent
-package naming, if you want v3.3.3, you need to install `1:3.3.3`.
+package naming, if you want v3.3.4, you need to install `1:3.3.4`.
 
 You may omit the AWS key variables and set them in your environment.
 
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:3.3.3" \
+    -var "neo4j_version=1:3.3.4" \
     packer-template.json
 ```
 
@@ -32,7 +32,7 @@ for this process.
 Images above are placed in non-public project because they're in staging, also also because the public project for security reasons has no compute quota, and so images cannot be built there.
 
 ```
-PACKER_IMAGE=neo4j-enterprise-1-3-3-3
+PACKER_IMAGE=neo4j-enterprise-1-3-3-4
 gcloud compute --project=launcher-public images create $PACKER_IMAGE --source-image=$PACKER_IMAGE --source-image-project=launcher-development-191917
 ```
 
@@ -42,6 +42,6 @@ Create an instance of the public image in some test project:
 
 ```
 gcloud compute instances create my-neo4j-instance \
-    --image neo4j-enterprise-1-3-3-3 \
+    --image neo4j-enterprise-1-3-3-4 \
     --image-project launcher-public
 ```

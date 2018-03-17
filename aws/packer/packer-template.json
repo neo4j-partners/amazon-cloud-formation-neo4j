@@ -58,6 +58,11 @@
       "destination": "/home/ubuntu/pre-neo4j.sh"
     },
     {
+      "type": "file",
+      "source": "../../licensing",
+      "destination": "/home/ubuntu"
+    },    
+    {
       "type": "shell",
       "script": "./install-neo4j.sh",
       "environment_vars": [

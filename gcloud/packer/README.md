@@ -43,5 +43,6 @@ Create an instance of the public image in some test project:
 ```
 gcloud compute instances create my-neo4j-instance \
     --image neo4j-enterprise-1-3-3-4 \
+    --tags neo4j \
     --image-project launcher-public
 ```

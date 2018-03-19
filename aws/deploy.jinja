@@ -26,7 +26,7 @@
     {% endif %}
 
     {% if default_machine is not defined %}
-      {% set default_machine = "m3.medium" %}
+      {% set default_machine = "r4.large" %}
     {% endif %}
 
     {% set INTERNAL_DNS_TLD = "neo4j" %}
@@ -69,21 +69,7 @@
             "Description": "EC2 instance type",
             "Type": "String",
             "Default": "{{default_machine}}",
-            "AllowedValues": [
-                "m1.medium",
-                "m1.large",
-                "t2.small",
-                "t2.medium",
-                "m1.xlarge",
-                "m2.xlarge",
-                "m2.2xlarge",
-                "m2.4xlarge",
-                "m3.medium",
-                "m3.xlarge",
-                "m3.2xlarge",
-                "c1.medium",
-                "c1.xlarge"
-            ],
+            "AllowedValues": {% include 'template-parts/allowable-machine-types.jinja' %},
             "ConstraintDescription": "Must be a valid EC2 instance type."
         },
         "ClusterNodes": {

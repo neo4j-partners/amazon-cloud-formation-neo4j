@@ -1,11 +1,12 @@
-# gcloud-launcher
+# neo4j-cloud-launcher
 
-This repo contains files related to cloud deployments of causal cluster.
+There is one folder per supported cloud platform.  Underneath of those,
+you can find a `packer` folder for building images on that platform, and
+a set of templates for deploying neo4j images.  The template language is
+of course cloud specific.
 
-* GCP: see the `gcloud` subdirectory
-* AWS: see the `aws` subdirectory.
-
-Tool suites in different cloud environments are very different, but there are commonalities:
+Commonalities between cloud environments are things we try to exploit
+to do things once:
 
 - VM based deploy
 - Debian-based packaging employed
@@ -24,3 +25,7 @@ export NEO4J_URI=bolt+routing://my-cloud-host:7687
 node stress.js
 ```
 
+# Credentials, Questions
+
+To use some of this stuff, you'll need service account credentials.
+David Allen <david.allen@neo4j.com> has those.

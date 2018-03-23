@@ -47,9 +47,8 @@ configuration.
 
 ```
 gcloud config set project my-project-id
-
 gcloud deployment-manager deployments create my-cluster \
-    --template deployment-manager/neo4j-causal-cluster.jinja
+    --template solutions/causal-cluster/neo4j-causal-cluster.jinja
 ```
 
 This does the same that Google Launcher does, without the GUI config.

@@ -37,7 +37,16 @@ input:
         '5': '5'
         '6': '6'
         '7': '7'
-        '8': '8'
+    - name: readReplicas
+      title: Number of Read Replicas
+      section: CLUSTER_CONFIGURATION
+      enumLabels:
+        '0': '0'
+        '1': '1'
+        '2': '2'
+        '3': '3'
+        '4': '4'
+        '5': '5'
     - name: machineType
       title: Machine type
     - name: bootDiskType

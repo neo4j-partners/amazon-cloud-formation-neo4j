@@ -24,17 +24,23 @@
    {% set clusterNodes = 3 | int %} {# Value must be >= 3 #}
 {% endif %}
 
+{% if properties.has_key("readReplicas") %}
+   {% set readReplicas = properties["readReplicas"] | int %}
+{% else %}
+   {% set readReplicas = 0 | int %}
+{% endif %}
+
 {% set passwordLength = 16 %}
 
 {# Image must be hardcoded, and must be tied to launcher-public for correct perms.
  # Remember to update in c2d_deployment_configuration.json too!
  #}
-{% set vmImage = "https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-cc-3-3-3-v1" %}
+{% set vmImage = "https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-3-3-4" %}
 
 {# This is a prefix only. For n nodes, this template deploys
  # {{instanceName}}-1, {{instanceName}}-2, ... n.
  #}
-{% set instanceName = "%s-vm" % deployment %}
+{% set instanceName = "%s-core-vm" % deployment %}
 
 resources:
   - name: generated-password
@@ -43,13 +49,14 @@ resources:
       length: {{ passwordLength }}
       includeSymbols: false
 
-  - name: {{ name }}
+  - name: {{ name }}-cores
     type: vm_multiple_instances.py
     properties:
       password: $(ref.generated-password.password)
       tags:
         items:
         - neo4j
+        - neo4j-core-node
         - neo4j-causal-cluster
         - neo4j-{{ deployment }}
       instanceName: {{ instanceName }}
@@ -69,63 +76,62 @@ resources:
         items:
         - key: initial-password
           value: $(ref.generated-password.password)
+        - key: dbms_mode
+          value: CORE
         - key: causal_clustering_initial_discovery_members
           value: {% for i in range(1, clusterNodes+1) %}{{instanceName}}-{{i}}:5000{% if not loop.last %},{% endif %}{% endfor %}
         - key: causal_clustering_expected_core_cluster_size
           value: {{ clusterNodes }}
         - key: startup-script
           value: |
-            export LOGFILE=/root/vmdeploy-log.txt
-            date | tee -a $LOGFILE
-            echo "Post-startup script " `whoami` 2>&1 | tee -a $LOGFILE
-            
-            export UUID=$(cat /proc/sys/kernel/random/uuid)
-            if [ -z $UUID ]; then
-               export UUID=defaultuuid
-            fi
+{% include "node-startup-script.sh.jinja" %}
 
-            # gcloud components necessary to signal to waiter when VM setup complete.
-            sudo apt-get update 2>&1 | tee -a $LOGFILE
-            sudo apt-get --only-upgrade install google-cloud-sdk 2>&1 | tee -a $LOGFILE
+      serviceAccounts:
+        - email: default
+          scopes:
+            - 'https://www.googleapis.com/auth/cloud.useraccounts.readonly'
+            - 'https://www.googleapis.com/auth/devstorage.read_only'
+            - 'https://www.googleapis.com/auth/logging.write'
+            - 'https://www.googleapis.com/auth/monitoring.write'
+            - 'https://www.googleapis.com/auth/cloudruntimeconfig'
 
-            # Stop database, delete underlying data, remove cluster binding, restart.
-            # Guarantees clean consistent startup state, first-time discovery, and a 
-            # unique store ID for UDC reporting.
-            /bin/systemctl stop neo4j.service 2>&1 | tee -a $LOGFILE
-            /usr/bin/neo4j-admin unbind 2>&1 | tee -a $LOGFILE
-            /bin/rm -rf /var/lib/neo4j/data/databases/graph.db/ 2>&1 | tee -a $LOGFILE
-            /bin/systemctl start neo4j.service 2>&1 | tee -a $LOGFILE
+  - name: {{ name }}-replicas
+    type: vm_multiple_instances.py
+    properties:
+      password: $(ref.generated-password.password)
+      tags:
+        items:
+        - neo4j
+        - neo4j-causal-cluster
+        - neo4j-read-replica
+        - neo4j-{{ deployment }}
+      instanceName: {{ "%s-replica-vm" % deployment }}
+      numberOfVMReplicas: {{ readReplicas }}
+      sourceImage: {{ vmImage }}
+      zone: {{ zone }}      
+      machineType: {{ machineType }}
+      network: {{ network }}
+      {% if subnetwork %}
+      subnetwork: {{ subnetwork }}
+      {% endif %}
+      bootDiskType: {{ bootDiskType }}
+      bootDiskSizeGb: {{ bootDiskSizeGb }}
+      hasExternalIP: {{ hasExternalIP }}
+      {# SEE README.md IN THIS REPO -- This is where all neo4j CC config goes #}
+      metadata:
+        items:
+        - key: initial-password
+          value: $(ref.generated-password.password)
+        - key: dbms_mode
+          value: READ_REPLICA
+        - key: causal_clustering_initial_discovery_members
+          value: {% for i in range(1, clusterNodes+1) %}{{instanceName}}-{{i}}:5000{% if not loop.last %},{% endif %}{% endfor %}
+        - key: causal_clustering_expected_core_cluster_size
+          value: {{ clusterNodes }}
+        - key: startup-script
+          value: |
+{% include "node-startup-script.sh.jinja" %}
 
-            # Loop waiting for neo4j service to start.
-            while true; do
-                if curl -s -I http://localhost:7474 | grep "200 OK"; then
-                    echo "Neo4j is up; changing default password" 2>&1 | tee -a $LOGFILE
-
-                    curl -v -H "Content-Type: application/json" \
-                            -XPOST -d '{"password":"$(ref.generated-password.password)"}' \
-                            -u neo4j:admin \
-                            http://localhost:7474/user/neo4j/password \
-                            2>&1 | tee -a $LOGFILE
-                    echo "Password reset, signaling success" 2>&1 | tee -a $LOGFILE
-
-                    # Signal to waiter we're all set up.
-                    # Example: https://github.com/GoogleCloudPlatform/deploymentmanager-samples/tree/master/examples/v2/waiter
-                    # Service account must have scope: 'https://www.googleapis.com/auth/cloudruntimeconfig'
-                    # UUID here is important so multiple VM keys don't clash.
-                    gcloud beta runtime-config configs variables set \
-                      success/{{name}}-$UUID success \
-                      --config-name $(ref.cluster-waiter.configName) 2>&1 | tee -a $LOGFILE
-
-                    break
-                fi
-
-                echo "Waiting for neo4j to come up" 2>&1 | tee -a $LOGFILE
-                sleep 1
-            done
-
-            echo "VM setup complete." 2>&1 | tee -a $LOGFILE
-            date | tee -a $LOGFILE
-  
       serviceAccounts:
         - email: default
           scopes:

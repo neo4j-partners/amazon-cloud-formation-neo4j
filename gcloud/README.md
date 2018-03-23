@@ -43,12 +43,14 @@ gcloud services enable deploymentmanager.googleapis.com
 # Quickstart / Deploy Instructions
 
 A CC is deployed by creating 3 instances of the same VM, each with identical
-configuration. 
+configuration.  Be exact in passing of properties as documented below, gcloud is
+very fussy about those.
 
 ```
 gcloud config set project my-project-id
 gcloud deployment-manager deployments create my-cluster \
-    --template solutions/causal-cluster/neo4j-causal-cluster.jinja
+    --template solutions/causal-cluster/neo4j-causal-cluster.jinja \
+    --properties "clusterNodes:'3',readReplicas:'2'"
 ```
 
 This does the same that Google Launcher does, without the GUI config.

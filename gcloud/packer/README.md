@@ -31,9 +31,39 @@ for this process.
 
 Images above are placed in non-public project because they're in staging, also also because the public project for security reasons has no compute quota, and so images cannot be built there.
 
+Additionally, we have to use a google-provided python script to tag
+license metadata to the image in order to make it acceptable for the
+launcher marketplace.
+
 ```
 PACKER_IMAGE=neo4j-enterprise-1-3-3-4
-gcloud compute --project=launcher-public images create $PACKER_IMAGE --source-image=$PACKER_IMAGE --source-image-project=launcher-development-191917
+PROJECT=launcher-development-191917
+ZONE=us-east1-b
+TARGET=license-me
+PUBLIC_PROJECT=launcher-public
+
+# Setup
+gcloud config set project $PROJECT
+gcloud config set compute/zone $ZONE
+
+# Create image from packer instance
+gcloud compute instances create $TARGET \
+   --scopes https://www.googleapis.com/auth/cloud-platform \
+   --image-project $PROJECT \
+   --tags neo4j \
+   --image=$PACKER_IMAGE
+
+# Immediately delete, but keep the disk, because the next
+# step needs the disk.
+gcloud compute instances delete $TARGET --keep-disks=all
+
+# This step creates a new image from the disk, licenses it,
+# and copies it to the destination public project.
+# Path relative to packer directory.
+python2.7 ../partner-utils/image_creator.py --project $PROJECT --disk $TARGET \
+   --name $PACKER_IMAGE --description "Neo4j Enterprise" \
+   --destination-project $PUBLIC_PROJECT \
+   --license $PUBLIC_PROJECT/neo4j-enterprise-causal-cluster
 ```
 
 ## Test Public Image

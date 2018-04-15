@@ -23,14 +23,14 @@ Causal clusters:
 
 ```
 pipenv run python3 generate.py --template deploy.jinja > neo4j-enterprise-stack.json && \
-s3cmd put neo4j-enterprise-stack.json s3://neo4j-cloudformation/
+s3cmd -P put neo4j-enterprise-stack.json s3://neo4j-cloudformation/
 ```
 
 Standalone:
 
 ```
 pipenv run python3 generate.py --template deploy-standalone.jinja > neo4j-enterprise-standalone-stack.json && \
-s3cmd put neo4j-enterprise-standalone-stack.json s3://neo4j-cloudformation/
+s3cmd -P put neo4j-enterprise-standalone-stack.json s3://neo4j-cloudformation/
 ```
 
 CloudFormation can then be given these S3 URLs 

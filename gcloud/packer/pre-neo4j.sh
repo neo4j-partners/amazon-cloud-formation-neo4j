@@ -98,7 +98,7 @@ echo "pre-neo4j.sh Internal hostname $INTERNAL_HOSTNAME"
 #   inet6 fe80::4001:aff:fe8a:4/64 scope link 
 #      valid_lft forever preferred_lft forever
 # So we're pulling just the 10.138.0.4 part.
-export INTERNAL_IP_ADDR=$(ip addr | grep brd | grep eth0 | cut -d ' ' -f 8)
+export INTERNAL_IP_ADDR=$(curl -s -H "Metadata-Flavor: Google" $INSTANCE_API/network-interfaces/0/ip)
 
 echo "pre-neo4j.sh internal IP $INTERNAL_IP_ADDR"
 

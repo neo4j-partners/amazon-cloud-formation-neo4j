@@ -1,0 +1,50 @@
+            export LOGFILE=/root/vmdeploy-log.txt
+            date | tee -a $LOGFILE
+            echo "Post-startup script " `whoami` 2>&1 | tee -a $LOGFILE
+            
+            export UUID=$(cat /proc/sys/kernel/random/uuid)
+            if [ -z $UUID ]; then
+               export UUID=defaultuuid
+            fi
+
+            # gcloud components necessary to signal to waiter when VM setup complete.
+            sudo apt-get update 2>&1 | tee -a $LOGFILE
+            sudo apt-get -y --only-upgrade install google-cloud-sdk 2>&1 | tee -a $LOGFILE
+
+            # Stop database, delete underlying data, remove cluster binding, restart.
+            # Guarantees clean consistent startup state, first-time discovery, and a 
+            # unique store ID for UDC reporting.
+            /bin/systemctl stop neo4j.service 2>&1 | tee -a $LOGFILE
+            /usr/bin/neo4j-admin unbind 2>&1 | tee -a $LOGFILE
+            /bin/rm -rf /var/lib/neo4j/data/databases/graph.db/ 2>&1 | tee -a $LOGFILE
+            /bin/systemctl start neo4j.service 2>&1 | tee -a $LOGFILE
+
+            # Loop waiting for neo4j service to start.
+            while true; do
+                if curl -s -I http://localhost:7474 | grep "200 OK"; then
+                    echo "Neo4j is up; changing default password" 2>&1 | tee -a $LOGFILE
+
+                    curl -v -H "Content-Type: application/json" \
+                            -XPOST -d '{"password":"$(ref.generated-password.password)"}' \
+                            -u neo4j:neo4j \
+                            http://localhost:7474/user/neo4j/password \
+                            2>&1 | tee -a $LOGFILE
+                    echo "Password reset, signaling success" 2>&1 | tee -a $LOGFILE
+
+                    # Signal to waiter we're all set up.
+                    # Example: https://github.com/GoogleCloudPlatform/deploymentmanager-samples/tree/master/examples/v2/waiter
+                    # Service account must have scope: 'https://www.googleapis.com/auth/cloudruntimeconfig'
+                    # UUID here is important so multiple VM keys don't clash.
+                    gcloud beta runtime-config configs variables set \
+                      success/{{name}}-$UUID success \
+                      --config-name $(ref.cluster-waiter.configName) 2>&1 | tee -a $LOGFILE
+
+                    break
+                fi
+
+                echo "Waiting for neo4j to come up" 2>&1 | tee -a $LOGFILE
+                sleep 1
+            done
+
+            echo "VM setup complete." 2>&1 | tee -a $LOGFILE
+            date | tee -a $LOGFILE

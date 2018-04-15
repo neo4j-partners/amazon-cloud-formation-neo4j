@@ -43,13 +43,14 @@ gcloud services enable deploymentmanager.googleapis.com
 # Quickstart / Deploy Instructions
 
 A CC is deployed by creating 3 instances of the same VM, each with identical
-configuration. 
+configuration.  Be exact in passing of properties as documented below, gcloud is
+very fussy about those.
 
 ```
 gcloud config set project my-project-id
-
 gcloud deployment-manager deployments create my-cluster \
-    --template deployment-manager/neo4j-causal-cluster.jinja
+    --template solutions/causal-cluster/neo4j-causal-cluster.jinja \
+    --properties "clusterNodes:'3',readReplicas:'2'"
 ```
 
 This does the same that Google Launcher does, without the GUI config.
@@ -72,24 +73,8 @@ quota, so launching VMs into it will fail every time.  It's only there to house 
 
 # Preparing a new Image (i.e. upgrading all of this)
 
-- Inside of the running image you're creating, make sure neo4j password is set to `admin`
-because the startup script in deployment manager expects this when changing to random
-strong password.
-- [Prepare the image like this](https://cloud.google.com/launcher/docs/partners/technical-components#create_the_base_solution_vm).
-- Update the image you want to use in several places: `c2d_deployment_configuration.json`, 
-and the main solution jinja template.   Google does not support "in place updates", so you
-cannot replace the existing VM without changing the deployment template.
-
-Crucial step with partner tools to create new image:
-
-```
-   $ python2.7 image_creator.py --project launcher-development-191917 \
-      --disk my-cluster-vm-1 \
-      --name neo4j-cc-3-3-3-vWHATEVER \
-      --description "Neo4j Enterprise 3.3.3 Causal Cluster" \
-      --destination-project launcher-public \
-      --license launcher-public/neo4j-enterprise-causal-cluster
-```
+See the packer directory; this prepares new images, follow directions there to copy
+an image to the appropriate project and associate the right license with it.
 
 # Removing a Deployment
 
@@ -113,12 +98,6 @@ done
 
 # Google Image
 
-## Images for Development
-
-Look for the `neo4j-cc-node-v*` images in the family `neo4j-cc` within
-the development project.  In the public project, there are corresponding "live"
-images.
-
 ## Metadata
 
 Google deploy manager jinja templates allow us to configure key/values on the image.  This metadata in turn can be fetched inside of the VM from a metadata server.
@@ -130,11 +109,6 @@ is TODO.
 
 The result of all of this is that by tweaking the deployment manager
 template, you can control the entire cluster's identical config.
-
-# What to do when upgrading Neo4j
-
-When installing a new neo4j package, the main thing is to ensure that the service hook continues to run pre-neo4j.sh.  See the section below on 
-debian instance service configuration.  All other updates should be automatic, presuming no internal neo4j configuration settings change.
 
 # Debian Instance Service Configuration
 

@@ -44,7 +44,12 @@ echo '########## NEO4J POST-INSTALL ###########'
 echo '#########################################'
 
 # Provisioned copy of conf needs to be put in place.
-sudo cp /home/ubuntu/neo4j.conf /etc/neo4j/neo4j.template
+if [ $neo4j_edition = "community" ]; then
+    sudo cp /home/ubuntu/neo4j-community.conf /etc/neo4j/neo4j.template
+else
+    sudo cp /home/ubuntu/neo4j.conf /etc/neo4j/neo4j.template
+fi
+
 sudo cp /home/ubuntu/pre-neo4j.sh /etc/neo4j/pre-neo4j.sh
 sudo cp -r /home/ubuntu/licensing /var/lib/neo4j
 sudo chmod +x /etc/neo4j/pre-neo4j.sh

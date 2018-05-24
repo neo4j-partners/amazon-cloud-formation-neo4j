@@ -73,7 +73,8 @@ echo "dbms_backup_address" "${dbms_backup_enabled:=localhost:6362}"
 # Causal Clustering
 echo "causal_clustering_discovery_type" "${causal_clustering_discovery_type:=LIST}"
 echo "causal_clustering_initial_discovery_members" "${causal_clustering_initial_discovery_members:=localhost:5000}"
-echo "causal_clustering_expected_core_cluster_size" "${causal_clustering_expected_core_cluster_size:=1}"
+echo "causal_clustering_minimum_core_cluster_size_at_formation" "${causal_clustering_minimum_core_cluster_size_at_formation:=3}"
+echo "causal_clustering_minimum_core_cluster_size_at_runtime" "${causal_clustering_minimum_core_cluster_size_at_runtime:=3}"
 
 echo "dbms_connectors_default_listen_address" "${dbms_connectors_default_listen_address:=0.0.0.0}"
 echo "dbms_mode" "${dbms_mode:=SINGLE}"
@@ -104,6 +105,8 @@ export dbms_connector_https_enabled \
     dbms_backup_address \
     causal_clustering_discovery_type \
     causal_clustering_initial_discovery_members \
+    causal_clustering_minimum_core_cluster_size_at_formation \
+    causal_clustering_minimum_core_cluster_size_at_runtime \
     causal_clustering_expected_core_cluster_size \
     dbms_connectors_default_listen_address \
     dbms_mode \

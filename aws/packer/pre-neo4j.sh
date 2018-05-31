@@ -68,7 +68,7 @@ echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=REQUIRED}
 
 # Backup
 echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
-echo "dbms_backup_address" "${dbms_backup_enabled:=localhost:6362}"
+echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
 
 # Causal Clustering
 echo "causal_clustering_discovery_type" "${causal_clustering_discovery_type:=LIST}"

@@ -5,15 +5,15 @@ from AMI ID to region.
 
 ## Neo4j Enterprise 3.4.0
 ```
-ap-northeast-1: ami-eab14e95
-ap-southeast-1: ami-cdcaf7b1
-eu-central-1: ami-a2331849
-eu-west-1: ami-29784150
-sa-east-1: ami-f1336d9d
-us-east-1: ami-8888eff7
-us-east-2: ami-5bcef23e
-us-west-1: ami-507e6530
-us-west-2: ami-18631a60
+ap-northeast-1: ami-124eb46d
+ap-southeast-1: ami-7278410e
+eu-central-1: ami-4e5763a5
+eu-west-1: ami-b1cecbc8
+sa-east-1: ami-24481148
+us-east-1: ami-eecaa191
+us-east-2: ami-dc3e01b9
+us-west-1: ami-4a0f152a
+us-west-2: ami-1ad0aa62
 ```
 
 ## Neo4j Community 3.4.0

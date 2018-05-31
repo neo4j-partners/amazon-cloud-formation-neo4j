@@ -39,7 +39,7 @@ CloudFormation can then be given these S3 URLs
 
 ### Validating a template locally
 
-`aws cloudformation validate-template --template-body file://neo4j-enterprise-stack.json`
+`aws cloudformation validate-template --template-url https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-stack.json`
 
 This often doesn't work and comes with numerous limitations.  One on filesize
 (which doesn't apply to S3), another in that it doesn't validate everything.

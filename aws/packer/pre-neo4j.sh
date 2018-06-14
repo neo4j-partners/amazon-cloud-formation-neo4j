@@ -126,5 +126,19 @@ envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
 
 echo "pre-neo4j.sh: Starting neo4j console..."
 
+# Check to see if enterprise is installed.
+dpkg -l | grep neo4j-enterprise
+if [ "$?" -ne 0 ] && [ -f /etc/neo4j/password-reset.log ]; then
+    # Only reset password for community, which is deployed as single AMI w/o
+    # CloudFormation templating. In the enterprise case, cloudformation handles
+    # the password reset bit.
+    #
+    # Also, only do this if the password reset log exists.  This ensures that
+    # during a packer build, the password doesn't get reset to the packer instance ID,
+    # and only happens on first user startup.
+    echo "Startup: checking to see if password needs to be reset"
+    exec /etc/neo4j/reset-password-aws.sh & 
+fi
+
 # This is the same command sysctl's service would have executed.
 /usr/share/neo4j/bin/neo4j console

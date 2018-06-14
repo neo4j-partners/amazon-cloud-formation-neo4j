@@ -54,6 +54,9 @@ sudo cp /home/ubuntu/pre-neo4j.sh /etc/neo4j/pre-neo4j.sh
 sudo cp -r /home/ubuntu/licensing /var/lib/neo4j
 sudo chmod +x /etc/neo4j/pre-neo4j.sh
 
+sudo cp /home/ubuntu/reset-password-aws.sh /etc/neo4j/reset-password-aws.sh
+sudo chmod +x /etc/neo4j/reset-password-aws.sh
+
 # Edit startup profile for this system service to call our pre-neo4j wrapper (which in turn
 # runs neo4j).  The wrapper grabs key/values from cloud environment and dynamically re-writes
 # neo4j.conf at startup time to properly configure it for network environment.
@@ -67,6 +70,18 @@ sleep 20
 echo "After re-configuration, service status"
 sudo systemctl status neo4j
 sudo journalctl -u neo4j -b
+
+if [ $neo4j_edition = "community" ]; then
+   # On first live startup of community, this signals that default password
+   # should be reset, so we can have strong passwords without cloudformation.
+   # See also reset-password-aws.sh, and pre-neo4j.sh where it is triggered.
+   #
+   # Important to do this **after** service restart above so that we don't
+   # reset the default password during the packer install.
+   sudo touch /etc/neo4j/password-reset.log   
+fi
+
+sudo chown neo4j /etc/neo4j/*
 
 echo ''
 echo '#########################################'

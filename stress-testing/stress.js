@@ -18,11 +18,14 @@ const uuid = require('uuid');
 
 const TOTAL_HITS = 80000;
 
-const writeProbabilityTable = [
-  [ 0.001, 'fatnode' ],
-  [ 0.002, 'nary' ],
-  [ 0.25, 'mergewrite' ],
-  [ 1, 'rawrite' ],
+const probabilityTable = [
+  [ 0.001, 'fatnodeWrite' ],
+  [ 0.002, 'naryWrite' ],
+  [ 0.25, 'mergeWrite' ],
+  [ 0.50, 'aggregateRead' ],
+  [ 0.55, 'metadataRead' ],
+  [ 0.60, 'longPathRead' ],
+  [ 1, 'rawWrite' ],
 ];
 
 const concurrency = { concurrency: process.env.CONCURRENCY || 10 };
@@ -58,12 +61,21 @@ const NAryTreeStrategy = require('./write-strategy/NAryTreeStrategy');
 const FatNodeAppendStrategy = require('./write-strategy/FatNodeAppendStrategy');
 const MergeWriteStrategy = require('./write-strategy/MergeWriteStrategy');
 const RawWriteStrategy = require('./write-strategy/RawWriteStrategy');
+const AggregateReadStrategy = require('./read-strategy/AggregateReadStrategy');
+const MetadataReadStrategy = require('./read-strategy/MetadataReadStrategy');
+const LongPathReadStrategy = require('./read-strategy/LongPathReadStrategy');
 
-const writeStrategies = {
-  nary: new NAryTreeStrategy({ n: 2 }),
-  fatnode: new FatNodeAppendStrategy({}),
-  mergewrite: new MergeWriteStrategy({ n: 1000000 }),
-  rawrite: new RawWriteStrategy({ n: 10 }),
+const strategies = {
+  // WRITE STRATEGIES
+  naryWrite: new NAryTreeStrategy({ n: 2 }),
+  fatnodeWrite: new FatNodeAppendStrategy({}),
+  mergeWrite: new MergeWriteStrategy({ n: 1000000 }),
+  rawWrite: new RawWriteStrategy({ n: 10 }),
+
+  // READ STRATEGIES
+  aggregateRead: new AggregateReadStrategy({}),
+  metadataRead: new MetadataReadStrategy({}),
+  longPathRead: new LongPathReadStrategy({}),
 };
 
 const runStrategy = (driver) => {
@@ -72,34 +84,35 @@ const runStrategy = (driver) => {
   let strat;
   let key;
 
-  for (let i=0; i<writeProbabilityTable.length; i++) {
-    const entry = writeProbabilityTable[i];
+  for (let i=0; i<probabilityTable.length; i++) {
+    const entry = probabilityTable[i];
     if (roll <= entry[0]) {
       key = entry[1];
       break;
     }
   }
 
-  strat = writeStrategies[key];
+  strat = strategies[key];
   didStrategy(key);
   return strat.run(driver);
 };
 
-const setupPromises = Object.keys(writeStrategies).map(key => writeStrategies[key].setup(driver));
+const setupPromises = Object.keys(strategies).map(key => strategies[key].setup(driver));
 
 // Pre-run this prior to script: FOREACH (id IN range(0,1000) | MERGE (:Node {id:id}));
 const arr = Array.apply(null, { length: TOTAL_HITS }).map(Number.call, Number);
 
-console.log('Running setup actions for ', Object.keys(writeStrategies).length, ' strategies; ', writeProbabilityTable);
+console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ', probabilityTable);
+
 Promise.all(setupPromises)
   .then(() => console.log('Starting parallel strategies'))
   .then(() => Promise.map(arr, item => runStrategy(driver).then(checkpoint), concurrency))
   .catch(err => {
     console.error(err);
-    Object.keys(writeStrategies).forEach(strat => {
+    Object.keys(strategies).forEach(strat => {
       console.log(strat, 'last query');
-      console.log(writeStrategies[strat].lastQuery);
-      console.log(writeStrategies[strat].lastParams);
+      console.log(strategies[strat].lastQuery);
+      console.log(strategies[strat].lastParams);
     });
   })
   .finally(() => driver.close());

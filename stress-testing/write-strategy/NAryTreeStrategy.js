@@ -1,4 +1,4 @@
-const Strategy = require('./Strategy');
+const Strategy = require('../Strategy');
 const Promise = require('bluebird');
 
 class NAryTreeStrategy extends Strategy {

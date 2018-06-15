@@ -1,11 +1,29 @@
 /*
  * Quick stress testing script to apply lots of concurrent writes to the cluster.
+ * 
+ * Usage:
+ * export NEO4J_URI=bolt+routing://localhost
+ * export NEO4J_USERNAME=neo4j
+ * export NEO4J_PASSWORD=super-secret
+ * 
+ * npm install
+ * 
+ * node stress.js
+ * 
+ * To customize the workload, consult the probabilityTable.
  */
 const neo4j = require('neo4j-driver').v1;
 const Promise = require('bluebird');
 const uuid = require('uuid');
 
 const TOTAL_HITS = 80000;
+
+const writeProbabilityTable = [
+  [ 0.001, 'fatnode' ],
+  [ 0.002, 'nary' ],
+  [ 0.25, 'mergewrite' ],
+  [ 1, 'rawrite' ],
+];
 
 const concurrency = { concurrency: process.env.CONCURRENCY || 10 };
 
@@ -36,24 +54,17 @@ const didStrategy = name => {
   stats[name] = (stats[name] || 0) + 1;
 };
 
-const NAryTreeStrategy = require('./NAryTreeStrategy');
-const FatNodeAppendStrategy = require('./FatNodeAppendStrategy');
-const MergeWriteStrategy = require('./MergeWriteStrategy');
-const RawWriteStrategy = require('./RawWriteStrategy');
+const NAryTreeStrategy = require('./write-strategy/NAryTreeStrategy');
+const FatNodeAppendStrategy = require('./write-strategy/FatNodeAppendStrategy');
+const MergeWriteStrategy = require('./write-strategy/MergeWriteStrategy');
+const RawWriteStrategy = require('./write-strategy/RawWriteStrategy');
 
-const strategies = {
+const writeStrategies = {
   nary: new NAryTreeStrategy({ n: 2 }),
   fatnode: new FatNodeAppendStrategy({}),
   mergewrite: new MergeWriteStrategy({ n: 1000000 }),
   rawrite: new RawWriteStrategy({ n: 10 }),
 };
-
-const probabilityTable = [
-  [ 0.001, 'fatnode' ],
-  [ 0.002, 'nary' ],
-  [ 0.25, 'mergewrite' ],
-  [ 1, 'rawrite' ],
-];
 
 const runStrategy = (driver) => {
   const roll = Math.random();
@@ -61,34 +72,34 @@ const runStrategy = (driver) => {
   let strat;
   let key;
 
-  for (let i=0; i<probabilityTable.length; i++) {
-    const entry = probabilityTable[i];
+  for (let i=0; i<writeProbabilityTable.length; i++) {
+    const entry = writeProbabilityTable[i];
     if (roll <= entry[0]) {
       key = entry[1];
       break;
     }
   }
 
-  strat = strategies[key];
+  strat = writeStrategies[key];
   didStrategy(key);
   return strat.run(driver);
 };
 
-const setupPromises = Object.keys(strategies).map(key => strategies[key].setup(driver));
+const setupPromises = Object.keys(writeStrategies).map(key => writeStrategies[key].setup(driver));
 
 // Pre-run this prior to script: FOREACH (id IN range(0,1000) | MERGE (:Node {id:id}));
 const arr = Array.apply(null, { length: TOTAL_HITS }).map(Number.call, Number);
 
-console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ', probabilityTable);
+console.log('Running setup actions for ', Object.keys(writeStrategies).length, ' strategies; ', writeProbabilityTable);
 Promise.all(setupPromises)
   .then(() => console.log('Starting parallel strategies'))
   .then(() => Promise.map(arr, item => runStrategy(driver).then(checkpoint), concurrency))
   .catch(err => {
     console.error(err);
-    Object.keys(strategies).forEach(strat => {
+    Object.keys(writeStrategies).forEach(strat => {
       console.log(strat, 'last query');
-      console.log(strategies[strat].lastQuery);
-      console.log(strategies[strat].lastParams);
+      console.log(writeStrategies[strat].lastQuery);
+      console.log(writeStrategies[strat].lastParams);
     });
   })
   .finally(() => driver.close());

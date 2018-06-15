@@ -37,10 +37,22 @@
 "echo $FSTAB_ENTRY >> /etc/fstab\n",
 "mount -a 2>&1 | tee -a $LOGFILE\n",
 "echo `date` 'Preparing neo4j service...' | tee -a $LOGFILE\n", 
-"/usr/bin/neo4j-admin unbind 2>&1 | tee -a $LOGFILE\n",
 "/bin/rm -rf /var/lib/neo4j/data/databases/graph.db/ 2>&1 | tee -a $LOGFILE\n",
 "/bin/systemctl start neo4j.service 2>&1 | tee -a $LOGFILE\n",
 "\n",
+"sudo apt-get update\n",
+
+{# Install cfn-signal utilities so that we can signal stack completion #}
+"mkdir aws-cfn-bootstrap-latest\n",
+"curl https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz | tar xz -C aws-cfn-bootstrap-latest --strip-components 1\n",
+"easy_install aws-cfn-bootstrap-latest\n",
+"\n",
+"echo Stack ID '", { "Ref": "AWS::StackId" }, "' | tee -a $LOGFILE\n",
+
+{# Strong password determined by stackID #}
+"export STACK_TOKEN=$(echo '", 
+   { "Ref": "AWS::StackId" }, "' | base64 | tail -c 12)\n",
+
 "# Loop waiting for neo4j service to start.\n",
 "while true; do\n",
 "    if curl -s -I http://localhost:7474 | grep '200 OK'; then\n",
@@ -59,5 +71,12 @@
 "\n",
 "    echo `date` 'Waiting for neo4j to come up' 2>&1 | tee -a $LOGFILE\n",
 "    sleep 1\n",
-"done"
+"done\n",
+"\n",
+"echo Signaling stack success | tee -a $LOGFILE\n",
+
+"/usr/local/bin/cfn-signal --stack ", { "Ref": "AWS::StackName" }, " \\\n",
+"       --id $EC2_INSTANCE_ID \\\n",
+"       --region ", { "Ref": "AWS::Region" }, " \\\n",
+"       --success true -d \"$STACK_TOKEN\" '", { "Ref": "StackTokenWaitHandle" }, "' 2>&1 | tee -a $LOGFILE \n"
 ]

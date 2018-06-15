@@ -482,11 +482,31 @@
                 with
                     condition="CreateReplica%s" % i,
                     dbms_mode="READ_REPLICA" %} 
-                {% include 'template-parts/neo4j-node.jinja' %} 
+                {% include 'template-parts/neo4j-node.jinja' %},
         {% endwith %}
         
-        {% if not loop.last %},{% endif %}
-        {% endfor %}        
+        {% endfor %}
+
+        {# This is signaled by vm-startup-snippet at the end #}
+        "StackTokenWaitHandle" : {
+            "Type" : "AWS::CloudFormation::WaitConditionHandle"
+        },
+
+        {#
+         # We wait on a password reset signal from the underlying nodes, because it
+         # is evidence that the causal cluster has formed, and the REST API is available.
+         # In this way, user doesn't get cloudformation finished deploy signal until
+         # the actual cluster is available for query; cluster formation time is baked in.
+         #}
+        "WaitOnPasswordReset": {
+            "Type" : "AWS::CloudFormation::WaitCondition",
+            "DependsOn": "Neo4jServer0",
+            "Properties": {
+                "Handle"  : { "Ref" : "StackTokenWaitHandle" },
+                "Timeout" : "900",
+                "Count": "1"
+            }
+        }
     },
     "Outputs": {
         "Note": {
@@ -527,6 +547,19 @@
                 "Ref": "Password"
             }
         },
+
+        {# Each server signals back an instance ID into a dictionary, like:
+         # { instanceId1: password, instanceId2: password }
+         # They're all the same password, so just grab the first instance ID's
+         # return value.
+         # Right now this is not a desired output, but if used to generate a
+         # strong random password, this is the way to do it.
+        "GeneratedClusterPasswordVal": {
+            "Value": {
+                "Fn::GetAtt" : [ "WaitOnPasswordReset", "Data" ]
+            }
+        },
+         #}
         "SSH": {
             "Value": {
                 "Fn::Join": [

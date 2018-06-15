@@ -16,7 +16,8 @@ const neo4j = require('neo4j-driver').v1;
 const Promise = require('bluebird');
 const uuid = require('uuid');
 
-const TOTAL_HITS = 80000;
+const TOTAL_HITS = 100000;
+const concurrency = { concurrency: process.env.CONCURRENCY || 10 };
 
 const probabilityTable = [
   [ 0.001, 'fatnodeWrite' ],
@@ -27,8 +28,6 @@ const probabilityTable = [
   [ 0.60, 'longPathRead' ],
   [ 1, 'rawWrite' ],
 ];
-
-const concurrency = { concurrency: process.env.CONCURRENCY || 10 };
 
 if (!process.env.NEO4J_URI) {
   console.error('Set env vars NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD');
@@ -46,11 +45,19 @@ const session = driver.session();
 const stats = { completed: 0 };
 
 const checkpoint = data => {
+   if (interrupted) { return data; }
+
    stats.completed++;
    if(stats.completed % (process.env.CHECKPOINT_FREQUENCY || 50) === 0) {
      console.log(stats);
    }
    return data;
+};
+
+let interrupted = false;
+const sigintHandler = () => {
+  interrupted = true;
+  console.log('Caught interrupt. Allowing current batch to finish.');
 };
 
 const didStrategy = name => {
@@ -79,6 +86,7 @@ const strategies = {
 };
 
 const runStrategy = (driver) => {
+  if (interrupted) { return Promise.resolve(null); }
   const roll = Math.random();
 
   let strat;
@@ -103,6 +111,7 @@ const setupPromises = Object.keys(strategies).map(key => strategies[key].setup(d
 const arr = Array.apply(null, { length: TOTAL_HITS }).map(Number.call, Number);
 
 console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ', probabilityTable);
+process.on('SIGINT', sigintHandler);
 
 Promise.all(setupPromises)
   .then(() => console.log('Starting parallel strategies'))
@@ -115,4 +124,11 @@ Promise.all(setupPromises)
       console.log(strategies[strat].lastParams);
     });
   })
-  .finally(() => driver.close());
+  .finally(() => driver.close())
+  .then(() => {
+    console.log('Strategy report');
+    Object.keys(strategies).forEach(strategy => {
+      const strat = strategies[strategy];
+      strat.summarize();
+    });
+  })

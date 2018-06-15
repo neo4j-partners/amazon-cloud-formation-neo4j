@@ -17,11 +17,13 @@ class AggregateReadStrategy extends Strategy {
             this.session = driver.session();
         }
 
-        return this.session.run(`
+        const f = () => this.session.run(`
             MATCH (v:NAryTree) 
             WHERE id(v) % $r = 0
             RETURN min(v.val), max(v.val), stdev(v.val), count(v.val)`, 
             { r: this.randInt(13) });
+        
+        return this.time(f);
     }
 }
 

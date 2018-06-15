@@ -17,8 +17,20 @@ class MetadataReadStrategy extends Strategy {
             this.session = driver.session();
         }
 
-        return this.session.run(`
-            match (n) return distinct(labels(n)), count(n)`, {})
+        const i = this.randInt(50);
+
+        const f = () => {
+            let query;
+            if (i % 2 === 0) {
+                query = "CALL db.labels()";
+            } else {
+                query = "CALL db.propertyKeys()";
+            }
+
+            return this.session.run(query, {});
+        };
+        
+        return this.time(f);
     }
 }
 

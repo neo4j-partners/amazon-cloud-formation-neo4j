@@ -19,10 +19,12 @@ class LongPathReadStrategy extends Strategy {
 
         const start = 1 + this.randInt(1000);
 
-        return this.session.run(`
+        const f = () => this.session.run(`
             MATCH p=(s:NAryTree { val: $start })-[r:child*]->(e:NAryTree { val: $end })
             RETURN count(r)`, 
             { start, end: start + this.randInt(500) });
+
+        return this.time(f);
     }
 }
 

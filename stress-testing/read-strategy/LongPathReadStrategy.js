@@ -5,7 +5,7 @@ const uuid = require('uuid');
 class LongPathReadStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'AggregateReadStrategy';
+        this.name = 'LongPathReadStrategy';
     }
 
     setup(driver) {

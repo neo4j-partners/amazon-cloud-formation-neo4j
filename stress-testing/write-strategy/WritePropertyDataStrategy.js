@@ -1,4 +1,4 @@
-const Strategy = require('./Strategy');
+const Strategy = require('../Strategy');
 const Promise = require('bluebird');
 
 class WritePropertyDataStrategy extends Strategy {
@@ -32,12 +32,14 @@ class WritePropertyDataStrategy extends Strategy {
             data.push(uuid.v4());
         }
 
-        return session.run(`
+        const f = () => session.run(`
           MATCH (a:Node) WHERE a.id >= $r and a.id <= $p
           WITH a LIMIT 100
           SET a.list${randInt(100)} = $data SET a:WriteArray
           RETURN count(a);
         `, { data, r, p });
+
+        return this.time(f);
     }
 }
 

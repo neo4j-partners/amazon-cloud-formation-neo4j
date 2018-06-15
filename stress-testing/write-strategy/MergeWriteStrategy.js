@@ -1,4 +1,4 @@
-const Strategy = require('./Strategy');
+const Strategy = require('../Strategy');
 const Promise = require('bluebird');
 const uuid = require('uuid');
 
@@ -42,7 +42,8 @@ class MergeWriteStrategy extends Strategy {
           r2: this.randInt(100000),
         };
 
-        return this.session.run(this.lastQuery, this.lastParams);
+        const f = () => this.session.run(this.lastQuery, this.lastParams);
+        return this.time(f);
     }
 }
 

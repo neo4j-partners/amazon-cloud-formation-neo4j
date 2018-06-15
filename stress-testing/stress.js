@@ -1,13 +1,33 @@
 /*
  * Quick stress testing script to apply lots of concurrent writes to the cluster.
+ * 
+ * Usage:
+ * export NEO4J_URI=bolt+routing://localhost
+ * export NEO4J_USERNAME=neo4j
+ * export NEO4J_PASSWORD=super-secret
+ * 
+ * npm install
+ * 
+ * node stress.js
+ * 
+ * To customize the workload, consult the probabilityTable.
  */
 const neo4j = require('neo4j-driver').v1;
 const Promise = require('bluebird');
 const uuid = require('uuid');
 
-const TOTAL_HITS = 80000;
-
+const TOTAL_HITS = 100000;
 const concurrency = { concurrency: process.env.CONCURRENCY || 10 };
+
+const probabilityTable = [
+  [ 0.001, 'fatnodeWrite' ],
+  [ 0.002, 'naryWrite' ],
+  [ 0.25, 'mergeWrite' ],
+  [ 0.50, 'aggregateRead' ],
+  [ 0.55, 'metadataRead' ],
+  [ 0.60, 'longPathRead' ],
+  [ 1, 'rawWrite' ],
+];
 
 if (!process.env.NEO4J_URI) {
   console.error('Set env vars NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD');
@@ -25,6 +45,8 @@ const session = driver.session();
 const stats = { completed: 0 };
 
 const checkpoint = data => {
+   if (interrupted) { return data; }
+
    stats.completed++;
    if(stats.completed % (process.env.CHECKPOINT_FREQUENCY || 50) === 0) {
      console.log(stats);
@@ -32,30 +54,39 @@ const checkpoint = data => {
    return data;
 };
 
+let interrupted = false;
+const sigintHandler = () => {
+  interrupted = true;
+  console.log('Caught interrupt. Allowing current batch to finish.');
+};
+
 const didStrategy = name => {
   stats[name] = (stats[name] || 0) + 1;
 };
 
-const NAryTreeStrategy = require('./NAryTreeStrategy');
-const FatNodeAppendStrategy = require('./FatNodeAppendStrategy');
-const MergeWriteStrategy = require('./MergeWriteStrategy');
-const RawWriteStrategy = require('./RawWriteStrategy');
+const NAryTreeStrategy = require('./write-strategy/NAryTreeStrategy');
+const FatNodeAppendStrategy = require('./write-strategy/FatNodeAppendStrategy');
+const MergeWriteStrategy = require('./write-strategy/MergeWriteStrategy');
+const RawWriteStrategy = require('./write-strategy/RawWriteStrategy');
+const AggregateReadStrategy = require('./read-strategy/AggregateReadStrategy');
+const MetadataReadStrategy = require('./read-strategy/MetadataReadStrategy');
+const LongPathReadStrategy = require('./read-strategy/LongPathReadStrategy');
 
 const strategies = {
-  nary: new NAryTreeStrategy({ n: 2 }),
-  fatnode: new FatNodeAppendStrategy({}),
-  mergewrite: new MergeWriteStrategy({ n: 1000000 }),
-  rawrite: new RawWriteStrategy({ n: 10 }),
+  // WRITE STRATEGIES
+  naryWrite: new NAryTreeStrategy({ n: 2 }),
+  fatnodeWrite: new FatNodeAppendStrategy({}),
+  mergeWrite: new MergeWriteStrategy({ n: 1000000 }),
+  rawWrite: new RawWriteStrategy({ n: 10 }),
+
+  // READ STRATEGIES
+  aggregateRead: new AggregateReadStrategy({}),
+  metadataRead: new MetadataReadStrategy({}),
+  longPathRead: new LongPathReadStrategy({}),
 };
 
-const probabilityTable = [
-  [ 0.001, 'fatnode' ],
-  [ 0.002, 'nary' ],
-  [ 0.25, 'mergewrite' ],
-  [ 1, 'rawrite' ],
-];
-
 const runStrategy = (driver) => {
+  if (interrupted) { return Promise.resolve(null); }
   const roll = Math.random();
 
   let strat;
@@ -80,6 +111,8 @@ const setupPromises = Object.keys(strategies).map(key => strategies[key].setup(d
 const arr = Array.apply(null, { length: TOTAL_HITS }).map(Number.call, Number);
 
 console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ', probabilityTable);
+process.on('SIGINT', sigintHandler);
+
 Promise.all(setupPromises)
   .then(() => console.log('Starting parallel strategies'))
   .then(() => Promise.map(arr, item => runStrategy(driver).then(checkpoint), concurrency))
@@ -91,4 +124,11 @@ Promise.all(setupPromises)
       console.log(strategies[strat].lastParams);
     });
   })
-  .finally(() => driver.close());
+  .finally(() => driver.close())
+  .then(() => {
+    console.log('Strategy report');
+    Object.keys(strategies).forEach(strategy => {
+      const strat = strategies[strategy];
+      strat.summarize();
+    });
+  })

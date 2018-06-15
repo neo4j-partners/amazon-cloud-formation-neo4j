@@ -1,4 +1,4 @@
-const Strategy = require('./Strategy');
+const Strategy = require('../Strategy');
 const Promise = require('bluebird');
 
 class NAryTreeStrategy extends Strategy {
@@ -47,7 +47,8 @@ class NAryTreeStrategy extends Strategy {
             RETURN p.val;
         `;
 
-        return this.session.run(this.lastQuery, this.lastParams);
+        const f = () => this.session.run(this.lastQuery, this.lastParams);
+        return this.time(f);
     }
 }
 

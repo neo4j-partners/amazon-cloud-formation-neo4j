@@ -1,4 +1,4 @@
-const Strategy = require('./Strategy');
+const Strategy = require('../Strategy');
 const Promise = require('bluebird');
 const uuid = require('uuid');
 
@@ -32,7 +32,8 @@ class RawWriteStrategy extends Strategy {
         );`;
         
         this.lastParams = { uuid: uuid.v4() };
-        return this.session.run(this.lastQuery, this.lastParams);
+        const f = () => this.session.run(this.lastQuery, this.lastParams);
+        return this.time(f);
     }
 }
 

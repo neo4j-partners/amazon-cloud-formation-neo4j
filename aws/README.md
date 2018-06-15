@@ -21,28 +21,31 @@ There are two possible templates you can use:
 
 Causal clusters:
 
+Generate from Jinja template, upload to S3, and validate.
+
 ```
-pipenv run python3 generate.py --template deploy.jinja > neo4j-enterprise-stack.json && \
-s3cmd -P put neo4j-enterprise-stack.json s3://neo4j-cloudformation/
+export VERSION=3.4.1
+S3BUCKET=neo4j-cloudformation
+GEN_STACK=neo4j-enterprise-stack-$VERSION-test.json
+pipenv run python3 generate.py --template deploy.jinja > $GEN_STACK && \
+s3cmd -P put $GEN_STACK s3://$S3BUCKET/
+aws cloudformation validate-template \
+  --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK > /dev/null
 ```
 
 Standalone:
 
 ```
-pipenv run python3 generate.py --template deploy-standalone.jinja > neo4j-enterprise-standalone-stack.json && \
-s3cmd -P put neo4j-enterprise-standalone-stack.json s3://neo4j-cloudformation/
+export VERSION=3.4.1
+S3BUCKET=neo4j-cloudformation
+GEN_STACK=neo4j-enterprise-standalone-stack-$VERSION-test.json
+pipenv run python3 generate.py --template deploy-standalone.jinja > $GEN_STACK && \
+s3cmd -P put $GEN_STACK s3://$S3BUCKET/
 ```
 
 CloudFormation can then be given these S3 URLs 
 * `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-stack.json`
 * `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-standalone-stack.json`
-
-### Validating a template locally
-
-`aws cloudformation validate-template --template-body file://neo4j-enterprise-stack.json`
-
-This often doesn't work and comes with numerous limitations.  One on filesize
-(which doesn't apply to S3), another in that it doesn't validate everything.
 
 ## Testing Deployed Stacks
 

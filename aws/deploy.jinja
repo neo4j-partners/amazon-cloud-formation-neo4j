@@ -34,35 +34,7 @@
     "Description": "Neo4j on AWS - creates a variable number of EC2 Ubuntu machines, a VPC, elastic IP addresses, and deploys the Neo4j Graph Database cluster on it.  **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
     "AWSTemplateFormatVersion": "2010-09-09",
     "Mappings": {        
-        "AWSRegionArch2AMI": {
-            "us-east-1": {
-                "64": "ami-6176da1c"
-            },
-            "us-east-2": {
-                "64": "ami-07350562"
-            },
-            "us-west-2": {
-                "64": "ami-a70d6adf"
-            },
-            "us-west-1": {
-                "64": "ami-851606e5"
-            },
-            "eu-west-1": {
-                "64": "ami-ff441a86"
-            },
-            "eu-central-1": {
-                "64": "ami-ff1e4014"
-            },
-            "ap-southeast-1": {
-                "64": "ami-295f7a55"
-            },
-            "ap-northeast-1": {
-                "64": "ami-c11d0bbd"
-            },
-            "sa-east-1": {
-                "64": "ami-ea673186"
-            }
-        }
+        "AWSRegionArch2AMI": {% include 'template-parts/region2AMIMappings.jinja' %}
     },
     "Parameters": {
         "InstanceType": {
@@ -96,7 +68,7 @@
             "Type": "String",
             "MinLength": "9",
             "MaxLength": "18",
-            "Default": "",
+            "Default": "0.0.0.0/0",
             "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
             "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x.  For example, 0.0.0.0/0 for open internet access."
         },
@@ -510,11 +482,31 @@
                 with
                     condition="CreateReplica%s" % i,
                     dbms_mode="READ_REPLICA" %} 
-                {% include 'template-parts/neo4j-node.jinja' %} 
+                {% include 'template-parts/neo4j-node.jinja' %},
         {% endwith %}
         
-        {% if not loop.last %},{% endif %}
-        {% endfor %}        
+        {% endfor %}
+
+        {# This is signaled by vm-startup-snippet at the end #}
+        "StackTokenWaitHandle" : {
+            "Type" : "AWS::CloudFormation::WaitConditionHandle"
+        },
+
+        {#
+         # We wait on a password reset signal from the underlying nodes, because it
+         # is evidence that the causal cluster has formed, and the REST API is available.
+         # In this way, user doesn't get cloudformation finished deploy signal until
+         # the actual cluster is available for query; cluster formation time is baked in.
+         #}
+        "WaitOnPasswordReset": {
+            "Type" : "AWS::CloudFormation::WaitCondition",
+            "DependsOn": "Neo4jServer0",
+            "Properties": {
+                "Handle"  : { "Ref" : "StackTokenWaitHandle" },
+                "Timeout" : "900",
+                "Count": "1"
+            }
+        }
     },
     "Outputs": {
         "Note": {
@@ -555,6 +547,19 @@
                 "Ref": "Password"
             }
         },
+
+        {# Each server signals back an instance ID into a dictionary, like:
+         # { instanceId1: password, instanceId2: password }
+         # They're all the same password, so just grab the first instance ID's
+         # return value.
+         # Right now this is not a desired output, but if used to generate a
+         # strong random password, this is the way to do it.
+        "GeneratedClusterPasswordVal": {
+            "Value": {
+                "Fn::GetAtt" : [ "WaitOnPasswordReset", "Data" ]
+            }
+        },
+         #}
         "SSH": {
             "Value": {
                 "Fn::Join": [

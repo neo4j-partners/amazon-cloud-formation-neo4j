@@ -20,6 +20,11 @@ const TOTAL_HITS = 100000;
 const p = Number(process.env.CONCURRENCY);
 const concurrency = { concurrency: (!Number.isNaN(p) && p > 0) ? p : 10 };
 
+// Each time, a random number is chosen, and this table is scanned through.
+// If the random number is less than the strategy number, it executes.
+// So for example if the random number is 0.30, then aggregateRead is executed.
+// By tweaking the distribution of these numbers you can control how frequently
+// each strategy is executed.
 const probabilityTable = [
   [ 0.001, 'fatnodeWrite' ],
   [ 0.002, 'naryWrite' ],

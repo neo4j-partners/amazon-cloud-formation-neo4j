@@ -15,15 +15,7 @@ then used to substitute a template-driven neo4j.conf that is written on every se
 
 # Stress Testing
 
-I cooked up my own script for beating up clusters just to test that they're working roughly OK.   To use that:
-
-```
-npm install
-export NEO4J_USER=neo4j
-export NEO4J_PASSWORD=supersecret
-export NEO4J_URI=bolt+routing://my-cloud-host:7687
-node stress.js
-```
+See the stress-testing folder for full directions on how to use this stand-alone, with Docker, etc.
 
 # Credentials, Questions
 

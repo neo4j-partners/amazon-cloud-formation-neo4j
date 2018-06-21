@@ -17,7 +17,8 @@ const Promise = require('bluebird');
 const uuid = require('uuid');
 
 const TOTAL_HITS = 100000;
-const concurrency = { concurrency: process.env.CONCURRENCY || 10 };
+const p = Number(process.env.CONCURRENCY);
+const concurrency = { concurrency: (!Number.isNaN(p) && p > 0) ? p : 10 };
 
 const probabilityTable = [
   [ 0.001, 'fatnodeWrite' ],
@@ -114,7 +115,7 @@ console.log('Running setup actions for ', Object.keys(strategies).length, ' stra
 process.on('SIGINT', sigintHandler);
 
 Promise.all(setupPromises)
-  .then(() => console.log('Starting parallel strategies'))
+  .then(() => console.log(`Starting parallel strategies: concurrency ${concurrency.concurrency}`))
   .then(() => Promise.map(arr, item => runStrategy(driver).then(checkpoint), concurrency))
   .catch(err => {
     console.error(err);

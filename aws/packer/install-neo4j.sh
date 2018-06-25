@@ -66,7 +66,23 @@ echo "Daemon reload and restart"
 sudo systemctl daemon-reload
 sudo systemctl restart neo4j
 
-sleep 20
+if [ -z $apoc_jar ]; then
+    echo "Skipping APOC installation because apoc_jar is not set."
+else
+    cd /tmp && \
+    curl -L "$apoc_jar" -O
+    sudo mv /tmp/apoc-*.jar /var/lib/neo4j/plugins
+    
+    if [ $? -eq 0 ] ; then
+        echo "APOC installed:"
+        ls -l /var/lib/neo4j/plugins/*.jar
+        md5sum /var/lib/neo4j/plugins/*.jar
+    else 
+        echo "APOC install failed"
+    fi
+fi
+
+sleep 10
 echo "After re-configuration, service status"
 sudo systemctl status neo4j
 sudo journalctl -u neo4j -b

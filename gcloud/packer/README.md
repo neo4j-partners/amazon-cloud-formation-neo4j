@@ -23,7 +23,7 @@ You may omit the AWS key variables and set them in your environment.
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:3.4.0" \
+    -var "neo4j_version=1:3.4.3" \
     packer-template.json
 ```
 
@@ -43,7 +43,7 @@ basically API resources that get tagged to images for tracking purposes.
 Marketplace updates that are submitted, referencing non-licensed images will be rejected.
 
 ```
-PACKER_IMAGE=neo4j-enterprise-1-3-4-0
+PACKER_IMAGE=neo4j-enterprise-1-3-4-3-apoc
 PROJECT=launcher-development-191917
 ZONE=us-east1-b
 TARGET=license-me
@@ -84,12 +84,14 @@ gcloud compute disks delete $TARGET
 
 ## Test Public Image
 
+See the test directory at the top of the repo for scripts which will do this.
+
 ### Check that license metadata is present.  
 
 Note that licenses contains our entry.  Here's what good metadata looks like:
 
 ```
-$ gcloud compute images describe neo4j-enterprise-1-3-4-0 --project launcher-public
+$ gcloud compute images describe neo4j-enterprise-1-3-4-3-apoc --project launcher-public
 archiveSizeBytes: '830832128'
 creationTimestamp: '2018-03-29T06:15:32.483-07:00'
 description: Neo4j Enterprise
@@ -118,7 +120,7 @@ status: READY
 
 ```
 gcloud compute instances create my-neo4j-instance \
-    --image neo4j-enterprise-1-3-4-0 \
+    --image neo4j-enterprise-1-3-4-3 \
     --tags neo4j \
     --image-project launcher-public
 ```

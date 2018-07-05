@@ -132,13 +132,3 @@ Currently, all node instances must be deployed in the same subnet, same zone/reg
 This is because they find each other by local and GCP internal DNS name resolution. This can
 be overcome if you set up separate DNS or static IP addresses for new nodes, and then ensure
 that the `causal_clustering_initial_discovery_members` metadata setting contains the right hosts.
-
-## Cluster Size
-
-The deployment manager templates are going to be wired to deploy 3 nodes.  Because things are 
-configurable from the outside though, it should be straightforward to deploy any size or topology,
-because you can pass dbms.MODE, expected cluster size, initial cluster members, and so on in from
-the outside with metadata.
-
-Yet uncertain, whether google provides tools to build GUIs to solicit these parameters and then
-use those in the template.

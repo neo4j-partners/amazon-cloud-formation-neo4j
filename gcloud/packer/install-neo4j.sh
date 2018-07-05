@@ -49,6 +49,22 @@ sudo chmod +x /etc/neo4j/pre-neo4j.sh
 # neo4j.conf at startup time to properly configure it for network environment.
 sudo sed -i 's/ExecStart=.*$/ExecStart=\/etc\/neo4j\/pre-neo4j.sh/' /etc/systemd/system/neo4j.service
 
+if [ -z $apoc_jar ]; then
+    echo "Skipping APOC installation because apoc_jar is not set."
+else
+    cd /tmp && \
+    curl -L "$apoc_jar" -O
+    sudo mv /tmp/apoc-*.jar /var/lib/neo4j/plugins
+    
+    if [ $? -eq 0 ] ; then
+        echo "APOC installed:"
+        ls -l /var/lib/neo4j/plugins/*.jar
+        md5sum /var/lib/neo4j/plugins/*.jar
+    else 
+        echo "APOC install failed"
+    fi
+fi
+
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload
 sudo systemctl restart neo4j

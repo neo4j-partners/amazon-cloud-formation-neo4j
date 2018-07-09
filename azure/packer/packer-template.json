@@ -1,0 +1,77 @@
+{
+  "variables": {
+    "client_id": "{{env `AZURE_CLIENT_ID`}}",
+    "client_secret": "{{env `AZURE_CLIENT_SECRET`}}",
+    "subscription_id": "{{ env `AZURE_SUBSCRIPTION_ID` }}",
+    "neo4j_version": "1:3.4.3",
+    "neo4j_edition": "enterprise",
+
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/3.4.0.1/apoc-3.4.0.1-all.jar"
+  },
+  "builders": [
+    {
+      "type": "azure-arm",
+      "client_id": "{{user `client_id`}}",
+      "client_secret": "{{user `client_secret`}}",
+      "subscription_id": "{{user `subscription_id`}}",
+      "tenantId": "54e85725-ed2a-49a4-a19e-11c8d29f9a0f",
+      "managed_image_name": "neo4j-{{user `neo4j_edition`}}-{{user `neo4j_version` | clean_ami_name}}-apoc {{isotime \"2006-01-02T03_04_05Z\"}}",
+      "managed_image_resource_group_name": "Testing",
+
+      "location": "West US",
+      "vm_size": "Standard_A2",
+
+      "os_type": "Linux",
+      "image_publisher": "Canonical",
+      "image_offer": "UbuntuServer",
+      "image_sku": "16.04-LTS",
+  
+      "ssh_username": "ubuntu",
+
+      "azure_tags": {
+        "neo4j-install-date": "{{isotime \"2006-01-02T03:04:05Z\"}}",
+        "neo4j-version": "{{user `neo4j_version`}}",
+        "neo4j-edition": "{{user `neo4j_edition`}}"
+      }
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "file",
+      "source": "./neo4j.conf",
+      "destination": "/home/ubuntu/neo4j.conf"
+    },
+    {
+      "type": "file",
+      "source": "./neo4j-community.conf",
+      "destination": "/home/ubuntu/neo4j-community.conf"
+    },
+    {
+      "type": "file",
+      "source": "./pre-neo4j.sh",
+      "destination": "/home/ubuntu/pre-neo4j.sh"
+    },
+    {
+      "type": "file",
+      "source": "../../licensing",
+      "destination": "/home/ubuntu"
+    },
+    {
+      "type": "shell",
+      "script": "./install-neo4j.sh",
+      "environment_vars": [
+        "neo4j_version={{ user `neo4j_version` }}",
+        "neo4j_edition={{ user `neo4j_edition` }}",
+        "apoc_jar={{ user `apoc_jar` }}"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "sudo rm -f /home/ubuntu/.ssh/authorized_keys",
+        "sudo rm -f /root/.ssh/authorized_keys",
+        "sudo rm -f /home/ubuntu/*.conf"
+      ]
+    }
+  ]
+}

@@ -92,16 +92,6 @@ echo "After re-configuration, service status"
 sudo systemctl status neo4j
 sudo journalctl -u neo4j -b
 
-if [ $neo4j_edition = "community" ]; then
-   # On first live startup of community, this signals that default password
-   # should be reset, so we can have strong passwords without cloudformation.
-   # See also reset-password-aws.sh, and pre-neo4j.sh where it is triggered.
-   #
-   # Important to do this **after** service restart above so that we don't
-   # reset the default password during the packer install.
-   sudo touch /etc/neo4j/password-reset.log   
-fi
-
 sudo chown neo4j /etc/neo4j/*
 
 echo ''

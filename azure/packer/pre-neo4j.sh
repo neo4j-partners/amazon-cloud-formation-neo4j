@@ -7,45 +7,53 @@
 # In this way, neo4j does not need to know ahead of time what it's IP will be, and
 # can be controlled by tags put on the instance.
 ######################################################################################
-echo "pre-neo4j.sh: Fetching AWS instance metadata"
+echo "pre-neo4j.sh: Fetching Azure instance metadata"
 
-# Documentation: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html
-export API=http://169.254.169.254/latest/
-export MAC_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/)
-export INTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/local-ipv4s)
-export EXTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/public-ipv4s)
-export INSTANCE_ID=$(curl --silent $API/meta-data/instance-id)
-export AVAILABILITY_ZONE=$(curl --silent $API/meta-data/placement/availability-zone)
-export REGION=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document|grep region|awk -F\" '{print $4}'`
+# Azure Instance Metadata
+# Documentation: https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service
+export API=http://169.254.169.254/metadata
+export VERSION=api-version=2017-08-01
+export HEADERS="-H Metadata:true"
+export INTERNAL_IP_ADDR=$(curl $HEADERS --silent $API/instance/network/interface/0/ipv4/ipAddress/0/privateIpAddress?$VERSION\&format=text)
+export EXTERNAL_IP_ADDR=$(curl $HEADERS --silent $API/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress?$VERSION\&format=text)
+export INSTANCE_ID=$(curl $HEADERS --silent $API/instance?$VERSION | jq -r '.compute.vmId')
 
 get_instance_tags () {
-    instance_id=$(curl --silent $API/meta-data/instance-id)
-    echo $(aws ec2 describe-tags --filters "Name=resource-id,Values=$instance_id" --region=${REGION})
-}
+    joinedTags=$(curl $HEADERS --silent $API/instance?$VERSION | jq -r '.compute.tags')
+    # Tags come like this:
+    # tag1:value1;tag2:value2
+    # So we need to split/transform into:
+    # tag1=value1
+    # tag2=value2
+    # Which will make it easy to re-export them.
+    echo "$joinedTags" | perl -e '
+        use strict;
 
-get_ami_tags () {
-    ami_id=$(curl --silent $API/meta-data/ami-id)
-    echo $(aws ec2 describe-tags --filters "Name=resource-id,Values=$ami_id" --region=${REGION})
+        my $line = <STDIN>;
+        chomp($line);
+        my @parts = split(/;/, $line);
+
+        foreach my $part (@parts) {
+            # Only first, not global, in case value contains :
+            # as in default_advertised_address::0.0.0.0
+            $part =~ s/:/=/;
+            print $part,"\n";
+        }
+    '
 }
 
 tags_to_env () {
     tags=$1
     # Go through JSON keys, setting env vars in all lowercase.
     # so instance tag "Foo_Bar": 5 becomes export foo_bar=5
-    for key in $(echo $tags | /usr/bin/jq -r ".[][].Key"); do
-        value=$(echo $tags | /usr/bin/jq -r ".[][] | select(.Key==\"$key\") | .Value")
-        key=$(echo $key | /usr/bin/tr '-' '_' | /usr/bin/tr '[:upper:]' '[:lower:]')
-        echo "Configuring environment $key=$value"
-        export $key="$value"
+    for kvPair in $tags; do
+        export $kvPair
     done
 }
 
-# Fetch AMI tags and instance tags, and translate those JSON
-# tags into a set of environment variables, declared within this shell.
-ami_tags=$(get_ami_tags)
+# Fetch instance tags, transform them into X=Y pairs, and then
+# export those pairs into current shell environment.
 instance_tags=$(get_instance_tags)
-
-tags_to_env "$ami_tags"
 tags_to_env "$instance_tags"
 
 # At this point all env vars are in place, we only need to fill out those missing
@@ -125,20 +133,6 @@ echo "neo4j_mode $neo4j_mode"
 envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
 
 echo "pre-neo4j.sh: Starting neo4j console..."
-
-# Check to see if enterprise is installed.
-dpkg -l | grep neo4j-enterprise
-if [ "$?" -ne 0 ] && [ -f /etc/neo4j/password-reset.log ]; then
-    # Only reset password for community, which is deployed as single AMI w/o
-    # CloudFormation templating. In the enterprise case, cloudformation handles
-    # the password reset bit.
-    #
-    # Also, only do this if the password reset log exists.  This ensures that
-    # during a packer build, the password doesn't get reset to the packer instance ID,
-    # and only happens on first user startup.
-    echo "Startup: checking to see if password needs to be reset"
-    exec /etc/neo4j/reset-password-aws.sh & 
-fi
 
 # This is the same command sysctl's service would have executed.
 /usr/share/neo4j/bin/neo4j console

@@ -28,8 +28,13 @@ echo "Starting neo4j..."
 sudo systemctl start neo4j
 
 # Install ancillary tools necessary for config/monitoring.
-# python runtime needed for some aws internal tools, like cloudformation.
-sudo apt-get --yes install jq awscli python python-setuptools
+# Azure tools get installed here.
+AZ_REPO=$(lsb_release -cs)
+echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | \
+    sudo tee /etc/apt/sources.list.d/azure-cli.list
+curl -L https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
+sudo apt-get update
+apt-get --yes install apt-transport-https azure-cli jq
 
 echo "Available system services"
 ls /etc/systemd/system

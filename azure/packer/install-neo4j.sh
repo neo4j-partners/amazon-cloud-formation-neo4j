@@ -34,7 +34,7 @@ echo "deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO 
     sudo tee /etc/apt/sources.list.d/azure-cli.list
 curl -L https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
 sudo apt-get update
-apt-get --yes install apt-transport-https azure-cli jq
+sudo apt-get --yes install apt-transport-https azure-cli jq
 
 echo "Available system services"
 ls /etc/systemd/system

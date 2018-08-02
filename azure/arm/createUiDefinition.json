@@ -1,0 +1,266 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+    "handler": "Microsoft.Compute.MultiVm",
+    "version": "0.1.2-preview",
+    "parameters": {
+        "basics": [
+            {
+                "name": "adminUsername",
+                "type": "Microsoft.Compute.UserNameTextBox",
+                "label": "Admin Account Name",
+                "toolTip": "Administrator user name used for SSH to your VMs. 'admin' and 'root' are not valid",
+                "osPlatform": "Linux"
+            },
+            {
+                "name": "adminCredentials",
+                "type": "Microsoft.Compute.CredentialsCombo",
+                "label": {
+                    "authenticationType": "Authentication type",
+                    "password": "Password",
+                    "confirmPassword": "Confirm password",
+                    "sshPublicKey": "SSH public key"
+                },
+                "toolTip": {
+                    "authenticationType": "",
+                    "password": "Admin password for the virtual machines.",
+                    "sshPublicKey": ""
+                },
+                "constraints": {
+                    "required": true
+                },
+                "options": {
+                    "hideConfirmation": false
+                },
+                "osPlatform": "Linux"
+            }
+        ],
+        "steps": [
+            {
+                "name": "neo4jConfig",
+                "label": "Neo4j Settings",
+                "subLabel": {
+                    "preValidation": "Configure VMs",
+                    "postValidation": "Done"
+                },
+                "bladeTitle": "Neo4j Settings",
+                "elements": [
+                    {
+                        "name": "Neo4jVersion",
+                        "type": "Microsoft.Common.DropDown",
+                        "label": "Neo4j Version",
+                        "defaultValue": "Most recent version",
+                        "constraints": {
+                            "allowedValues": [
+                                {
+                                    "label": "Latest version",
+                                    "value": "default"
+                                },
+                                {
+                                    "label": "Neo4j 3.4",
+                                    "value": "default"
+                                },
+                                {
+                                    "label": "Neo4j 3.3",
+                                    "value": "3.3"
+                                },
+                                {
+                                    "label": "Neo4j 3.2",
+                                    "value": "3.2"
+                                },
+                                {
+                                    "label": "Neo4j 3.1",
+                                    "value": "3.1"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "name": "Neo4jPassword",
+                        "type": "Microsoft.Common.PasswordBox",
+                        "label": {
+                            "password": "Neo4j password",
+                            "confirmPassword": "Confirm Neo4j password"
+                        },
+                        "toolTip": "The password used to authenticate with the 'neo4j' user as 12-72 characters. Must include at least 3 of: 1 lower case character, 1 upper case character, 1 number, and 1 special character.",
+                        "constraints": {
+                            "required": true,
+                            "regex": "^(?:(?=.*[a-z])(?:(?=.*[A-Z])(?=.*[\\d\\W])|(?=.*\\W)(?=.*\\d))|(?=.*\\W)(?=.*[A-Z])(?=.*\\d)).{12,72}$"
+                        }
+                    },
+                    {
+                        "name": "sslCert",
+                        "type": "Microsoft.Common.FileUpload",
+                        "label": "SSL Certificate",
+                        "toolTip": "SSL certificate (domain.cert) to use for HTTPS access. By default a self-signed certificate is generated.",
+                        "constraints": {
+                            "required": false,
+                            "accept": ".cert"
+                        },
+                        "options": {
+                            "uploadMode": "file"
+                        }
+                    },
+                    {
+                        "name": "sslKey",
+                        "type": "Microsoft.Common.FileUpload",
+                        "label": "SSL Private Key",
+                        "toolTip": "SSL private key (domain.key) to use for HTTPS access. By default a self-signed certificate is generated.",
+                        "constraints": {
+                            "required": false,
+                            "accept": ".key"
+                        },
+                        "options": {
+                            "uploadMode": "file"
+                        }
+                    },
+                    {
+                        "name": "ClusterName",
+                        "type": "Microsoft.Common.TextBox",
+                        "label": "Neo Cluster Name",
+                        "defaultValue": "neo",
+                        "toolTip": "The name for your Neo4j cluster.  Used for VM and other name prefixes.",
+                        "constraints": {
+                            "required": true,
+                            "regex": "^[a-zA-Z0-9\\.\\-]{1,11}$",
+                            "validationMessage": "Alphanumeric characters, period(.) and dash(-) are allowed.  The value must be 1-11 characters long."
+                        }
+                    },
+                    {
+                        "name": "VmCount",
+                        "type": "Microsoft.Common.TextBox",
+                        "label": "Number of VMs",
+                        "defaultValue": "3",
+                        "toolTip": "Number of VMs in the Neo4j cluster",
+                        "constraints": {
+                            "required": true,
+                            "regex": "^(3|4|5|6|7|8|9|10|11|12)$",
+                            "validationMessage": "Number of VMs must be between 3 and 12, inclusive."
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "VmSize",
+                        "type": "Microsoft.Compute.SizeSelector",
+                        "label": "Size of each VM",
+                        "toolTip": "",
+                        "recommendedSizes": [
+                            "Standard_D4_v2",
+                            "Standard_D5_v2",
+                            "Standard_D4",
+                            "Standard_D5"
+                        ],
+                        "constraints": {
+                            "excludedSizes": [
+                                "Basic_A0",
+                                "Basic_A1",
+                                "Basic_A2",
+                                "Basic_A3",
+                                "Standard_A0",
+                                "Standard_A1",
+                                "Standard_A2",
+                                "Standard_A3",
+                                "Standard_D1",
+                                "Standard_D2",
+                                "Standard_D3",
+                                "Standard_D1_v2",
+                                "Standard_D2_v2",
+                                "Standard_D3_v2",
+                                "Standard_DS1",
+                                "Standard_DS2",
+                                "Standard_DS3"
+                            ]
+                        },
+                        "osPlatform": "Linux",
+                        "count": "[steps('neo4jConfig').VmCount]",
+                        "visible": true
+                    },
+                    {
+                        "name": "VNet",
+                        "type": "Microsoft.Network.VirtualNetworkCombo",
+                        "label": {
+                            "virtualNetwork": "Virtual network for the Cluster",
+                            "subnets": "Subnet for VMs"
+                        },
+                        "toolTip": {
+                            "virtualNetwork": "",
+                            "subnets": ""
+                        },
+                        "defaultValue": {
+                            "name": "neo-vnet-01",
+                            "addressPrefixSize": "/24"
+                        },
+                        "constraints": {
+                            "minAddressPrefixSize": "/27"
+                        },
+                        "options": {
+                            "hideExisting": true
+                        },
+                        "subnets": {
+                            "cluster": {
+                                "label": "Subnet for Cluster VMs",
+                                "defaultValue": {
+                                    "name": "clusterSubnet",
+                                    "addressPrefixSize": "/24"
+                                },
+                                "constraints": {
+                                    "minAddressPrefixSize": "/27",
+                                    "minAddressCount": 12,
+                                    "requireContiguousAddresses": true
+                                }
+                            }
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "PublicIP",
+                        "type": "Microsoft.Network.PublicIpAddressCombo",
+                        "label": {
+                            "publicIpAddress": "Public IP address",
+                            "domainNameLabel": "None"
+                        },
+                        "toolTip": {
+                            "publicIpAddress": "Public IP address where Neo4j will be accessible. Select None if you don't want Neo4j to be publically accessible.",
+                            "domainNameLabel": ""
+                        },
+                        "defaultValue": {
+                            "publicIpAddressName": "NeoIP001"
+                        },
+                        "constraints": {
+                            "required": {
+                                "domainNameLabel": false
+                            }
+                        },
+                        "options": {
+                            "hideNone": false,
+                            "hideExisting": false,
+                            "hideDomainNameLabel": true
+                        },
+                        "visible": true
+                    }
+                ]
+            }
+        ],
+        "outputs": {
+            "Location": "[location()]",
+            "ClusterNamePrefix": "[steps('neo4jConfig').ClusterName]",
+            "VmCount": "[int(steps('neo4jConfig').VmCount)]",
+            "VmSize": "[steps('neo4jConfig').VmSize]",
+            "AdminUserName": "[basics('adminUsername')]",
+            "AdminAuthType": "[toLower(basics('adminCredentials').authenticationType)]",
+            "AdminCredential": "[coalesce(basics('adminCredentials').password,basics('adminCredentials').sshPublicKey)]",
+            "VNetNewOrExisting": "[toLower(steps('neo4jConfig').VNet.newOrExisting)]",
+            "VNetName": "[steps('neo4jConfig').VNet.name]",
+            "VNetResourceGroupName": "[steps('neo4jConfig').VNet.resourceGroup]",
+            "VNetAddressPrefix": "[first(steps('neo4jConfig').VNet.addressPrefixes)]",
+            "SubnetName": "[steps('neo4jConfig').VNet.subnets.cluster.name]",
+            "SubnetAddressPrefix": "[steps('neo4jConfig').VNet.subnets.cluster.addressPrefix]",
+            "SubnetStartAddress": "[steps('neo4jConfig').VNet.subnets.cluster.startAddress]",
+            "PublicIPNewOrExistingOrNone": "[toLower(steps('neo4jConfig').PublicIP.newOrExistingOrNone)]",
+            "PublicIPName": "[steps('neo4jConfig').PublicIP.name]",
+            "Neo4jVersion": "[steps('neo4jConfig').Neo4jVersion]",
+            "Neo4jPassword": "[steps('neo4jConfig').Neo4jPassword]",
+            "sslCert": "[steps('neo4jConfig').sslCert]",
+            "sslKey": "[steps('neo4jConfig').sslKey]"
+        }
+    }
+}

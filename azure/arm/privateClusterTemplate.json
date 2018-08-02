@@ -1,0 +1,557 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "Location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]"
+        },
+        "ResourceGroupName": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().name]"
+        },
+        "ClusterNamePrefix": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 11
+        },
+
+        "VmCount": {
+            "type": "int",
+            "minValue": 3,
+            "defaultValue": 3
+        },
+        "VmSize": {
+            "type": "string"
+        },
+
+        "AdminUserName": {
+            "type": "securestring"
+        },
+        "AdminAuthType": {
+            "type": "string",
+            "allowedValues": ["sshpublickey", "password"]
+        },
+        "AdminCredential": {
+            "type": "securestring",
+            "defaultValue": null
+        },
+
+        "VNetNewOrExisting": {
+            "type": "string",
+            "allowedValues": [
+                "new",
+                "existing"
+            ]
+        },
+        "VNetName": {
+            "type": "string"
+        },
+        "VNetAddressPrefix": {
+            "type": "string"
+        },
+        "VNetResourceGroupName": {
+            "type": "string"
+        },
+        "SubnetName": {
+            "type": "string"
+        },
+        "SubnetAddressPrefix": {
+            "type": "string"
+        },
+        "SubnetStartAddress": {
+            "type": "string"
+        },
+
+        "PublicIPNewOrExistingOrNone": {
+            "type": "string",
+            "allowedValues": ["new","existing","none"]
+        },
+        "PublicIPName": {
+            "type": "string"
+        },
+        "PublicIPAllocationMethod": {
+            "type": "string",
+            "allowedValues": ["Static", "Dynamic"]
+        },
+        "PublicIPIdleTimeoutInMinutes": {
+            "type": "int",
+            "minValue": 4,
+            "maxValue": 30
+        },
+
+        "sslCert": {
+            "type": "string"
+        },
+        "sslKey": {
+            "type": "string"
+        },
+
+        "Neo4jVersion": {
+            "type": "string"
+        },
+        "Neo4jPassword": {
+            "type": "securestring"
+        },
+        "Neo4jHttpsPort": {
+            "type": "int"
+        },
+        "Neo4jHttpPort": {
+            "type": "int"
+        },
+        "Neo4jBoltPort": {
+            "type": "int"
+        },
+        "Neo4jClusterPort": {
+            "type": "int",
+            "defaultValue": 5001,
+            "metadata": {
+                "description": "The port used for communication between instances in the cluster"
+            }
+        },
+        "Neo4jTransactionPort": {
+            "type": "int",
+            "defaultValue": 6001,
+            "metadata": {
+                "description": "The port used to read transaction data from the master"
+            }
+        },
+
+        "saList": {
+            "type": "array",
+            "metadata": {
+                "description": "List of storage accounts to provision"
+            }
+        },
+        "saListByVM": {
+            "type": "array",
+            "metadata": {
+                "description": "List of storage account to use, indexed by ordinal VM number"
+            }
+        },
+        "Neo4JTags": {
+            "type": "object",
+            "metadata": {
+                "description": "Dictionary of tags to apply to the various resources"
+            }
+        },
+        "ArtifactsBase": {
+            "type": "string",
+            "metadata": {
+                "artifactsBaseUrl": "",
+                "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
+            },
+            "defaultValue": "https://raw.githubusercontent.com/neo4j/azure-neo4j/master/ha"
+        },
+        "extensionScript": {
+            "type": "string",
+            "defaultValue": "setup.sh"
+        }
+    },
+    "variables": {
+        "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
+        "namePrefixes": {
+            "nic": "[concat(parameters('ClusterNamePrefix'),'-nic-')]",
+            "nsg": "[concat(parameters('ClusterNamePrefix'),'-sg')]",
+            "storage": "[concat(toLower(trim(parameters('ClusterNamePrefix'))), uniqueString(resourceGroup().id))]",
+            "vm": "[concat(parameters('ClusterNamePrefix'),'-vm-')]",
+            "availabilitySet": "[concat(parameters('ClusterNamePrefix'), '-as')]"
+        },
+        "resourceIDs": {
+            "availabilitySet": "[resourceId('Microsoft.Compute/availabilitySets', variables('namePrefixes').availabilitySet)]",
+            "virtualNetwork": "[resourceId(parameters('VNetResourceGroupName'), 'Microsoft.Network/virtualNetworks', parameters('VNetName'))]"
+        },
+        "natRulePrefix": "SSH-",
+        "vnetReferencerUri": "[concat(variables('artifactsBase'), 'vnet-', parameters('VNetNewOrExisting'), '.json')]",
+        "imageReferenceTest": {
+            "publisher": "Canonical",
+            "offer": "UbuntuServer",
+            "sku": "16.04.0-LTS",
+            "version": "latest"
+        },
+        "imageReferenceMarketPlace": {
+            "publisher": "MicrosoftWindowsServerEssentials",
+            "offer": "WindowsServerEssentials",
+            "sku": "WindowsServerEssentials",
+            "version": "latest"
+        },
+        "imageReference": "[variables('imageReferenceTest')]",
+        "authConfig-sshpublickey": {
+            "linuxConfiguration": {
+                "disablePasswordAuthentication": true,
+                "ssh": {
+                    "publicKeys": [
+                        {
+                            "path": "[concat('/home/', parameters('AdminUserName'),'/.ssh/authorized_keys')]",
+                            "keyData": "[parameters('AdminCredential')]"
+                        }
+                    ]
+                }
+            },
+            "adminPassword": ""
+        },
+        "authConfig-password": {
+            "linuxConfiguration": {
+                "disablePasswordAuthentication": false
+            },
+            "adminPassword": "[parameters('AdminCredential')]"
+        },
+        "authConfig": "[variables(concat('authConfig-',parameters('AdminAuthType')))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "[parameters('saList')[copyIndex()]]",
+            "apiVersion": "2016-12-01",
+            "location": "[parameters('Location')]",
+            "tags": "[parameters('Neo4JTags')]",
+            "properties": {},
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "kind": "Storage",
+            "dependsOn": [],
+            "copy": {
+                "name": "storageAccountProvisioningCI",
+                "count": "[length(parameters('saList'))]"
+            }
+        },
+        {
+            "type": "Microsoft.Compute/availabilitySets",
+            "name": "[variables('namePrefixes').availabilitySet]",
+            "apiVersion": "2016-08-30",
+            "location": "[parameters('Location')]",
+            "tags": "[parameters('Neo4JTags')]",
+            "properties": {
+                "platformUpdateDomainCount": 20,
+                "platformFaultDomainCount": 3
+            },
+            "dependsOn": []
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "name": "IPListConstructor",
+            "apiVersion": "2016-09-01",
+            "dependsOn": [],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifactsBase'), 'generateIPList.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "subnetCIDR": {
+                        "value": "[parameters('SubnetAddressPrefix')]"
+                    },
+                    "addressCount": {
+                        "value": "[parameters('VmCount')]"
+                    },
+                    "ArtifactsBase": {
+                        "value": "[parameters('ArtifactsBase')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "name": "[concat(variables('namePrefixes').nic, padLeft(copyIndex(),3,'0'))]",
+            "apiVersion": "2016-12-01",
+            "location": "[parameters('Location')]",
+            "tags": "[parameters('Neo4JTags')]",
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "privateIPAllocationMethod": "Static",
+                            "privateIPAddress": "[reference('IPListConstructor').outputs.IPList.value[copyIndex()]]",
+                            "subnet": {
+                                "id": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/', parameters('SubnetName'))]"
+                            }
+                        }
+                    }
+                ],
+                "dnsSettings": {
+                    "dnsServers": []
+                },
+                "enableIPForwarding": false,
+                "networkSecurityGroup": {
+                    "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]"
+                }
+            },
+            "copy": {
+                "name": "nicCI",
+                "count": "[parameters('VmCount')]"
+            },
+            "dependsOn": [
+                "VirtualNetwork",
+                "IPListConstructor",
+                "[variables('namePrefixes').nsg]"
+            ]
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "name": "[variables('namePrefixes').nsg]",
+            "apiVersion": "2016-12-01",
+            "location": "[parameters('Location')]",
+            "tags": "[parameters('Neo4JTags')]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "default-allow-ssh",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "22",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1000,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "http-probe",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jHttpPort'))]",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1010,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "allow-https",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jHttpsPort'))]",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1020,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "allow-bolt",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jBoltPort'))]",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1030,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "neo4j-cluster-communication",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jClusterPort'))]",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1040,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "neo4j-transaction-communiocation",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jTransactionPort'))]",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1050,
+                            "direction": "Inbound"
+                        }
+                    }
+                ]
+            },
+            "dependsOn": []
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "name": "VirtualNetwork",
+            "apiVersion": "2016-09-01",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('vnetReferencerUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "NetworkName": {
+                        "value": "[parameters('VNetName')]"
+                    },
+                    "NetworkAddressPrefix": {
+                        "value": "[parameters('VNetAddressPrefix')]"
+                    },
+                    "SubnetName": {
+                        "value": "[parameters('SubnetName')]"
+                    },
+                    "SubnetAddressPrefix": {
+                        "value": "[parameters('SubnetAddressPrefix')]"
+                    },
+                    "SubnetStartAddress": {
+                        "value": "[parameters('SubnetStartAddress')]"
+                    },
+                    "ResourceGroupName": {
+                        "value": "[parameters('VNetResourceGroupName')]"
+                    },
+                    "Location": {
+                        "value": "[parameters('Location')]"
+                    },
+                    "Neo4Jtags": {
+                        "value": "[parameters('Neo4JTags')]"
+                    },
+                    "ArtifactsBase": {
+                        "value": "[parameters('ArtifactsBase')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "name": "[concat(variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]",
+            "apiVersion": "2016-08-30",
+            "location": "[parameters('Location')]",
+            "tags": "[parameters('Neo4JTags')]",
+            "properties": {
+                "availabilitySet": {
+                    "id": "[variables('resourceIDs').availabilitySet]"
+                },
+                "hardwareProfile": {
+                    "vmSize": "[parameters('VmSize')]"
+                },
+                "storageProfile": {
+                    "imageReference": "[variables('imageReference')]",
+                    "osDisk": {
+                        "name": "[concat(variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-OS')]",
+                        "createOption": "FromImage",
+                        "vhd": {
+                            "uri": "[concat('https://',parameters('saListByVM')[copyIndex()],'.blob.core.windows.net/vhds/', variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-OS.vhd')]"
+                        },
+                        "caching": "ReadWrite"
+                    },
+                    "dataDisks": [
+                        {
+                            "lun": 0,
+                            "name": "[concat(variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-Data-0')]",
+                            "createOption": "Empty",
+                            "vhd": {
+                                "uri": "[concat('https://',parameters('saListByVM')[copyIndex()], '.blob.core.windows.net/vhds/', variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-Data-0.vhd')]"
+                            },
+                            "caching": "None",
+                            "diskSizeGB": "1023"
+                        }
+                    ]
+                },
+                "osProfile": {
+                    "computerName": "[concat(variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'))]",
+                    "adminUsername": "[parameters('AdminUserName')]",
+                    "linuxConfiguration": "[variables('authConfig').linuxConfiguration]",
+                    "secrets": [],
+                    "adminPassword": "[variables('authConfig').adminPassword]"
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic,padLeft(copyIndex(),3,'0')))]"
+                        }
+                    ]
+                }
+            },
+            "copy": {
+                "name": "vmCI",
+                "count": "[parameters('VmCount')]"
+            },
+            "dependsOn": [
+                "[variables('resourceIDs').availabilitySet]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('saListByVM')[copyIndex()])]",
+                "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic,padLeft(copyIndex(),3,'0')))]"
+            ]
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]",
+            "apiVersion": "2016-09-01",
+            "dependsOn": [
+                "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]"
+            ],
+            "copy": {
+                "name": "vmExtLoop",
+                "count": "[parameters('VmCount')]"
+            },
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifactsBase'), 'scriptTemplate.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "VmName": {
+                        "value": "[concat(variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]"
+                    },
+                    "Location": {
+                        "value": "[parameters('Location')]"
+                    },
+                    "ArtifactsBase": {
+                        "value": "[parameters('ArtifactsBase')]"
+                    },
+                    "Neo4Jtags": {
+                        "value": "[parameters('Neo4JTags')]"
+                    },
+                    "script": {
+                        "value": "[parameters('extensionScript')]"
+                    },
+                    "Version": {
+                        "value": "[parameters('Neo4jVersion')]"
+                    },
+                    "Password": {
+                        "value": "[parameters('Neo4jPassword')]"
+                    },
+                    "sslCert": {
+                        "value": "[parameters('sslCert')]"
+                    },
+                    "sslKey": {
+                        "value": "[parameters('sslKey')]"
+                    },
+                    "httpPort": {
+                        "value": "[string(parameters('Neo4jHttpPort'))]"
+                    },
+                    "httpsPort": {
+                        "value": "[string(parameters('Neo4jHttpsPort'))]"
+                    },
+                    "boltPort": {
+                        "value": "[string(parameters('Neo4jBoltPort'))]"
+                    },
+                    "CoordPort": {
+                        "value": "[string(parameters('Neo4jClusterPort'))]"
+                    },
+                    "DataPort": {
+                        "value": "[string(parameters('Neo4jTransactionPort'))]"
+                    },
+                    "myId": {
+                        "value": "[string(copyIndex(1))]"
+                    },
+                    "myIp": {
+                        "value": "[reference('IPListConstructor').outputs.IPList.value[copyIndex()]]"
+                    },
+                    "allIps": {
+                        "value": "[trim(replace(replace(replace(string(reference('IPListConstructor').outputs.IPList.value),'\"',''), '[', ''),']',''))]"
+                    }
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,107 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "firstOnSubnet": {
+            "type": "int",
+            "defaultValue": 4,
+            "metadata": {
+                "description": "First IP available on Subnet .. on Azure, usually *.4"
+            }
+        },
+        "subnetCIDR": {
+            "type": "string",
+            "defaultValue": "10.0.1.0/24",
+            "metadata": {
+                "description": "CIDR of the network.  e.g. 10.0.1.0/24"
+            }
+        },
+        "addressCount": {
+            "type": "int",
+            "defaultValue": 10,
+            "metadata": {
+                "description": "Number of IP addresses to be generated"
+            }
+        },
+        "ArtifactsBase": {
+            "type": "string",
+            "metadata": {
+                "artifactsBaseUrl": ""
+            },
+            "defaultValue": "https://raw.githubusercontent.com/neo4j/azure-neo4j/master/ha"
+        }
+    },
+    "variables": {
+        "SubnetWithoutCIDR":    "[split(parameters('subnetCIDR'), '/')[0]]",
+        "NetworkAddressParts": "[split(variables('SubnetWithoutCIDR'),'.')]",
+        "NetworkAddressPartsInt": [
+            "[int(variables('NetworkAddressParts')[0])]",
+            "[int(variables('NetworkAddressParts')[1])]",
+            "[int(variables('NetworkAddressParts')[2])]",
+            "[int(variables('NetworkAddressParts')[3])]"
+        ],
+        "topOctet": "[variables('NetworkAddressParts')[0]]",
+        "intNetworkAddress": "[int(add(0,add(mul(variables('NetworkAddressPartsInt')[1],65536),add(mul(variables('NetworkAddressPartsInt')[2],256),variables('NetworkAddressPartsInt')[3]))))]",
+        "firstAddress": "[add(parameters('firstOnSubnet'), variables('intNetworkAddress'))]",
+        "stepNamePrefix": "IPList-concatStep-"
+    },
+    "resources": [
+        {
+            "comments": "Dummy Step 0 to get a one-behind starting state for iterative list build from empty list",
+            "type": "Microsoft.Resources/deployments",
+            "name": "[concat(variables('stepNamePrefix'), '0')]",
+            "apiVersion": "2016-09-01",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(parameters('ArtifactsBase'), '/noResourceAppend.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "prefix": {
+                        "value": []
+                    },
+                    "suffix": {
+                        "value": []
+                    }
+                }
+            }
+        },
+        {
+            "comments": "Build a list of NAT rules by appending this one to the previous iteration's result",
+            "type": "Microsoft.Resources/deployments",
+            "name": "[concat(variables('stepNamePrefix'), copyIndex(1))]",
+            "apiVersion": "2016-09-01",
+            "dependsOn": [
+                "[concat(variables('stepNamePrefix'), copyIndex())]"
+            ],
+            "copy": {
+                "name": "rCount",
+                "count": "[parameters('addressCount')]"
+            },
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(parameters('ArtifactsBase'), '/noResourceAppend.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "prefix": {
+                        "value": "[reference(concat(variables('stepNamePrefix'), copyIndex())).outputs.newList.value]"
+                    },
+                    "suffix": {
+                        "value": [
+                           "[concat(variables('topOctet'),'.',string(mod(div(add(variables('firstAddress'), copyIndex()),65536),256)),'.',string(mod(div(add(variables('firstAddress'), copyIndex()),256),256)),'.',string(mod(add(variables('firstAddress'), copyIndex()),256)))]"
+                        ]
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "IPList": {
+            "type": "array",
+            "value": "[reference(concat(variables('stepNamePrefix'), parameters('addressCount'))).outputs.newList.value]"
+        }
+    }
+}

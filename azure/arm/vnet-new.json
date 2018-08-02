@@ -1,0 +1,80 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "NetworkName": {
+            "type": "string"
+        },
+        "NetworkAddressPrefix": {
+            "type": "string",
+            "metadata": {
+                "description": "CIDR for Virtual Network, e.g., 1.2.3.4/16"
+            }
+        },
+        "SubnetName": {
+            "type": "string"
+        },
+        "SubnetAddressPrefix": {
+            "type": "string"
+        },
+        "SubnetStartAddress": {
+            "type": "string"
+        },
+        "ResourceGroupName": {
+            "type": "string",
+            "metadata": {
+                "description": "the RG to own the Vnet -- ignored for new VNET"
+            }
+        },
+        "Location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]"
+        },
+        "Neo4Jtags": {
+            "type": "object",
+            "metadata": {
+                "description": "resource tags to be applied to the new VNET"
+            }
+        },
+        "ArtifactsBase": {
+            "type": "string",
+            "metadata": {
+                "artifactsBaseUrl": ""
+            },
+            "defaultValue": "https://raw.githubusercontent.com/neo4j/azure-neo4j/master/ha"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "comments": "Define a new Virtual Network in the current resource group",
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[parameters('NetworkName')]",
+            "apiVersion": "2016-12-01",
+            "location": "[parameters('Location')]",
+            "tags": "[parameters('Neo4JTags')]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('NetworkAddressPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[parameters('SubnetName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('SubnetAddressPrefix')]"
+                        }
+                    }
+                ]
+            },
+            "dependsOn": []
+        }
+    ],
+    "outputs": {
+        "vnetResourceID": {
+            "type": "string",
+            "value": "[resourceID('Microsoft.Network/virtualNetworks', parameters('NetworkName'))]"
+        }
+    }
+}

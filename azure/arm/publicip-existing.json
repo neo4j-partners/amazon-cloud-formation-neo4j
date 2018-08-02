@@ -1,0 +1,79 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "PublicIPNameForNew": {
+            "type": "string",
+            "metadata": {
+                "description": "Name to use for the new PublicIP instance"
+            }
+        },
+        "PublicIPNameExisting": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Name of an existing PublicIP instance to use.  e.g. 'MyIP001'"
+            }
+        },
+        "PublicIPAllocationMethod": {
+            "type": "string",
+            "allowedValues": [
+                "Static",
+                "Dynamic"
+            ],
+            "defaultValue": "Dynamic"
+        },
+        "IdleTimeoutInMinutes": {
+            "type": "int",
+            "defaultValue": 10,
+            "metadata": {
+                "description": "Time to wait before reclaiming a 'no-traffic' connection as idle"
+            }
+        },
+        "ResourceGroupName": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().name]",
+            "metadata": {
+                "description": "Name of Resource group to use -- ignored for new PublicIP"
+            }
+        },
+        "Location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "Azure location at which to create the new PublicIP instance"
+            }
+        },
+        "ApiVersions": {
+            "type": "object",
+            "defaultValue": {
+                "network": "2016-07-01"
+            },
+            "metadata": {
+                "description": "Optional override of Resource Provider version."
+            }
+        },
+        "Neo4JTags": {
+            "type": "object",
+            "metadata": {
+                "description": "Dictionary of tags to apply to the Public IP"
+            }
+        },
+        "ArtifactsBase": {
+            "type": "string",
+            "metadata": {
+                "artifactsBaseUrl": "",
+                "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
+            },
+            "defaultValue": "https://raw.githubusercontent.com/neo4j/azure-neo4j/master/ha"
+        }
+    },
+    "variables": {},
+    "resources": [],
+    "outputs": {
+        "PublicIPResourceID": {
+            "type": "string",
+            "value": "[resourceID('Microsoft.Network/publicIPAddresses', parameters('PublicIPNameExisting'))]"
+        }
+    }
+}

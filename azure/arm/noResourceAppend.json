@@ -1,0 +1,32 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "prefix": {
+            "type": "array",
+            "metadata": {
+                "description": "First part of existing array"
+            }
+        },
+        "suffix": {
+            "type": "array",
+            "metadata": {
+                "description": "Array to append to prefix array."
+            }
+        },
+        "ArtifactsBase": {
+            "type": "string",
+            "metadata": {
+                "artifactsBaseUrl": ""
+            },
+            "defaultValue": ""
+        }
+    },
+    "resources": [],
+    "outputs": {
+        "newList": {
+            "type": "array",
+            "value": "[concat(parameters('prefix'),parameters('suffix'))]"
+        }
+    }
+}

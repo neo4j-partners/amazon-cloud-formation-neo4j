@@ -1,0 +1,33 @@
+#!/bin/bash
+
+if [ -z "${RESOURCE_GROUP}" ]; then
+    RESOURCE_GROUP=neo4j-public
+fi
+if [ -z "${DEPLOYMENT}" ]; then
+    DEPLOYMENT="neo4j-$(TZ=0 date +'Neo4j-HA-%Y%m%dT%H%M%SZ')"
+fi
+if [ -z "${LOCATION}" ]; then
+    LOCATION="East US"
+fi
+
+PARAMETERS=$(cat)
+
+#echo "$PARAMETERS"
+#exit
+
+if ! az group show --name "${RESOURCE_GROUP}" &> /dev/null; then
+    if ! az group create --name "${RESOURCE_GROUP}" --location "${LOCATION}"; then
+        exit $?
+    fi
+fi
+
+# az group deployment create\
+#     --template-uri "https://raw.githubusercontent.com/neo4j/azure-neo4j/master/ha/mainTemplate.json" \
+#     -p "${PARAMETERS}" -g "${RESOURCE_GROUP}" -n "${DEPLOYMENT}"
+echo "${PARAMETERS}" > .parameters.json
+az group deployment create \
+    --template-file arm/standalone.json \
+    --parameters @./.parameters.json \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${DEPLOYMENT}"
+exit $?

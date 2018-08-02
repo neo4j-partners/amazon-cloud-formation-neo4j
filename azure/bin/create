@@ -1,0 +1,111 @@
+#!/bin/bash
+
+if [ -z "${NAME_PREFIX}" ]; then
+    NAME_PREFIX="neo4j-$(cat /dev/urandom | env LC_CTYPE=C tr -cd 'a-z0-9A-Z' | head -c 8)"
+fi
+
+if [ -z "${CORE_NODE_COUNT}" ]; then
+    CORE_NODE_COUNT=3
+fi
+
+if [ -z "${READ_REPLICA_COUNT}" ] ; then
+    READ_REPLICA_COUNT=0
+fi
+
+if [ -z "${NEO4J_PASSWORD}" ]; then
+    read -p "Neo4j Password: " -s NEO4J_PASSWORD
+    echo
+fi
+if [ -z "${HEAP_SIZE}" ]; then
+    HEAP_SIZE="1G"
+fi
+
+if [ -z "${PUBKEY}" ]; then
+    PUBKEY=$(cat ~/.ssh/id_rsa.pub)
+fi
+if [ -z "${USERNAME}" ]; then
+    USERNAME=ubuntu
+fi
+
+# Hook for later adding an extension script from some other resource.
+EXTENSION=""
+# if [ -n "$1" -a -f "$1" ]; then
+#     if [[ "$1" != *"/"* ]]; then
+#         if git -C "$(dirname $0)" ls-files "$1" --error-unmatch >/dev/null; then
+#             EXTENSION=$(cat<<EXTENSION_JSON
+# ,
+#     "extensionScript": {
+#         "value": "$1"
+#     }
+# EXTENSION_JSON
+# )
+#         fi
+#     fi
+# fi
+
+$(dirname $0)/deploy <<JSON
+{
+    "location": {
+        "value": "eastus"
+    },
+
+    "virtualMachineImage": {
+        "value": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/neo4j-enterprise-1_3_4_5-apoc_2018-08-02T01_25_50Z"
+    },
+
+    "virtualMachineName": {
+        "value": "${NAME_PREFIX}"
+    },
+
+    "virtualMachineSize": {
+        "value": "Standard_B2s"
+    },
+
+    "virtualNetworkName": {
+        "value": "neo4j-vnet"
+    },
+
+    "networkInterfaceName": {
+        "value": "neo4j-897"
+    },
+
+    "networkSecurityGroupName": {
+        "value": "neo4j-nsg"
+    },
+
+    "diagnosticsStorageAccountName": {
+        "value": "neo4jdiag459"
+    },
+
+    "diagnosticsStorageAccountId": {
+        "value": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Storage/storageAccounts/neo4jpublicdiag459"
+    },
+
+    "subnetName": {
+        "value": "default"
+    },
+
+    "publicIpAddressName": {
+        "value": "neo4j-ip"
+    },
+
+    "publicIpAddressType": {
+        "value": "Dynamic"
+    },
+
+    "publicIpAddressSku": {
+        "value": "Basic"
+    },
+
+    "adminUsername": {
+        "value": "${USERNAME}"
+    },
+
+    "adminPublicKey": {
+        "value": "${PUBKEY}"
+    }
+$EXTENSION
+}
+JSON
+
+exit $?

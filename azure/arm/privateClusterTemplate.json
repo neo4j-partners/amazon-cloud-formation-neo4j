@@ -6,10 +6,12 @@
             "type": "string",
             "defaultValue": "[resourceGroup().location]"
         },
+
         "ResourceGroupName": {
             "type": "string",
             "defaultValue": "[resourceGroup().name]"
         },
+
         "ClusterNamePrefix": {
             "type": "string",
             "minLength": 1,
@@ -19,8 +21,10 @@
         "VmCount": {
             "type": "int",
             "minValue": 3,
+            "maxValue": 9,
             "defaultValue": 3
         },
+
         "VmSize": {
             "type": "string"
         },
@@ -28,10 +32,12 @@
         "AdminUserName": {
             "type": "securestring"
         },
+
         "AdminAuthType": {
             "type": "string",
             "allowedValues": ["sshpublickey", "password"]
         },
+
         "AdminCredential": {
             "type": "securestring",
             "defaultValue": null
@@ -44,21 +50,27 @@
                 "existing"
             ]
         },
+
         "VNetName": {
             "type": "string"
         },
+
         "VNetAddressPrefix": {
             "type": "string"
         },
+
         "VNetResourceGroupName": {
             "type": "string"
         },
+
         "SubnetName": {
             "type": "string"
         },
+
         "SubnetAddressPrefix": {
             "type": "string"
         },
+
         "SubnetStartAddress": {
             "type": "string"
         },
@@ -67,13 +79,16 @@
             "type": "string",
             "allowedValues": ["new","existing","none"]
         },
+
         "PublicIPName": {
             "type": "string"
         },
+
         "PublicIPAllocationMethod": {
             "type": "string",
             "allowedValues": ["Static", "Dynamic"]
         },
+
         "PublicIPIdleTimeoutInMinutes": {
             "type": "int",
             "minValue": 4,
@@ -83,6 +98,7 @@
         "sslCert": {
             "type": "string"
         },
+
         "sslKey": {
             "type": "string"
         },
@@ -90,18 +106,23 @@
         "Neo4jVersion": {
             "type": "string"
         },
+
         "Neo4jPassword": {
             "type": "securestring"
         },
+
         "Neo4jHttpsPort": {
             "type": "int"
         },
+
         "Neo4jHttpPort": {
             "type": "int"
         },
+
         "Neo4jBoltPort": {
             "type": "int"
         },
+        
         "Neo4jClusterPort": {
             "type": "int",
             "defaultValue": 5001,
@@ -109,6 +130,7 @@
                 "description": "The port used for communication between instances in the cluster"
             }
         },
+
         "Neo4jTransactionPort": {
             "type": "int",
             "defaultValue": 6001,
@@ -123,18 +145,21 @@
                 "description": "List of storage accounts to provision"
             }
         },
+
         "saListByVM": {
             "type": "array",
             "metadata": {
                 "description": "List of storage account to use, indexed by ordinal VM number"
             }
         },
+
         "Neo4JTags": {
             "type": "object",
             "metadata": {
                 "description": "Dictionary of tags to apply to the various resources"
             }
         },
+
         "ArtifactsBase": {
             "type": "string",
             "metadata": {
@@ -143,6 +168,7 @@
             },
             "defaultValue": "https://raw.githubusercontent.com/neo4j/azure-neo4j/master/ha"
         },
+        
         "extensionScript": {
             "type": "string",
             "defaultValue": "setup.sh"

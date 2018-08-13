@@ -18,7 +18,7 @@
       "subscription_id": "{{user `subscription_id`}}",
       "tenant_id": "{{user `tenant_id`}}",
 
-      "managed_image_name": "neo4j-{{user `neo4j_edition`}}-1_3_4_5-apoc_{{isotime \"2006-01-02T03_04_05Z\"}}",
+      "managed_image_name": "neo4j-{{user `neo4j_edition`}}-{{user `neo4j_version` | clean_image_name}}-apoc_{{isotime \"2006-01-02T03_04_05Z\"}}",
       "managed_image_resource_group_name": "neo4j-public",
 
       "location": "East US",

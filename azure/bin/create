@@ -1,17 +1,11 @@
 #!/bin/bash
 
-if [ -z "${NAME_PREFIX}" ]; then
-    NAME_PREFIX="neo4j-$(cat /dev/urandom | env LC_CTYPE=C tr -cd 'a-z0-9A-Z' | head -c 8)"
+if [ -z "${CLUSTERNAME_PREFIX}" ]; then
+    CLUSTERNAME_PREFIX="neo$(cat /dev/urandom | env LC_CTYPE=C tr -cd 'a-z0-9A-Z' | head -c 8)"
 fi
-
-if [ -z "${CORE_NODE_COUNT}" ]; then
-    CORE_NODE_COUNT=3
+if [ -z "${INSTANCE_COUNT}" ]; then
+    INSTANCE_COUNT=3
 fi
-
-if [ -z "${READ_REPLICA_COUNT}" ] ; then
-    READ_REPLICA_COUNT=0
-fi
-
 if [ -z "${NEO4J_PASSWORD}" ]; then
     read -p "Neo4j Password: " -s NEO4J_PASSWORD
     echo
@@ -24,10 +18,9 @@ if [ -z "${PUBKEY}" ]; then
     PUBKEY=$(cat ~/.ssh/id_rsa.pub)
 fi
 if [ -z "${USERNAME}" ]; then
-    USERNAME=ubuntu
+    USERNAME=$(whoami)
 fi
 
-# Hook for later adding an extension script from some other resource.
 EXTENSION=""
 # if [ -n "$1" -a -f "$1" ]; then
 #     if [[ "$1" != *"/"* ]]; then
@@ -45,66 +38,63 @@ EXTENSION=""
 
 $(dirname $0)/deploy <<JSON
 {
-    "location": {
-        "value": "eastus"
+    "ClusterNamePrefix": {
+        "value": "${CLUSTERNAME_PREFIX}"
     },
-
-    "virtualMachineImage": {
-        "value": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/neo4j-enterprise-1_3_4_5-apoc_2018-08-02T01_25_50Z"
+    "VmCount": {
+        "value": ${INSTANCE_COUNT}
     },
-
-    "virtualMachineName": {
-        "value": "${NAME_PREFIX}"
+    "VmSize": {
+        "value": "Standard_A1"
     },
-
-    "virtualMachineSize": {
-        "value": "Standard_B2s"
-    },
-
-    "virtualNetworkName": {
-        "value": "neo4j-vnet"
-    },
-
-    "networkInterfaceName": {
-        "value": "neo4j-897"
-    },
-
-    "networkSecurityGroupName": {
-        "value": "neo4j-nsg"
-    },
-
-    "diagnosticsStorageAccountName": {
-        "value": "neo4jdiag459"
-    },
-
-    "diagnosticsStorageAccountId": {
-        "value": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Storage/storageAccounts/neo4jpublicdiag459"
-    },
-
-    "subnetName": {
-        "value": "default"
-    },
-
-    "publicIpAddressName": {
-        "value": "neo4j-ip"
-    },
-
-    "publicIpAddressType": {
-        "value": "Dynamic"
-    },
-
-    "publicIpAddressSku": {
-        "value": "Basic"
-    },
-
-    "adminUsername": {
+    "AdminUserName": {
         "value": "${USERNAME}"
     },
-
-    "adminPublicKey": {
+    "AdminAuthType": {
+        "value": "sshpublickey"
+    },
+    "AdminCredential": {
         "value": "${PUBKEY}"
-    }
-$EXTENSION
+    },
+    "VNetResourceGroupName": {
+        "value": "neo4j-public"
+    },
+    "VNetNewOrExisting": {
+        "value": "new"
+    },
+    "VNetName": {
+        "value": "neoVnet"
+    },
+    "VNetAddressPrefix": {
+        "value": "10.0.0.0/16"
+    },
+    "SubnetName": {
+        "value": "NeoVnetSubnet1"
+    },
+    "SubnetAddressPrefix": {
+        "value": "10.0.1.0/24"
+    },
+    "SubnetStartAddress": {
+        "value": "10.0.1.0"
+    },
+    "PublicIPNewOrExistingOrNone": {
+        "value": "new"
+    },
+    "PublicIPName": {
+        "value": "NeoA001"
+    },
+    "PublicIPAllocationMethod": {
+        "value": "Dynamic"
+    },
+    "PublicIPIdleTimeoutInMinutes": {
+        "value": 10
+    },
+    "Neo4jPassword": {
+        "value": "${NEO4J_PASSWORD}"
+    },
+    "ArtifactsBase": {
+        "value": "https://s3.amazonaws.com/neo4j-arm/test/"
+    }$EXTENSION
 }
 JSON
 

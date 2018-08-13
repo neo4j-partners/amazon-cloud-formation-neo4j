@@ -21,12 +21,15 @@ if ! az group show --name "${RESOURCE_GROUP}" &> /dev/null; then
     fi
 fi
 
+# Copy latest testing templates to S3
+./deploy-content.sh
+
 # az group deployment create\
 #     --template-uri "https://raw.githubusercontent.com/neo4j/azure-neo4j/master/ha/mainTemplate.json" \
 #     -p "${PARAMETERS}" -g "${RESOURCE_GROUP}" -n "${DEPLOYMENT}"
 echo "${PARAMETERS}" > .parameters.json
 az group deployment create \
-    --template-file arm/standalone.json \
+    --template-file arm/mainTemplate.json \
     --parameters @./.parameters.json \
     --resource-group "${RESOURCE_GROUP}" \
     --name "${DEPLOYMENT}"

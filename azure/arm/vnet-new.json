@@ -30,7 +30,7 @@
             "type": "string",
             "defaultValue": "[resourceGroup().location]"
         },
-        "Neo4Jtags": {
+        "Neo4JTags": {
             "type": "object",
             "metadata": {
                 "description": "resource tags to be applied to the new VNET"

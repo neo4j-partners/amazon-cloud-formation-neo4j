@@ -4,5 +4,9 @@
 # Right now it doesn't do much, but provides a location for any extensions that need
 # to happen on top of the base VM developed from packer.
 ########################################################################################
-echo `date` > ~/post-deploy.log
-echo "Post deploy actions complete" >> ~/post-deploy.log
+LOGFILE=~/post-deploy.log
+echo `date` | tee -a $LOGFILE
+echo "Post deploy actions complete" 2>&1 | tee -a $LOGFILE
+env 2>&1 | tee -a $LOGFILE
+sudo apt-get update 2>&1 | tee -a $LOGFILE
+

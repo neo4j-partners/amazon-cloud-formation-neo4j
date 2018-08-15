@@ -1,7 +1,8 @@
 #!/bin/bash
 
 if [ -z "${CLUSTERNAME_PREFIX}" ]; then
-    CLUSTERNAME_PREFIX="neo$(cat /dev/urandom | env LC_CTYPE=C tr -cd 'a-z0-9A-Z' | head -c 8)"
+    #CLUSTERNAME_PREFIX="neo$(cat /dev/urandom | env LC_CTYPE=C tr -cd 'a-z0-9A-Z' | head -c 8)"
+    CLUSTERNAME_PREFIX="neo4j-test"
 fi
 if [ -z "${INSTANCE_COUNT}" ]; then
     INSTANCE_COUNT=3
@@ -93,7 +94,7 @@ $(dirname $0)/deploy <<JSON
         "value": "${NEO4J_PASSWORD}"
     },
     "ArtifactsBase": {
-        "value": "https://s3.amazonaws.com/neo4j-arm/test/"
+        "value": "https://s3.amazonaws.com/neo4j-arm/test"
     }$EXTENSION
 }
 JSON

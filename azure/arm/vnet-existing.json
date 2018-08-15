@@ -41,7 +41,7 @@
             "metadata": {
                 "artifactsBaseUrl": ""
             },
-            "defaultValue": "https://raw.githubusercontent.com/neo4j/azure-neo4j/master/ha"
+            "defaultValue": "https://s3.amazonaws.com/neo4j-arm/test"
         }
     },
     "variables": {},

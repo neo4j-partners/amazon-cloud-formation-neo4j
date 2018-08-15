@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# This script creates a sample resource group and deploys all resources into it from the ARM
+# templates.  Most of it can be controlled from the outside by setting env vars.
+########################################################################################
 
 if [ -z "${CLUSTERNAME_PREFIX}" ]; then
     #CLUSTERNAME_PREFIX="neo$(cat /dev/urandom | env LC_CTYPE=C tr -cd 'a-z0-9A-Z' | head -c 8)"
@@ -18,6 +22,7 @@ fi
 if [ -z "${PUBKEY}" ]; then
     PUBKEY=$(cat ~/.ssh/id_rsa.pub)
 fi
+
 if [ -z "${USERNAME}" ]; then
     USERNAME=$(whoami)
 fi
@@ -41,13 +46,28 @@ if [ -z "${RESOURCE_GROUP}" ] ; then
    export RESOURCE_GROUP=RG-testdeploy-$(head -c 3 /dev/urandom | base64)
 fi
 
+if [ -z "${DEPLOYMENT}" ]; then
+    # DEPLOYMENT="neo4j-$(TZ=0 date +'Neo4j-HA-%Y%m%dT%H%M%SZ')"
+    DEPLOYMENT=neo4j-testdeploy
+fi
+
+if [ -z "${LOCATION}" ]; then
+    LOCATION="East US"
+fi
+
 # Resource groups should be created for all things which share
 # a lifecycle.  Deployments also can't delete all of their underlying
 # resources, so we will destroy all deployment resources by actually
 # deleting the entire group.
-az group create -l eastus -n "${RESOURCE_GROUP}"
+echo "Checking $RESOURCE_GROUP"
+if ! az group show --name "${RESOURCE_GROUP}" &> /dev/null; then
+    if ! az group create --name "${RESOURCE_GROUP}" --location "${LOCATION}"; then
+        echo "Failed to create necessary resource group ${RESOURCE_GROUP}"
+        exit $?
+    fi
+fi
 
-$(dirname $0)/deploy <<JSON
+echo $(cat <<JSON
 {
     "ClusterNamePrefix": {
         "value": "${CLUSTERNAME_PREFIX}"
@@ -89,7 +109,7 @@ $(dirname $0)/deploy <<JSON
         "value": "10.0.1.0"
     },
     "PublicIPNewOrExistingOrNone": {
-        "value": "new"
+        "value": "none"
     },
     "PublicIPName": {
         "value": "NeoA001"
@@ -108,5 +128,20 @@ $(dirname $0)/deploy <<JSON
     }$EXTENSION
 }
 JSON
+) > .parameters.json
 
-exit $?
+echo "Parameters have been prepared."
+echo "Deploying templates to S3..."
+
+# Results in HTTP location:
+# https://s3.amazonaws.com/neo4j-arm/test/
+s3cmd put -P arm/* s3://neo4j-arm/test/
+
+echo "When ready to deploy, run this command:"
+
+echo az group deployment create \
+    --template-file arm/mainTemplate.json \
+    --parameters @./.parameters.json \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${DEPLOYMENT}"
+

@@ -89,12 +89,11 @@
                 "autoUpgradeMinorVersion": true,
                 "settings": {
                     "fileUris": [
-                        "[concat(variables('artifactsBase'), parameters('script'))]",
-                        "[concat(variables('artifactsBase'), 'setup.sh')]"
+                        "[concat(variables('artifactsBase'), 'post-deploy.sh')]"
                     ]
                 },
                 "protectedSettings": {
-                    "commandToExecute": "[concat('/usr/bin/env NEO4J_VERSION=\"',parameters('Version'),'\" NEO4J_PASSWORD=\"',parameters('Password'),'\" SSL_CERT=\"',parameters('sslCert'),'\" SSL_KEY=\"',parameters('sslKey'),'\" HTTP_PORT=\"',parameters('httpPort'),'\" HTTPS_PORT=\"',parameters('httpsPort'),'\" HTTP_LOGGING=\"',parameters('httpLogging'),'\" BOLT_PORT=\"',parameters('boltPort'),'\" COORD_PORT=\"',parameters('CoordPort'),'\" DATA_PORT=\"',parameters('DataPort'),'\" JOIN_TIMEOUT=\"',parameters('JoinTimeout'),'\" MY_ID=\"',parameters('myId'),'\" MY_IP=\"',parameters('myIp'),'\" HOST_IPS=',variables('sq'),parameters('allIps'),variables('sq'),' ./',parameters('script'))]"
+                    "commandToExecute": "[concat('/usr/bin/env NEO4J_VERSION=\"',parameters('Version'),'\" NEO4J_PASSWORD=\"',parameters('Password'),'\" SSL_CERT=\"',parameters('sslCert'),'\" SSL_KEY=\"',parameters('sslKey'),'\" HTTP_PORT=\"',parameters('httpPort'),'\" HTTPS_PORT=\"',parameters('httpsPort'),'\" HTTP_LOGGING=\"',parameters('httpLogging'),'\" BOLT_PORT=\"',parameters('boltPort'),'\" COORD_PORT=\"',parameters('CoordPort'),'\" DATA_PORT=\"',parameters('DataPort'),'\" JOIN_TIMEOUT=\"',parameters('JoinTimeout'),'\" MY_ID=\"',parameters('myId'),'\" MY_IP=\"',parameters('myIp'),'\" HOST_IPS=',variables('sq'),parameters('allIps'),variables('sq'),' ./post-deploy.sh')]"
                 }
             }
         }

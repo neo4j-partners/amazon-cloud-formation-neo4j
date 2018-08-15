@@ -189,7 +189,9 @@
         },
         "natRulePrefix": "SSH-",
         "vnetReferencerUri": "[concat(variables('artifactsBase'), 'vnet-', parameters('VNetNewOrExisting'), '.json')]",
-        "imageReferenceTest": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/neo4j-enterprise-1_3_4_5-apoc_2018-08-02T01_25_50Z",
+        "imageReferenceTest": {
+            "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/neo4j-enterprise-1_3_4_5-apoc_2018-08-02T01_25_50Z"
+        },
         "imageReference": "[variables('imageReferenceTest')]",
         "authConfig-sshpublickey": {
             "linuxConfiguration": {

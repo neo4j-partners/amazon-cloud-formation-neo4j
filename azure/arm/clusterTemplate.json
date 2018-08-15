@@ -180,7 +180,9 @@
         },
         "natRulePrefix": "SSH-",
         "vnetReferencerUri": "[concat(variables('artifactsBase'), 'vnet-', parameters('VNetNewOrExisting'), '.json')]",
-        "imageReferenceTest": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/neo4j-enterprise-1_3_4_5-apoc_2018-08-02T01_25_50Z",
+        "imageReferenceTest": {
+            "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/neo4j-enterprise-1-3.4.5-apoc_2018-08-02T04_16_20Z"
+        },
         "imageReference": "[variables('imageReferenceTest')]",
         "authConfig-sshpublickey": {
             "linuxConfiguration": {
@@ -231,6 +233,9 @@
             "properties": {
                 "platformUpdateDomainCount": 20,
                 "platformFaultDomainCount": 3
+            },
+            "sku": {
+                "name": "Aligned"
             },
             "dependsOn": []
         },
@@ -667,7 +672,7 @@
                         "name": "[concat(variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-OS')]",
                         "createOption": "fromImage",
                         "managedDisk": {
-                            "storageAccountType": "Premium_LRS"
+                            "storageAccountType": "Standard_LRS"
                         }
                     },
                     "dataDisks": [
@@ -675,8 +680,8 @@
                             "lun": 0,
                             "name": "[concat(variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-Data-0')]",
                             "createOption": "Empty",
-                            "vhd": {
-                                "uri": "[concat('https://',parameters('saListByVM')[copyIndex()], '.blob.core.windows.net/vhds/', variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-Data-0.vhd')]"
+                            "managedDisk": {
+                                "storageAccountType": "Standard_LRS"
                             },
                             "caching": "None",
                             "diskSizeGB": "1023"

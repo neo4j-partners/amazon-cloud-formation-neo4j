@@ -109,7 +109,7 @@ echo $(cat <<JSON
         "value": "10.0.1.0"
     },
     "PublicIPNewOrExistingOrNone": {
-        "value": "none"
+        "value": "new"
     },
     "PublicIPName": {
         "value": "NeoA001"

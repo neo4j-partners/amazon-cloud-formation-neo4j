@@ -122,7 +122,9 @@
         "Neo4JTags": {
             "type": "object",
             "defaultValue": {
-                "provider": "B9442746-5BFF-4E2F-BC90-1F49C5791FAA"
+                "provider": "B9442746-5BFF-4E2F-BC90-1F49C5791FAA",
+                "neo4jURL": "https://neo4j.com/",
+                "licensing": "https://neo4j.com/licensing"
             },
             "metadata": {
                 "description": "Azure Marketplace usage ID (do not change)"

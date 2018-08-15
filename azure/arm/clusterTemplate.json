@@ -180,18 +180,7 @@
         },
         "natRulePrefix": "SSH-",
         "vnetReferencerUri": "[concat(variables('artifactsBase'), 'vnet-', parameters('VNetNewOrExisting'), '.json')]",
-        "imageReferenceTest": {
-            "publisher": "Canonical",
-            "offer": "UbuntuServer",
-            "sku": "16.04-LTS",
-            "version": "latest"
-        },
-        "imageReferenceMarketPlace": {
-            "publisher": "MicrosoftWindowsServerEssentials",
-            "offer": "WindowsServerEssentials",
-            "sku": "WindowsServerEssentials",
-            "version": "latest"
-        },
+        "imageReferenceTest": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/neo4j-enterprise-1_3_4_5-apoc_2018-08-02T01_25_50Z",
         "imageReference": "[variables('imageReferenceTest')]",
         "authConfig-sshpublickey": {
             "linuxConfiguration": {
@@ -662,7 +651,7 @@
         {
             "type": "Microsoft.Compute/virtualMachines",
             "name": "[concat(variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]",
-            "apiVersion": "2016-08-30",
+            "apiVersion": "2018-04-01",
             "location": "[parameters('Location')]",
             "tags": "[parameters('Neo4JTags')]",
             "properties": {
@@ -676,11 +665,10 @@
                     "imageReference": "[variables('imageReference')]",
                     "osDisk": {
                         "name": "[concat(variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-OS')]",
-                        "createOption": "FromImage",
-                        "vhd": {
-                            "uri": "[concat('https://',parameters('saListByVM')[copyIndex()],'.blob.core.windows.net/vhds/', variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-OS.vhd')]"
-                        },
-                        "caching": "ReadWrite"
+                        "createOption": "fromImage",
+                        "managedDisk": {
+                            "storageAccountType": "Premium_LRS"
+                        }
                     },
                     "dataDisks": [
                         {

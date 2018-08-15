@@ -9,9 +9,6 @@
             "type": "string",
             "defaultValue": "[resourceGroup().location]"
         },
-        "script": {
-            "type": "string"
-        },
         "Version": {
             "type": "string"
         },
@@ -81,7 +78,6 @@
             "name": "[concat(parameters('VmName'),'/SetupScript')]",
             "apiVersion": "2017-03-30",
             "location": "[parameters('Location')]",
-            "tags": "[parameters('Neo4JTags')]",
             "properties": {
                 "publisher": "Microsoft.Azure.Extensions",
                 "type": "CustomScript",
@@ -93,7 +89,7 @@
                     ]
                 },
                 "protectedSettings": {
-                    "commandToExecute": "[concat('/usr/bin/env NEO4J_VERSION=\"',parameters('Version'),'\" NEO4J_PASSWORD=\"',parameters('Password'),'\" SSL_CERT=\"',parameters('sslCert'),'\" SSL_KEY=\"',parameters('sslKey'),'\" HTTP_PORT=\"',parameters('httpPort'),'\" HTTPS_PORT=\"',parameters('httpsPort'),'\" HTTP_LOGGING=\"',parameters('httpLogging'),'\" BOLT_PORT=\"',parameters('boltPort'),'\" COORD_PORT=\"',parameters('CoordPort'),'\" DATA_PORT=\"',parameters('DataPort'),'\" JOIN_TIMEOUT=\"',parameters('JoinTimeout'),'\" MY_ID=\"',parameters('myId'),'\" MY_IP=\"',parameters('myIp'),'\" HOST_IPS=',variables('sq'),parameters('allIps'),variables('sq'),' ./post-deploy.sh')]"
+                    "commandToExecute": "[concat('/usr/bin/env NEO4J_PASSWORD=\"',parameters('Password'),'\" NEO4J_VERSION=\"',parameters('Version'),'\" NEO4J_PASSWORD=\"',parameters('Password'),'\" SSL_CERT=\"',parameters('sslCert'),'\" SSL_KEY=\"',parameters('sslKey'),'\" HTTP_PORT=\"',parameters('httpPort'),'\" HTTPS_PORT=\"',parameters('httpsPort'),'\" HTTP_LOGGING=\"',parameters('httpLogging'),'\" BOLT_PORT=\"',parameters('boltPort'),'\" COORD_PORT=\"',parameters('CoordPort'),'\" DATA_PORT=\"',parameters('DataPort'),'\" JOIN_TIMEOUT=\"',parameters('JoinTimeout'),'\" MY_ID=\"',parameters('myId'),'\" ./post-deploy.sh')]"
                 }
             }
         }

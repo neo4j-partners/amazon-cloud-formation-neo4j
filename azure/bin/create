@@ -37,6 +37,16 @@ EXTENSION=""
 #     fi
 # fi
 
+if [ -z "${RESOURCE_GROUP}" ] ; then
+   export RESOURCE_GROUP=RG-testdeploy-$(head -c 3 /dev/urandom | base64)
+fi
+
+# Resource groups should be created for all things which share
+# a lifecycle.  Deployments also can't delete all of their underlying
+# resources, so we will destroy all deployment resources by actually
+# deleting the entire group.
+az group create -l eastus -n "${RESOURCE_GROUP}"
+
 $(dirname $0)/deploy <<JSON
 {
     "ClusterNamePrefix": {
@@ -58,7 +68,7 @@ $(dirname $0)/deploy <<JSON
         "value": "${PUBKEY}"
     },
     "VNetResourceGroupName": {
-        "value": "neo4j-public"
+        "value": "${RESOURCE_GROUP}"
     },
     "VNetNewOrExisting": {
         "value": "new"

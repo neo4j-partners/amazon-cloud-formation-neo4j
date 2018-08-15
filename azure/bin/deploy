@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ -z "${RESOURCE_GROUP}" ]; then
-    RESOURCE_GROUP=neo4j-public
+    export RESOURCE_GROUP=RG-testdeploy
 fi
 if [ -z "${DEPLOYMENT}" ]; then
     # DEPLOYMENT="neo4j-$(TZ=0 date +'Neo4j-HA-%Y%m%dT%H%M%SZ')"

@@ -115,7 +115,7 @@ echo $(cat <<JSON
         "value": "NeoA001"
     },
     "PublicIPAllocationMethod": {
-        "value": "Dynamic"
+        "value": "Static"
     },
     "PublicIPIdleTimeoutInMinutes": {
         "value": 10
@@ -140,7 +140,6 @@ if ! az group deployment validate \
     echo "Failed validation of templates, cannot continue"
     exit 1
 fi
-
 
 echo "Deploying templates to S3..."
 

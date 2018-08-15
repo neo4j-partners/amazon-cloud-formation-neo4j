@@ -306,9 +306,6 @@
                     "Location": {
                         "value": "[parameters('Location')]"
                     },
-                    "ResourceGroupName": {
-                        "value": "[parameters('ResourceGroupName')]"
-                    },
                     "ClusterNamePrefix": {
                         "value": "[parameters('ClusterNamePrefix')]"
                     },
@@ -351,14 +348,8 @@
                     "PublicIPNewOrExistingOrNone": {
                         "value": "[parameters('PublicIPNewOrExistingOrNone')]"
                     },
-                    "PublicIPName": {
-                        "value": "[parameters('PublicIPName')]"
-                    },
                     "PublicIPAllocationMethod": {
                         "value": "[parameters('PublicIPAllocationMethod')]"
-                    },
-                    "PublicIPIdleTimeoutInMinutes": {
-                        "value": "[parameters('PublicIPIdleTimeoutInMinutes')]"
                     },
                     "sslCert": {
                         "value": "[parameters('sslCert')]"

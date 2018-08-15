@@ -5,37 +5,45 @@
         "NetworkName": {
             "type": "string"
         },
+        
         "NetworkAddressPrefix": {
             "type": "string",
             "metadata": {
                 "description": "CIDR for Virtual Network, e.g., 1.2.3.4/16"
             }
         },
+
         "SubnetName": {
             "type": "string"
         },
+
         "SubnetAddressPrefix": {
             "type": "string"
         },
+
         "SubnetStartAddress": {
             "type": "string"
         },
+
         "ResourceGroupName": {
             "type": "string",
             "metadata": {
                 "description": "the RG to own the Vnet -- ignored for new VNET"
             }
         },
+
         "Location": {
             "type": "string",
             "defaultValue": "[resourceGroup().location]"
         },
+
         "Neo4JTags": {
             "type": "object",
             "metadata": {
                 "description": "resource tags to be applied to the new VNET"
             }
         },
+
         "ArtifactsBase": {
             "type": "string",
             "metadata": {

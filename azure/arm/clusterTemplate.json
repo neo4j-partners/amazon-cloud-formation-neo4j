@@ -102,16 +102,26 @@
         "Neo4jBoltPort": {
             "type": "int"
         },
+        
         "Neo4jClusterPort": {
             "type": "int",
-            "defaultValue": 5001,
+            "defaultValue": 5000,
             "metadata": {
                 "description": "The port used for communication between instances in the cluster"
             }
         },
+
         "Neo4jTransactionPort": {
             "type": "int",
-            "defaultValue": 6001,
+            "defaultValue": 6000,
+            "metadata": {
+                "description": "The port used to read transaction data from the master"
+            }
+        },
+
+        "Neo4jRaftPort": {
+            "type": "int",
+            "defaultValue": 7000,
             "metadata": {
                 "description": "The port used to read transaction data from the master"
             }
@@ -173,7 +183,7 @@
         "imageReferenceTest": {
             "publisher": "Canonical",
             "offer": "UbuntuServer",
-            "sku": "16.04.0-LTS",
+            "sku": "16.04-LTS",
             "version": "latest"
         },
         "imageReferenceMarketPlace": {
@@ -393,6 +403,19 @@
                             "priority": 1050,
                             "direction": "Inbound"
                         }
+                    },
+                    {
+                        "name": "neo4j-transaction-communiocation",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jRaftPort'))]",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1060,
+                            "direction": "Inbound"
+                        }
                     }
                 ]
             },
@@ -422,7 +445,7 @@
                     "IdleTimeoutInMinutes": {
                         "value": "[parameters('PublicIPIdleTimeoutInMinutes')]"
                     },
-                    "Neo4Jtags": {
+                    "Neo4JTags": {
                         "value": "[parameters('Neo4JTags')]"
                     },
                     "ArtifactsBase": {
@@ -627,7 +650,7 @@
                     "Location": {
                         "value": "[parameters('Location')]"
                     },
-                    "Neo4Jtags": {
+                    "Neo4JTags": {
                         "value": "[parameters('Neo4JTags')]"
                     },
                     "ArtifactsBase": {
@@ -724,7 +747,7 @@
                     "ArtifactsBase": {
                         "value": "[parameters('ArtifactsBase')]"
                     },
-                    "Neo4Jtags": {
+                    "Neo4JTags": {
                         "value": "[parameters('Neo4JTags')]"
                     },
                     "script": {

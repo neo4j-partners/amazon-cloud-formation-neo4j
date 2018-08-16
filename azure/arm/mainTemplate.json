@@ -40,11 +40,6 @@
             "defaultValue": null
         },
 
-        "VNetNewOrExisting": {
-            "type": "string",
-            "allowedValues": [ "new", "existing" ]
-        },
-
         "VNetName": {
             "type": "string"
         },
@@ -65,34 +60,10 @@
             "type": "string"
         },
 
-        "SubnetStartAddress": {
-            "type": "string"
-        },
-
-        "PublicIPNewOrExistingOrNone": {
-            "type": "string",
-            "allowedValues": [ "new", "existing", "none" ]
-        },
-
         "PublicIPAllocationMethod": {
             "type": "string",
             "allowedValues": [ "Static", "Dynamic" ],
             "defaultValue": "Dynamic"
-        },
-
-        "sslCert": {
-            "type": "string",
-            "defaultValue": ""
-        },
-
-        "sslKey": {
-            "type": "securestring",
-            "defaultValue": ""
-        },
-
-        "Neo4jVersion": {
-            "type": "string",
-            "defaultValue": ""
         },
 
         "Neo4jPassword": {
@@ -186,9 +157,6 @@
                     "AdminCredential": {
                         "value": "[parameters('AdminCredential')]"
                     },
-                    "VNetNewOrExisting": {
-                        "value": "[parameters('VNetNewOrExisting')]"
-                    },
                     "VNetName": {
                         "value": "[parameters('VNetName')]"
                     },
@@ -204,23 +172,8 @@
                     "SubnetAddressPrefix": {
                         "value": "[parameters('SubnetAddressPrefix')]"
                     },
-                    "SubnetStartAddress": {
-                        "value": "[parameters('SubnetStartAddress')]"
-                    },
-                    "PublicIPNewOrExistingOrNone": {
-                        "value": "[parameters('PublicIPNewOrExistingOrNone')]"
-                    },
                     "PublicIPAllocationMethod": {
                         "value": "[parameters('PublicIPAllocationMethod')]"
-                    },
-                    "sslCert": {
-                        "value": "[parameters('sslCert')]"
-                    },
-                    "sslKey": {
-                        "value": "[parameters('sslKey')]"
-                    },
-                    "Neo4jVersion": {
-                        "value": "[parameters('Neo4jVersion')]"
                     },
                     "Neo4jPassword": {
                         "value": "[parameters('Neo4jPassword')]"

@@ -75,9 +75,6 @@ echo $(cat <<JSON
     "VNetResourceGroupName": {
         "value": "${RESOURCE_GROUP}"
     },
-    "VNetNewOrExisting": {
-        "value": "new"
-    },
     "VNetName": {
         "value": "neoVnet"
     },
@@ -89,12 +86,6 @@ echo $(cat <<JSON
     },
     "SubnetAddressPrefix": {
         "value": "10.0.1.0/24"
-    },
-    "SubnetStartAddress": {
-        "value": "10.0.1.0"
-    },
-    "PublicIPNewOrExistingOrNone": {
-        "value": "new"
     },
     "PublicIPAllocationMethod": {
         "value": "Static"

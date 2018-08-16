@@ -37,14 +37,6 @@
             "defaultValue": null
         },
 
-        "VNetNewOrExisting": {
-            "type": "string",
-            "allowedValues": [
-                "new",
-                "existing"
-            ]
-        },
-
         "VNetName": {
             "type": "string"
         },
@@ -65,30 +57,9 @@
             "type": "string"
         },
 
-        "SubnetStartAddress": {
-            "type": "string"
-        },
-
-        "PublicIPNewOrExistingOrNone": {
-            "type": "string",
-            "allowedValues": ["new","existing","none"]
-        },
-
         "PublicIPAllocationMethod": {
             "type": "string",
             "allowedValues": ["Static", "Dynamic"]
-        },
-
-        "sslCert": {
-            "type": "string"
-        },
-
-        "sslKey": {
-            "type": "string"
-        },
-
-        "Neo4jVersion": {
-            "type": "string"
         },
 
         "Neo4jPassword": {
@@ -167,7 +138,6 @@
             "publicIP": "[resourceId('Microsoft.Network/publicIPAddresses', variables('namePrefixes').publicIP)]",
             "virtualNetwork": "[resourceId(parameters('VNetResourceGroupName'), 'Microsoft.Network/virtualNetworks', parameters('VNetName'))]"
         },
-        "natRulePrefix": "SSH-",
         "imageReferenceTest": {
             "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/neo4j-enterprise-1-3.4.5-apoc_2018-08-02T04_16_20Z"
         },

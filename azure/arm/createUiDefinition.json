@@ -242,7 +242,7 @@
         ],
         "outputs": {
             "Location": "[location()]",
-            "ClusterNamePrefix": "[steps('neo4jConfig').ClusterName]",
+            "ClusterName": "[steps('neo4jConfig').ClusterName]",
             "VmCount": "[int(steps('neo4jConfig').VmCount)]",
             "VmSize": "[steps('neo4jConfig').VmSize]",
             "AdminUserName": "[basics('adminUsername')]",

@@ -7,7 +7,7 @@
             "defaultValue": "[resourceGroup().location]"
         },
 
-        "ClusterNamePrefix": {
+        "ClusterName": {
             "type": "string",
             "minLength": 1,
             "maxLength": 11,
@@ -134,8 +134,8 @@
                     "Location": {
                         "value": "[parameters('Location')]"
                     },
-                    "ClusterNamePrefix": {
-                        "value": "[parameters('ClusterNamePrefix')]"
+                    "ClusterName": {
+                        "value": "[parameters('ClusterName')]"
                     },
                     "VmCount": {
                         "value": "[parameters('VmCount')]"

@@ -4,10 +4,10 @@
 # templates.  Most of it can be controlled from the outside by setting env vars.
 ########################################################################################
 
-if [ -z "${CLUSTERNAME_PREFIX}" ]; then
-    #CLUSTERNAME_PREFIX="neo$(cat /dev/urandom | env LC_CTYPE=C tr -cd 'a-z0-9A-Z' | head -c 8)"
-    CLUSTERNAME_PREFIX="neo4j-test"
+if [ -z "${CLUSTERNAME}" ]; then
+    CLUSTERNAME="neo4j-test"
 fi
+
 if [ -z "${INSTANCE_COUNT}" ]; then
     INSTANCE_COUNT=3
 fi
@@ -54,8 +54,8 @@ fi
 
 echo $(cat <<JSON
 {
-    "ClusterNamePrefix": {
-        "value": "${CLUSTERNAME_PREFIX}"
+    "ClusterName": {
+        "value": "${CLUSTERNAME}"
     },
     "VmCount": {
         "value": ${INSTANCE_COUNT}

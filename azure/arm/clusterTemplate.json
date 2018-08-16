@@ -7,7 +7,7 @@
             "defaultValue": "[resourceGroup().location]"
         },
 
-        "ClusterNamePrefix": {
+        "ClusterName": {
             "type": "string",
             "minLength": 1,
             "maxLength": 11
@@ -116,13 +116,13 @@
     "variables": {
         "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
         "namePrefixes": {
-            "nic": "[concat(parameters('ClusterNamePrefix'),'-nic-')]",
-            "nsg": "[concat(parameters('ClusterNamePrefix'),'-sg')]",
-            "storage": "[concat(toLower(trim(parameters('ClusterNamePrefix'))), uniqueString(resourceGroup().id))]",
-            "vm": "[concat(parameters('ClusterNamePrefix'),'-vm-')]",
-            "publicIP": "[concat(parameters('ClusterNamePrefix'),'-public-ip')]",
-            "loadBalancer": "[concat(parameters('ClusterNamePrefix'),'-lb')]",
-            "availabilitySet": "[concat(parameters('ClusterNamePrefix'), '-as')]"
+            "nic": "[concat(parameters('ClusterName'),'-nic-')]",
+            "nsg": "[concat(parameters('ClusterName'),'-sg')]",
+            "storage": "[concat(toLower(trim(parameters('ClusterName'))), uniqueString(resourceGroup().id))]",
+            "vm": "[concat(parameters('ClusterName'),'-vm-')]",
+            "publicIP": "[concat(parameters('ClusterName'),'-public-ip')]",
+            "loadBalancer": "[concat(parameters('ClusterName'),'-lb')]",
+            "availabilitySet": "[concat(parameters('ClusterName'), '-as')]"
         },
         "LbResourceID": "[resourceId('Microsoft.Network/loadBalancers',variables('namePrefixes').loadBalancer)]",
         "resourceIDs": {

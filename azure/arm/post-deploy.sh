@@ -15,6 +15,8 @@ env 2>&1 | tee -a $LOGFILE
 
 # Guarantee empty DB
 /bin/rm -rf /var/lib/neo4j/data/databases/graph.db/ 2>&1 | tee -a $LOGFILE
+/usr/bin/neo4j-admin unbind
+
 echo "Restarting Neo4j fresh"
 /bin/systemctl start neo4j.service 2>&1 | tee -a $LOGFILE
 

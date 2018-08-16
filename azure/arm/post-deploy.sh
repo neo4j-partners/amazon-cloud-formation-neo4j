@@ -24,7 +24,7 @@ sudo apt-get update 2>&1 | tee -a $LOGFILE
 while true; do
     if curl -s -I http://localhost:7474 | grep '200 OK'; then
         echo `date` 'Neo4j is up; changing default password' 2>&1 | tee -a $LOGFILE
-        curl -v -H 'Content-Type: application/json'
+        curl -v -H 'Content-Type: application/json' \
                 -XPOST -d '{"password":"'$NEO4J_PASSWORD'"}' \
                 -u neo4j:neo4j \
                 http://localhost:7474/user/neo4j/password \

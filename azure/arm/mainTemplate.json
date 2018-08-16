@@ -399,12 +399,6 @@
                     "Neo4jHttpPort": {
                         "value": "[parameters('Neo4jHttpPort')]"
                     },
-                    "saList": {
-                        "value": "[variables('storageAccountsToProvision')]"
-                    },
-                    "saListByVM": {
-                        "value": "[variables('storageAccountsByVM')]"
-                    },
                     "ArtifactsBase": {
                         "value": "[parameters('ArtifactsBase')]"
                     },

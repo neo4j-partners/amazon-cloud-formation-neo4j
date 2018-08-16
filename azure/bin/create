@@ -27,21 +27,6 @@ if [ -z "${USERNAME}" ]; then
     USERNAME=$(whoami)
 fi
 
-EXTENSION=""
-# if [ -n "$1" -a -f "$1" ]; then
-#     if [[ "$1" != *"/"* ]]; then
-#         if git -C "$(dirname $0)" ls-files "$1" --error-unmatch >/dev/null; then
-#             EXTENSION=$(cat<<EXTENSION_JSON
-# ,
-#     "extensionScript": {
-#         "value": "$1"
-#     }
-# EXTENSION_JSON
-# )
-#         fi
-#     fi
-# fi
-
 if [ -z "${RESOURCE_GROUP}" ] ; then
    export RESOURCE_GROUP=RG-testdeploy-$(head -c 3 /dev/urandom | base64)
 fi
@@ -119,7 +104,7 @@ echo $(cat <<JSON
     },
     "ArtifactsBase": {
         "value": "https://s3.amazonaws.com/neo4j-arm/test"
-    }$EXTENSION
+    }
 }
 JSON
 ) > .parameters.json

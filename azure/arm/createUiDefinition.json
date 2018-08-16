@@ -126,15 +126,15 @@
                         }
                     },
                     {
-                        "name": "VmCount",
+                        "name": "CoreNodes",
                         "type": "Microsoft.Common.TextBox",
-                        "label": "Number of VMs",
+                        "label": "Number of core nodes",
                         "defaultValue": "3",
                         "toolTip": "Number of VMs in the Neo4j cluster",
                         "constraints": {
                             "required": true,
-                            "regex": "^(3|4|5|6|7|8|9|10|11|12)$",
-                            "validationMessage": "Number of VMs must be between 3 and 12, inclusive."
+                            "regex": "^(3|4|5|6|7|8|9)$",
+                            "validationMessage": "Number of core nodes must be between 3 and 9, inclusive."
                         },
                         "visible": true
                     },
@@ -171,7 +171,7 @@
                             ]
                         },
                         "osPlatform": "Linux",
-                        "count": "[steps('neo4jConfig').VmCount]",
+                        "count": "[steps('neo4jConfig').CoreNodes]",
                         "visible": true
                     },
                     {
@@ -243,7 +243,7 @@
         "outputs": {
             "Location": "[location()]",
             "ClusterName": "[steps('neo4jConfig').ClusterName]",
-            "VmCount": "[int(steps('neo4jConfig').VmCount)]",
+            "CoreNodes": "[int(steps('neo4jConfig').CoreNodes)]",
             "VmSize": "[steps('neo4jConfig').VmSize]",
             "AdminUserName": "[basics('adminUsername')]",
             "AdminAuthType": "[toLower(basics('adminCredentials').authenticationType)]",

@@ -8,13 +8,15 @@ if [ -z "${CLUSTERNAME}" ]; then
     CLUSTERNAME="neo4j-test"
 fi
 
-if [ -z "${INSTANCE_COUNT}" ]; then
-    INSTANCE_COUNT=3
+if [ -z "${CORE_NODES}" ]; then
+    CORE_NODES=3
 fi
+
 if [ -z "${NEO4J_PASSWORD}" ]; then
     read -p "Neo4j Password: " -s NEO4J_PASSWORD
     echo
 fi
+
 if [ -z "${HEAP_SIZE}" ]; then
     HEAP_SIZE="1G"
 fi
@@ -57,7 +59,7 @@ echo $(cat <<JSON
     "ClusterName": {
         "value": "${CLUSTERNAME}"
     },
-    "VmCount": {
+    "CoreNodes": {
         "value": ${INSTANCE_COUNT}
     },
     "VmSize": {

@@ -13,7 +13,7 @@
             "maxLength": 11
         },
 
-        "VmCount": {
+        "CoreNodes": {
             "type": "int",
             "minValue": 3,
             "defaultValue": 3
@@ -184,7 +184,7 @@
                         "value": "[parameters('SubnetAddressPrefix')]"
                     },
                     "addressCount": {
-                        "value": "[parameters('VmCount')]"
+                        "value": "[parameters('CoreNodes')]"
                     },
                     "ArtifactsBase": {
                         "value": "[parameters('ArtifactsBase')]"
@@ -205,7 +205,7 @@
             },
             "copy": {
                 "name": "ipCI",
-                "count": "[parameters('VmCount')]"
+                "count": "[parameters('CoreNodes')]"
             }
         },
         {
@@ -240,7 +240,7 @@
             },
             "copy": {
                 "name": "nicCI",
-                "count": "[parameters('VmCount')]"
+                "count": "[parameters('CoreNodes')]"
             },
             "dependsOn": [
                 "[concat(variables('resourceIDs').publicIP, padLeft(copyIndex(),3,'0'))]",
@@ -449,7 +449,7 @@
             },
             "copy": {
                 "name": "vmCI",
-                "count": "[parameters('VmCount')]"
+                "count": "[parameters('CoreNodes')]"
             },
             "dependsOn": [
                 "[variables('resourceIDs').availabilitySet]",
@@ -465,7 +465,7 @@
             ],
             "copy": {
                 "name": "vmExtLoop",
-                "count": "[parameters('VmCount')]"
+                "count": "[parameters('CoreNodes')]"
             },
             "properties": {
                 "mode": "Incremental",

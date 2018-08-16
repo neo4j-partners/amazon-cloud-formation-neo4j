@@ -16,10 +16,11 @@
             }
         },
 
-        "VmCount": {
+        "CoreNodes": {
             "type": "int",
             "minValue": 3,
-            "defaultValue": 3
+            "defaultValue": 3,
+            "maxValue": 9
         },
 
         "VmSize": {
@@ -137,8 +138,8 @@
                     "ClusterName": {
                         "value": "[parameters('ClusterName')]"
                     },
-                    "VmCount": {
-                        "value": "[parameters('VmCount')]"
+                    "CoreNodes": {
+                        "value": "[parameters('CoreNodes')]"
                     },
                     "VmSize": {
                         "value": "[parameters('VmSize')]"

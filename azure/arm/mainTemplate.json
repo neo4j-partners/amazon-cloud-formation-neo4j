@@ -146,9 +146,6 @@
                     "AdminUserName": {
                         "value": "[parameters('AdminUserName')]"
                     },
-                    "AdminAuthType": {
-                        "value": "[parameters('AdminAuthType')]"
-                    },
                     "AdminCredential": {
                         "value": "[parameters('AdminCredential')]"
                     },

@@ -30,11 +30,6 @@
             "type": "securestring"
         },
 
-        "AdminAuthType": {
-            "type": "string",
-            "allowedValues": [ "sshpublickey", "password" ]
-        },
-
         "AdminCredential": {
             "type": "securestring",
             "defaultValue": null

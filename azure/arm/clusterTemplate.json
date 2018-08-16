@@ -561,47 +561,11 @@
                     "Location": {
                         "value": "[parameters('Location')]"
                     },
-                    "ArtifactsBase": {
-                        "value": "[parameters('ArtifactsBase')]"
-                    },
-                    "Neo4JTags": {
-                        "value": "[parameters('Neo4JTags')]"
-                    },
-                    "Version": {
-                        "value": "[parameters('Neo4jVersion')]"
-                    },
                     "Password": {
                         "value": "[parameters('Neo4jPassword')]"
                     },
-                    "sslCert": {
-                        "value": "[parameters('sslCert')]"
-                    },
-                    "sslKey": {
-                        "value": "[parameters('sslKey')]"
-                    },
-                    "httpPort": {
-                        "value": "[string(parameters('Neo4jHttpPort'))]"
-                    },
-                    "httpsPort": {
-                        "value": "[string(parameters('Neo4jHttpsPort'))]"
-                    },
-                    "boltPort": {
-                        "value": "[string(parameters('Neo4jBoltPort'))]"
-                    },
-                    "CoordPort": {
-                        "value": "[string(parameters('Neo4jClusterPort'))]"
-                    },
-                    "DataPort": {
-                        "value": "[string(parameters('Neo4jTransactionPort'))]"
-                    },
-                    "myId": {
-                        "value": "[string(copyIndex(1))]"
-                    },
-                    "myIp": {
-                        "value": "[reference('IPListConstructor').outputs.IPList.value[copyIndex()]]"
-                    },
-                    "allIps": {
-                        "value": "[trim(replace(replace(replace(string(reference('IPListConstructor').outputs.IPList.value),'\"',''), '[', ''),']',''))]"
+                    "ArtifactsBase": {
+                        "value": "[parameters('ArtifactsBase')]"
                     }
                 }
             }

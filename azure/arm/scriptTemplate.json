@@ -9,55 +9,8 @@
             "type": "string",
             "defaultValue": "[resourceGroup().location]"
         },
-        "Version": {
-            "type": "string"
-        },
         "Password": {
             "type": "securestring"
-        },
-        "sslCert": {
-            "type": "string"
-        },
-        "sslKey": {
-            "type": "securestring"
-        },
-        "httpPort": {
-            "type": "string"
-        },
-        "httpsPort": {
-            "type": "string"
-        },
-        "boltPort": {
-            "type": "string"
-        },
-        "CoordPort": {
-            "type": "string"
-        },
-        "DataPort": {
-            "type": "string"
-        },
-        "myId": {
-            "type": "string"
-        },
-        "myIp": {
-            "type": "string"
-        },
-        "allIps": {
-            "type": "string"
-        },
-        "httpLogging": {
-            "type": "string",
-            "defaultValue": "false"
-        },
-        "JoinTimeout": {
-            "type": "string",
-            "defaultValue": "5m"
-        },
-        "Neo4JTags": {
-            "type": "object",
-            "metadata": {
-                "description": "Dictionary of tags to apply to the various resources"
-            }
         },
         "ArtifactsBase": {
             "type": "string",
@@ -69,8 +22,7 @@
         }
     },
     "variables": {
-        "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
-        "sq": "'"
+        "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]"
     },
     "resources": [
         {
@@ -89,7 +41,7 @@
                     ]
                 },
                 "protectedSettings": {
-                    "commandToExecute": "[concat('/usr/bin/env NEO4J_PASSWORD=\"',parameters('Password'),'\" NEO4J_VERSION=\"',parameters('Version'),'\" NEO4J_PASSWORD=\"',parameters('Password'),'\" SSL_CERT=\"',parameters('sslCert'),'\" SSL_KEY=\"',parameters('sslKey'),'\" HTTP_PORT=\"',parameters('httpPort'),'\" HTTPS_PORT=\"',parameters('httpsPort'),'\" HTTP_LOGGING=\"',parameters('httpLogging'),'\" BOLT_PORT=\"',parameters('boltPort'),'\" COORD_PORT=\"',parameters('CoordPort'),'\" DATA_PORT=\"',parameters('DataPort'),'\" JOIN_TIMEOUT=\"',parameters('JoinTimeout'),'\" MY_ID=\"',parameters('myId'),'\" ./post-deploy.sh')]"
+                    "commandToExecute": "[concat('/usr/bin/env NEO4J_PASSWORD=\"',parameters('Password'),'\" ./post-deploy.sh')]"
                 }
             }
         }

@@ -111,14 +111,8 @@ echo $(cat <<JSON
     "PublicIPNewOrExistingOrNone": {
         "value": "new"
     },
-    "PublicIPName": {
-        "value": "NeoA001"
-    },
     "PublicIPAllocationMethod": {
         "value": "Static"
-    },
-    "PublicIPIdleTimeoutInMinutes": {
-        "value": 10
     },
     "Neo4jPassword": {
         "value": "${NEO4J_PASSWORD}"

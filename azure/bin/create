@@ -60,7 +60,7 @@ echo $(cat <<JSON
         "value": "${CLUSTERNAME}"
     },
     "CoreNodes": {
-        "value": ${INSTANCE_COUNT}
+        "value": ${CORE_NODES}
     },
     "VmSize": {
         "value": "Standard_A1"

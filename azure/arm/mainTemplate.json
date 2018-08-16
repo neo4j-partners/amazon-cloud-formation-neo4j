@@ -143,11 +143,6 @@
                 "description": "Base URL at which Marketplace package files are stored. Do not remove or change. Value adjusted automatically during Marketplace submission process."
             },
             "defaultValue": "https://s3.amazonaws.com/neo4j-arm/test"
-        },
-        
-        "extensionScript": {
-            "type": "string",
-            "defaultValue": "setup.sh"
         }
     },
     "variables": {
@@ -244,9 +239,6 @@
                     },
                     "Neo4JTags": {
                         "value": "[variables('Neo4JTags')]"
-                    },
-                    "extensionScript": {
-                        "value": "[parameters('extensionScript')]"
                     }
                 }
             }

@@ -396,45 +396,6 @@
         },
         {
             "type": "Microsoft.Resources/deployments",
-            "name": "NATListConstructor",
-            "apiVersion": "2016-09-01",
-            "dependsOn": [],
-            "properties": {
-                "mode": "Incremental",
-                "templateLink": {
-                    "uri": "[concat(variables('artifactsBase'), 'generateNatRules.json')]",
-                    "contentVersion": "1.0.0.0"
-                },
-                "parameters": {
-                    "ruleNamePrefix": {
-                        "value": "[variables('natRulePrefix')]"
-                    },
-                    "ruleCount": {
-                        "value": "[parameters('VmCount')]"
-                    },
-                    "frontendPortBase": {
-                        "value": 22000
-                    },
-                    "backendPort": {
-                        "value": 22
-                    },
-                    "protocol": {
-                        "value": "Tcp"
-                    },
-                    "enableFloatingIP": {
-                        "value": false
-                    },
-                    "frontendIPConfigurationID": {
-                        "value": "[variables('resourceIDs').loadbalancerFE]"
-                    },
-                    "ArtifactsBase": {
-                        "value": "[parameters('ArtifactsBase')]"
-                    }
-                }
-            }
-        },
-        {
-            "type": "Microsoft.Resources/deployments",
             "name": "VirtualNetwork",
             "apiVersion": "2017-05-10",
             "properties": {

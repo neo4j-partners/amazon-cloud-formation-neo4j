@@ -4,16 +4,22 @@
  #
  # This is a template snippet and is not valid JSON on its own when expanded, it is intended
  # to be included in the larger clusterTemplate.
+ #
+ # Intention behind this snippet is to be able to create a node set as either CORE or READ_REPLICA
+ # with all dependent resources.
  # 
  # Requires jinja variables:
  #     dbms_mode = (CORE|READ_REPLICA)
  #     count_parameter e.g. "CoreNodes" - the name of the ARM parameter containing the number of
  #     VMs to generate.
+ #
+ # Note that this template has many ARM parameter/variable dependencies, generally taken from
+ # mainTemplate.json and clusterTemplate.json
  #}
 {
     "type": "Microsoft.Compute/availabilitySets",
     "name": "[concat(variables('namePrefixes').availabilitySet, '{{dbms_mode}}')]",
-    "apiVersion": "2016-08-30",
+    "apiVersion": "2018-06-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
     "properties": {
@@ -28,7 +34,7 @@
 {
     "type": "Microsoft.Resources/deployments",
     "name": "IPListConstructor{{dbms_mode}}",
-    "apiVersion": "2016-09-01",
+    "apiVersion": "2017-05-10",
     "dependsOn": [],
     "properties": {
         "mode": "Incremental",
@@ -68,7 +74,7 @@
 {
     "type": "Microsoft.Network/networkInterfaces",
     "name": "[concat(variables('namePrefixes').nic, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
-    "apiVersion": "2016-12-01",
+    "apiVersion": "2017-10-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
     "properties": {
@@ -108,7 +114,7 @@
 }, 
 {
     "type": "Microsoft.Compute/virtualMachines",
-    "name": "[concat(variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat(variables('namePrefixes').vm, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
     "apiVersion": "2018-04-01",
     "location": "[parameters('Location')]",
     "tags": {
@@ -177,4 +183,37 @@
         "[concat(variables('resourceIDs').availabilitySet, '{{dbms_mode}}')]",
         "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '{{dbms_mode}}', padLeft(copyIndex(),3,'0')))]"
     ]
+},
+{
+    "type": "Microsoft.Resources/deployments",
+    "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]",
+    "apiVersion": "2017-05-10",
+    "dependsOn": [
+        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]"
+    ],
+    "copy": {
+        "name": "vmExtLoop",
+        "count": "[parameters('CoreNodes')]"
+    },
+    "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+            "uri": "[concat(variables('artifactsBase'), 'scriptTemplate.json')]",
+            "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+            "VmName": {
+                "value": "[concat(variables('namePrefixes').vm, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]"
+            },
+            "Location": {
+                "value": "[parameters('Location')]"
+            },
+            "Password": {
+                "value": "[parameters('Neo4jPassword')]"
+            },
+            "ArtifactsBase": {
+                "value": "[parameters('ArtifactsBase')]"
+            }
+        }
+    }
 }

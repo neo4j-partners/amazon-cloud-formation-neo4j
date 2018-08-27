@@ -39,7 +39,7 @@ with open('generated.json', 'w') as f:
 # and hard to read fast.
 try:
       parsed = json.loads(tmpl_content.strip())
-except e:
+except Exception as e:
       raise Exception("Generated JSON for %s is invalid: %s" % (args.template, str(e)), e)
 
 # print(json.dumps(parsed))

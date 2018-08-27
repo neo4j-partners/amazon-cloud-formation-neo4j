@@ -71,21 +71,29 @@ echo "Daemon reload and restart"
 sudo systemctl daemon-reload
 sudo systemctl restart neo4j
 
-if [ -z $apoc_jar ]; then
-    echo "Skipping APOC installation because apoc_jar is not set."
-else
-    cd /tmp && \
-    curl -L "$apoc_jar" -O
-    sudo mv /tmp/apoc-*.jar /var/lib/neo4j/plugins
-    
-    if [ $? -eq 0 ] ; then
-        echo "APOC installed:"
-        ls -l /var/lib/neo4j/plugins/*.jar
-        md5sum /var/lib/neo4j/plugins/*.jar
-    else 
-        echo "APOC install failed"
+install_plugin () {
+    name=$1
+    url=$2
+
+    if [ -z $url ] ; then
+        echo "Skipping plugin install of $name - URL is not set"
+    else
+        jarname=$(basename "$url")
+        cd /tmp && curl -L "$url" -O
+        sudo mv "/tmp/$jarname" /var/lib/neo4j/plugins
+
+        if [ $? -eq 0 ]; then
+            echo "Plugin $name successfully installed:"
+            ls -l "/var/lib/neo4j/plugins/$jarname"
+            md5sum "/var/lib/neo4j/plugins/$jarname"
+        else
+            echo "Plugin $name install FAILED"
+        fi
     fi
-fi
+}
+
+install_plugin "APOC" "$apoc_jar"
+install_plugin "Graph Algos" "$graphalgos_jar"
 
 sleep 10
 echo "After re-configuration, service status"

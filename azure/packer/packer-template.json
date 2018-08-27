@@ -8,7 +8,8 @@
     "neo4j_version": "1:3.4.5",
     "neo4j_edition": "enterprise",
 
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/3.4.0.1/apoc-3.4.0.1-all.jar"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/3.4.0.2/apoc-3.4.0.2-all.jar",
+    "graphalgos_jar": "https://github.com/neo4j-contrib/neo4j-graph-algorithms/releases/download/3.4.4.0/graph-algorithms-algo-3.4.4.0.jar"
   },
   "builders": [
     {
@@ -65,7 +66,8 @@
       "environment_vars": [
         "neo4j_version={{ user `neo4j_version` }}",
         "neo4j_edition={{ user `neo4j_edition` }}",
-        "apoc_jar={{ user `apoc_jar` }}"
+        "apoc_jar={{ user `apoc_jar` }}",
+        "graphalgos_jar={{ user `graphalgos_jar` }}"
       ]
     },
     {

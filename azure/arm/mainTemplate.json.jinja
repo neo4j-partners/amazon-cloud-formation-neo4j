@@ -35,6 +35,12 @@
             "defaultValue": "Standard_D4_v2"
         },
 
+        "DataDiskSizeGB": {
+            "type": "int",
+            "minValue": 5,
+            "defaultValue": 1024
+        },
+
         "AdminUserName": {
             "type": "securestring",
             "defaultValue": "ubuntu"
@@ -155,6 +161,9 @@
                     },
                     "VmSize": {
                         "value": "[parameters('VmSize')]"
+                    },
+                    "DataDiskSizeGB": {
+                        "value": "[parameters('DataDiskSizeGB')]"
                     },
                     "AdminUserName": {
                         "value": "[parameters('AdminUserName')]"

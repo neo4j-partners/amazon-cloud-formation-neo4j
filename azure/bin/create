@@ -56,6 +56,9 @@ echo $(cat <<JSON
     "VmSize": {
         "value": "Standard_A1"
     },
+    "DataDiskSizeGB": {
+        "value": 512
+    },
     "AdminUserName": {
         "value": "${USERNAME}"
     },
@@ -102,6 +105,8 @@ for file in arm/*.json.jinja ; do
     if [ $? -ne 0 ] ; then
         echo "Template generation of $file failed; aborting"
         echo "Check your template syntax and try again"
+        echo "Local file 'generated.json' contains last output; check this to correlate"
+        echo "syntax errors with line numbers from previous exception"
         exit 1
     fi
 done

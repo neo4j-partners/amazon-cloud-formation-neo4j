@@ -8,7 +8,7 @@ description:
   tagline: 'Neo4j Enterprise: Causal Clustering'
   title: Neo4j Enterprise
   url: https://neo4j.com/
-  version: 3.4.3
+  version: 3.4.6
   documentations:
   - title: Neo4j Documentation
     url: https://neo4j.com/docs/

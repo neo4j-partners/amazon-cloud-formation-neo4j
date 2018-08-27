@@ -17,10 +17,6 @@ if [ -z "${NEO4J_PASSWORD}" ]; then
     echo
 fi
 
-if [ -z "${HEAP_SIZE}" ]; then
-    HEAP_SIZE="1G"
-fi
-
 if [ -z "${PUBKEY}" ]; then
     PUBKEY=$(cat ~/.ssh/id_rsa.pub)
 fi
@@ -63,7 +59,7 @@ echo $(cat <<JSON
         "value": ${CORE_NODES}
     },
     "VmSize": {
-        "value": "Standard_A1"
+        "value": "Standard_E4s_v3"
     },
     "AdminUserName": {
         "value": "${USERNAME}"

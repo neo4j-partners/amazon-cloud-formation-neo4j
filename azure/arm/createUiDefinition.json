@@ -5,7 +5,7 @@
     "parameters": {
         "basics": [
             {
-                "name": "adminUsername",
+                "name": "AdminUserName",
                 "type": "Microsoft.Compute.UserNameTextBox",
                 "label": "Admin Account Name",
                 "toolTip": "Administrator user name used for SSH to your VMs. 'admin' and 'root' are not valid",
@@ -130,11 +130,24 @@
                         "type": "Microsoft.Common.TextBox",
                         "label": "Number of core nodes",
                         "defaultValue": "3",
-                        "toolTip": "Number of VMs in the Neo4j cluster",
+                        "toolTip": "Number of VMs in the Neo4j core cluster",
                         "constraints": {
                             "required": true,
                             "regex": "^(3|4|5|6|7|8|9)$",
                             "validationMessage": "Number of core nodes must be between 3 and 9, inclusive."
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "ReadReplicas",
+                        "type": "Microsoft.Common.TextBox",
+                        "label": "Number of read replica nodes",
+                        "defaultValue": "0",
+                        "toolTip": "Number of read replicas in the cluster",
+                        "constraints": {
+                            "required": "true",
+                            "regex": "^(0|1|2|3|4|5|6|7|8|9)",
+                            "validationMessage": "Number of read replicas must be between 0 - 9"
                         },
                         "visible": true
                     },
@@ -244,8 +257,9 @@
             "Location": "[location()]",
             "ClusterName": "[steps('neo4jConfig').ClusterName]",
             "CoreNodes": "[int(steps('neo4jConfig').CoreNodes)]",
+            "ReadReplicas": "[int(steps('neo4jConfig').ReadReplicas)]",
             "VmSize": "[steps('neo4jConfig').VmSize]",
-            "AdminUserName": "[basics('adminUsername')]",
+            "AdminUserName": "[basics('AdminUserName')]",
             "AdminAuthType": "[toLower(basics('adminCredentials').authenticationType)]",
             "AdminCredential": "[coalesce(basics('adminCredentials').password,basics('adminCredentials').sshPublicKey)]",
             "VNetNewOrExisting": "[toLower(steps('neo4jConfig').VNet.newOrExisting)]",
@@ -256,11 +270,7 @@
             "SubnetAddressPrefix": "[steps('neo4jConfig').VNet.subnets.cluster.addressPrefix]",
             "SubnetStartAddress": "[steps('neo4jConfig').VNet.subnets.cluster.startAddress]",
             "PublicIPNewOrExistingOrNone": "[toLower(steps('neo4jConfig').PublicIP.newOrExistingOrNone)]",
-            "PublicIPName": "[steps('neo4jConfig').PublicIP.name]",
-            "Neo4jVersion": "[steps('neo4jConfig').Neo4jVersion]",
-            "Neo4jPassword": "[steps('neo4jConfig').Neo4jPassword]",
-            "sslCert": "[steps('neo4jConfig').sslCert]",
-            "sslKey": "[steps('neo4jConfig').sslKey]"
+            "Neo4jPassword": "[steps('neo4jConfig').Neo4jPassword]"
         }
     }
 }

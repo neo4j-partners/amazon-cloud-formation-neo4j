@@ -16,7 +16,15 @@
         "CoreNodes": {
             "type": "int",
             "minValue": 3,
+            "maxValue": 9,
             "defaultValue": 3
+        },
+
+        "ReadReplicas": {
+            "type": "int",
+            "minValue": 0,
+            "defaultValue": 0,
+            "maxValue": 9
         },
 
         "VmSize": {
@@ -448,7 +456,7 @@
                 }
             },
             "copy": {
-                "name": "vmCI",
+                "name": "vmCoreCI",
                 "count": "[parameters('CoreNodes')]"
             },
             "dependsOn": [

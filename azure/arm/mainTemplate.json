@@ -23,12 +23,21 @@
             "maxValue": 9
         },
 
+        "ReadReplicas": {
+            "type": "int",
+            "minValue": 0,
+            "defaultValue": 0,
+            "maxValue": 9
+        },
+
         "VmSize": {
-            "type": "string"
+            "type": "string",
+            "defaultValue": "Standard_D4_v2"
         },
 
         "AdminUserName": {
-            "type": "securestring"
+            "type": "securestring",
+            "defaultValue": "ubuntu"
         },
 
         "AdminCredential": {
@@ -140,6 +149,9 @@
                     },
                     "CoreNodes": {
                         "value": "[parameters('CoreNodes')]"
+                    },
+                    "ReadReplicas": {
+                        "value": "[parameters('ReadReplicas')]"
                     },
                     "VmSize": {
                         "value": "[parameters('VmSize')]"

@@ -180,7 +180,7 @@
         "count": "[parameters('{{ count_parameter }}')]"
     },
     "dependsOn": [
-        "[concat(variables('resourceIDs').availabilitySet, '-{{dbms_mode}}-')]",
+        "[concat(variables('resourceIDs').availabilitySet, '-{{dbms_mode}}')]",
         "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0')))]"
     ]
 },

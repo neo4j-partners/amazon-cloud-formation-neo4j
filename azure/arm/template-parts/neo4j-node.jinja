@@ -18,7 +18,7 @@
  #}
 {
     "type": "Microsoft.Compute/availabilitySets",
-    "name": "[concat(variables('namePrefixes').availabilitySet, '{{dbms_mode}}')]",
+    "name": "[concat(variables('namePrefixes').availabilitySet, '-{{dbms_mode}}')]",
     "apiVersion": "2018-06-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
@@ -57,7 +57,7 @@
 },
 {
     "type": "Microsoft.Network/publicIPAddresses",
-    "name": "[concat(variables('namePrefixes').publicIP, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat(variables('namePrefixes').publicIP, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
     "apiVersion": "2017-08-01",
     "location": "[parameters('Location')]",
     "properties": {
@@ -73,7 +73,7 @@
 },
 {
     "type": "Microsoft.Network/networkInterfaces",
-    "name": "[concat(variables('namePrefixes').nic, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat(variables('namePrefixes').nic, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
     "apiVersion": "2017-10-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
@@ -87,7 +87,7 @@
                     },
                     "privateIPAllocationMethod": "Dynamic",
                     "publicIPAddress": {
-                        "id": "[concat(variables('resourceIDs').publicIP, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]"
+                        "id": "[concat(variables('resourceIDs').publicIP, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]"
                     }
                 }
             }
@@ -106,7 +106,7 @@
         "count": "[parameters('{{count_parameter}}')]"
     },
     "dependsOn": [
-        "[concat(variables('resourceIDs').publicIP, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
+        "[concat(variables('resourceIDs').publicIP, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
         "VirtualNetwork",
         "IPListConstructor{{dbms_mode}}",
         "[variables('namePrefixes').nsg]"
@@ -114,7 +114,7 @@
 }, 
 {
     "type": "Microsoft.Compute/virtualMachines",
-    "name": "[concat(variables('namePrefixes').vm, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat(variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
     "apiVersion": "2018-04-01",
     "location": "[parameters('Location')]",
     "tags": {
@@ -133,7 +133,7 @@
     },
     "properties": {
         "availabilitySet": {
-            "id": "[variables('resourceIDs').availabilitySet]"
+            "id": "[concat(variables('resourceIDs').availabilitySet, '-{{dbms_mode}}')]"
         },
         "hardwareProfile": {
             "vmSize": "[parameters('VmSize')]"
@@ -141,7 +141,7 @@
         "storageProfile": {
             "imageReference": "[variables('imageReference')]",
             "osDisk": {
-                "name": "[concat(variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-OS')]",
+                "name": "[concat(variables('namePrefixes').vm,'-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'), '-OS')]",
                 "createOption": "fromImage",
                 "managedDisk": {
                     "storageAccountType": "Standard_LRS"
@@ -150,7 +150,7 @@
             "dataDisks": [
                 {
                     "lun": 0,
-                    "name": "[concat(variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'),'-Data-0')]",
+                    "name": "[concat(variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'),'-Data-0')]",
                     "createOption": "Empty",
                     "managedDisk": {
                         "storageAccountType": "Standard_LRS"
@@ -161,7 +161,7 @@
             ]
         },
         "osProfile": {
-            "computerName": "[concat(variables('namePrefixes').vm,padLeft(copyIndex(),3,'0'))]",
+            "computerName": "[concat(variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
             "adminUsername": "[parameters('AdminUserName')]",
             "linuxConfiguration": "[variables('authConfig').linuxConfiguration]",
             "secrets": [],
@@ -170,7 +170,7 @@
         "networkProfile": {
             "networkInterfaces": [
                 {
-                    "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic,padLeft(copyIndex(),3,'0')))]"
+                    "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0')))]"
                 }
             ]
         }
@@ -180,16 +180,16 @@
         "count": "[parameters('{{ count_parameter }}')]"
     },
     "dependsOn": [
-        "[concat(variables('resourceIDs').availabilitySet, '{{dbms_mode}}')]",
-        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '{{dbms_mode}}', padLeft(copyIndex(),3,'0')))]"
+        "[concat(variables('resourceIDs').availabilitySet, '-{{dbms_mode}}-')]",
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0')))]"
     ]
 },
 {
     "type": "Microsoft.Resources/deployments",
-    "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
     "apiVersion": "2017-05-10",
     "dependsOn": [
-        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]"
+        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]"
     ],
     "copy": {
         "name": "vmExtLoop",
@@ -203,7 +203,7 @@
         },
         "parameters": {
             "VmName": {
-                "value": "[concat(variables('namePrefixes').vm, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]"
+                "value": "[concat(variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]"
             },
             "Location": {
                 "value": "[parameters('Location')]"

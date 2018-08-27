@@ -392,6 +392,11 @@
                 }
             }
         },
+        {% with
+             count_parameter='CoreNodes'
+             dbms_mode="CORE" %}
+           {% include 'template-parts/neo4j-node.jinja' %},
+        {% endwith %}
         {
             "type": "Microsoft.Compute/virtualMachines",
             "name": "[concat(variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]",

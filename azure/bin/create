@@ -133,7 +133,13 @@ echo "Deploying templates to S3..."
 # https://s3.amazonaws.com/neo4j-arm/test/
 # Only put the JSON and the shell stuff, not the jinja.
 shopt -s extglob
-s3cmd put -P arm/!(*.jinja) s3://neo4j-arm/test/
+s3cmd put --recursive -P arm/!(*.jinja) s3://neo4j-arm/test/
+
+if [ $? -ne 0 ] ; then
+    echo "S3 JSON upload failed; aborting"
+    echo "Check your template syntax and try again"
+    exit 1
+fi
 
 echo "When ready to deploy, run this command:"
 

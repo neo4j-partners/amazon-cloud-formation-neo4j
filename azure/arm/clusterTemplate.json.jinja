@@ -187,7 +187,7 @@
                         }
                     },
                     {
-                        "name": "http-probe",
+                        "name": "allow-http",
                         "properties": {
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
@@ -307,11 +307,20 @@
         {#
          # The following included sub-template creates all IP addresses and virtual machines for the
          # given cluster topology role.
+         #
+         # This bit is where jinja shines, by allowing us to template massive amounts of non-DRY JSON
+         # code which would otherwise be very error prone to maintain individually.
          #}
         {% with
              count_parameter='CoreNodes',
              dbms_mode="CORE" %}
            {% include 'arm/template-parts/neo4j-node.jinja' %},
+        {% endwith %}
+
+        {% with
+             count_parameter='ReadReplicas',
+             dbms_mode='READ_REPLICA' %}
+           {% include 'arm/template-parts/neo4j-node.jinja' %}
         {% endwith %}
     ]
 }

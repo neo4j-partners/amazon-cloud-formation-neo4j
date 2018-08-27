@@ -130,10 +130,10 @@
     "variables": {
         "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
         "namePrefixes": {
-            "nic": "[concat(parameters('ClusterName'),'-nic-')]",
+            "nic": "[concat(parameters('ClusterName'),'-nic')]",
             "nsg": "[concat(parameters('ClusterName'),'-sg')]",
             "storage": "[concat(toLower(trim(parameters('ClusterName'))), uniqueString(resourceGroup().id))]",
-            "vm": "[concat(parameters('ClusterName'),'-vm-')]",
+            "vm": "[concat(parameters('ClusterName'),'-vm')]",
             "publicIP": "[concat(parameters('ClusterName'),'-public-ip')]",
             "loadBalancer": "[concat(parameters('ClusterName'),'-lb')]",
             "availabilitySet": "[concat(parameters('ClusterName'), '-as')]"
@@ -174,7 +174,7 @@
         {
             "type": "Microsoft.Network/networkSecurityGroups",
             "name": "[variables('namePrefixes').nsg]",
-            "apiVersion": "2016-12-01",
+            "apiVersion": "2017-10-01",
             "location": "[parameters('Location')]",
             "tags": "[parameters('Neo4JTags')]",
             "properties": {
@@ -237,7 +237,7 @@
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
                             "destinationPortRange": "[string(parameters('Neo4jClusterPort'))]",
-                            "sourceAddressPrefix": "*",
+                            "sourceAddressPrefix": "VirtualNetwork",
                             "destinationAddressPrefix": "*",
                             "access": "Allow",
                             "priority": 1040,
@@ -250,7 +250,7 @@
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
                             "destinationPortRange": "[string(parameters('Neo4jTransactionPort'))]",
-                            "sourceAddressPrefix": "*",
+                            "sourceAddressPrefix": "VirtualNetwork",
                             "destinationAddressPrefix": "*",
                             "access": "Allow",
                             "priority": 1050,
@@ -263,10 +263,23 @@
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
                             "destinationPortRange": "[string(parameters('Neo4jRaftPort'))]",
-                            "sourceAddressPrefix": "*",
+                            "sourceAddressPrefix": "VirtualNetwork",
                             "destinationAddressPrefix": "*",
                             "access": "Allow",
                             "priority": 1060,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "neo4j-backup",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "6362",
+                            "sourceAddressPrefix": "VirtualNetwork",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1070,
                             "direction": "Inbound"
                         }
                     }

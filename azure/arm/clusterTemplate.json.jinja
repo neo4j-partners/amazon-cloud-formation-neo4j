@@ -162,102 +162,6 @@
     },
     "resources": [
         {
-            "type": "Microsoft.Compute/availabilitySets",
-            "name": "[variables('namePrefixes').availabilitySet]",
-            "apiVersion": "2016-08-30",
-            "location": "[parameters('Location')]",
-            "tags": "[parameters('Neo4JTags')]",
-            "properties": {
-                "platformUpdateDomainCount": 20,
-                "platformFaultDomainCount": 3
-            },
-            "sku": {
-                "name": "Aligned"
-            },
-            "dependsOn": []
-        },
-        {
-            "type": "Microsoft.Resources/deployments",
-            "name": "IPListConstructor",
-            "apiVersion": "2016-09-01",
-            "dependsOn": [],
-            "properties": {
-                "mode": "Incremental",
-                "templateLink": {
-                    "uri": "[concat(variables('artifactsBase'), 'generateIPList.json')]",
-                    "contentVersion": "1.0.0.0"
-                },
-                "parameters": {
-                    "subnetCIDR": {
-                        "value": "[parameters('SubnetAddressPrefix')]"
-                    },
-                    "addressCount": {
-                        "value": "[parameters('CoreNodes')]"
-                    },
-                    "ArtifactsBase": {
-                        "value": "[parameters('ArtifactsBase')]"
-                    }
-                }
-            }
-        },
-        {
-            "name": "[concat(variables('namePrefixes').publicIP, padLeft(copyIndex(),3,'0'))]",
-            "type": "Microsoft.Network/publicIPAddresses",
-            "apiVersion": "2017-08-01",
-            "location": "[parameters('Location')]",
-            "properties": {
-                "publicIPAllocationMethod": "[parameters('PublicIPAllocationMethod')]",
-                "dnsSettings": {
-                    "domainNameLabel": "[concat('node', padLeft(copyIndex(),3,'0'))]"
-                }                
-            },
-            "copy": {
-                "name": "ipCI",
-                "count": "[parameters('CoreNodes')]"
-            }
-        },
-        {
-            "type": "Microsoft.Network/networkInterfaces",
-            "name": "[concat(variables('namePrefixes').nic, padLeft(copyIndex(),3,'0'))]",
-            "apiVersion": "2016-12-01",
-            "location": "[parameters('Location')]",
-            "tags": "[parameters('Neo4JTags')]",
-            "properties": {
-                "ipConfigurations": [
-                    {
-                        "name": "ipconfig1",
-                        "properties": {
-                            "subnet": {
-                                "id": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/', parameters('SubnetName'))]"
-                            },
-                            "privateIPAllocationMethod": "Dynamic",
-                            "publicIPAddress": {
-                                "id": "[concat(variables('resourceIDs').publicIP, padLeft(copyIndex(),3,'0'))]"
-                            }
-                        }
-                    }
-                ],
-                "dnsSettings": {
-                    "dnsServers": [],
-                    "internalDnsNameLabel": "[concat('node', padLeft(copyIndex(),3,'0'))]"
-                },
-                "enableIPForwarding": false,
-                "networkSecurityGroup": {
-                    "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]"
-                }
-            },
-            "copy": {
-                "name": "nicCI",
-                "count": "[parameters('CoreNodes')]"
-            },
-            "dependsOn": [
-                "[concat(variables('resourceIDs').publicIP, padLeft(copyIndex(),3,'0'))]",
-                "VirtualNetwork",
-                "IPListConstructor",
-                "[variables('namePrefixes').nsg]"
-            ]
-        },
-        {
             "type": "Microsoft.Network/networkSecurityGroups",
             "name": "[variables('namePrefixes').nsg]",
             "apiVersion": "2016-12-01",
@@ -393,9 +297,9 @@
             }
         },
         {% with
-             count_parameter='CoreNodes'
+             count_parameter='CoreNodes',
              dbms_mode="CORE" %}
-           {% include 'template-parts/neo4j-node.jinja' %},
+           {% include 'arm/template-parts/neo4j-node.jinja' %},
         {% endwith %}
         {
             "type": "Microsoft.Compute/virtualMachines",

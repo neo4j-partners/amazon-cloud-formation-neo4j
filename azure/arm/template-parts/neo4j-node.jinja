@@ -1,11 +1,111 @@
 {#
- # This sub-template creates a collection of VMs.
+ # This sub-template creates a collection of VMs, and resources necessary for those VMs,
+ # including IP addresses, availability sets, and so on.
+ #
+ # This is a template snippet and is not valid JSON on its own when expanded, it is intended
+ # to be included in the larger clusterTemplate.
  # 
- # Requires jinja variables:  
+ # Requires jinja variables:
  #     dbms_mode = (CORE|READ_REPLICA)
  #     count_parameter e.g. "CoreNodes" - the name of the ARM parameter containing the number of
  #     VMs to generate.
  #}
+{
+    "type": "Microsoft.Compute/availabilitySets",
+    "name": "[concat(variables('namePrefixes').availabilitySet, '{{dbms_mode}}')]",
+    "apiVersion": "2016-08-30",
+    "location": "[parameters('Location')]",
+    "tags": "[parameters('Neo4JTags')]",
+    "properties": {
+        "platformUpdateDomainCount": 20,
+        "platformFaultDomainCount": 3
+    },
+    "sku": {
+        "name": "Aligned"
+    },
+    "dependsOn": []
+},
+{
+    "type": "Microsoft.Resources/deployments",
+    "name": "IPListConstructor{{dbms_mode}}",
+    "apiVersion": "2016-09-01",
+    "dependsOn": [],
+    "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+            "uri": "[concat(variables('artifactsBase'), 'generateIPList.json')]",
+            "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+            "subnetCIDR": {
+                "value": "[parameters('SubnetAddressPrefix')]"
+            },
+            "addressCount": {
+                "value": "[parameters('{{count_parameter}}')]"
+            },
+            "ArtifactsBase": {
+                "value": "[parameters('ArtifactsBase')]"
+            }
+        }
+    }
+},
+{
+    "type": "Microsoft.Network/publicIPAddresses",
+    "name": "[concat(variables('namePrefixes').publicIP, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
+    "apiVersion": "2017-08-01",
+    "location": "[parameters('Location')]",
+    "properties": {
+        "publicIPAllocationMethod": "[parameters('PublicIPAllocationMethod')]",
+        "dnsSettings": {
+            "domainNameLabel": "[concat('node', padLeft(copyIndex(),3,'0'))]"
+        }                
+    },
+    "copy": {
+        "name": "ip{{dbms_mode}}CI",
+        "count": "[parameters('{{count_parameter}}')]"
+    }
+},
+{
+    "type": "Microsoft.Network/networkInterfaces",
+    "name": "[concat(variables('namePrefixes').nic, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
+    "apiVersion": "2016-12-01",
+    "location": "[parameters('Location')]",
+    "tags": "[parameters('Neo4JTags')]",
+    "properties": {
+        "ipConfigurations": [
+            {
+                "name": "ipconfig1",
+                "properties": {
+                    "subnet": {
+                        "id": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/', parameters('SubnetName'))]"
+                    },
+                    "privateIPAllocationMethod": "Dynamic",
+                    "publicIPAddress": {
+                        "id": "[concat(variables('resourceIDs').publicIP, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]"
+                    }
+                }
+            }
+        ],
+        "dnsSettings": {
+            "dnsServers": [],
+            "internalDnsNameLabel": "[concat('node', padLeft(copyIndex(),3,'0'))]"
+        },
+        "enableIPForwarding": false,
+        "networkSecurityGroup": {
+            "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]"
+        }
+    },
+    "copy": {
+        "name": "nicCI",
+        "count": "[parameters('{{count_parameter}}')]"
+    },
+    "dependsOn": [
+        "[concat(variables('resourceIDs').publicIP, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
+        "VirtualNetwork",
+        "IPListConstructor{{dbms_mode}}",
+        "[variables('namePrefixes').nsg]"
+    ]
+}, 
 {
     "type": "Microsoft.Compute/virtualMachines",
     "name": "[concat(variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]",
@@ -74,7 +174,7 @@
         "count": "[parameters('{{ count_parameter }}')]"
     },
     "dependsOn": [
-        "[variables('resourceIDs').availabilitySet]",
-        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic,padLeft(copyIndex(),3,'0')))]"
+        "[concat(variables('resourceIDs').availabilitySet, '{{dbms_mode}}')]",
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '{{dbms_mode}}', padLeft(copyIndex(),3,'0')))]"
     ]
 }

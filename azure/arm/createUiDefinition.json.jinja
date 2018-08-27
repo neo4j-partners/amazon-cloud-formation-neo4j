@@ -188,6 +188,19 @@
                         "visible": true
                     },
                     {
+                        "name": "DataDiskSizeGB",
+                        "type": "Microsoft.Common.TextBox",
+                        "label": "Size (in GB) of data disks on each Neo4j node",
+                        "defaultValue": "1024",
+                        "toolTip": "Size in GB of data disks",
+                        "constraints": {
+                            "required": "true",
+                            "regex": "^[0-9]+$",
+                            "validationMessage": "Must be an integer greater than 0"
+                        },
+                        "visible": true
+                    },
+                    {
                         "name": "VNet",
                         "type": "Microsoft.Network.VirtualNetworkCombo",
                         "label": {
@@ -259,6 +272,7 @@
             "CoreNodes": "[int(steps('neo4jConfig').CoreNodes)]",
             "ReadReplicas": "[int(steps('neo4jConfig').ReadReplicas)]",
             "VmSize": "[steps('neo4jConfig').VmSize]",
+            "DataDiskSizeGB": "[steps('neo4jConfig').DataDiskSizeGB]",
             "AdminUserName": "[basics('AdminUserName')]",
             "AdminAuthType": "[toLower(basics('adminCredentials').authenticationType)]",
             "AdminCredential": "[coalesce(basics('adminCredentials').password,basics('adminCredentials').sshPublicKey)]",

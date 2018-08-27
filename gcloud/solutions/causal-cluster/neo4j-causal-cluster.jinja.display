@@ -7,7 +7,7 @@ description:
   logo: '@media/solution-name_store.png'
   tagline: 'Neo4j Enterprise: Causal Clustering'
   title: Neo4j Enterprise
-  url: https://neo4j.com/
+  url: https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace
   version: 3.4.6
   documentations:
   - title: Neo4j Documentation
@@ -97,6 +97,9 @@ runtime:
     type: TYPE_GCE_VM_SSH
     action: '{{ outputs().vm1SelfLink }}'
   suggestedActions:
+    - heading: Register Your Cloud Instance of Neo4j
+    description: |
+        <a href="https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace">Register here</a>
     - heading: Connect to the Neo4j Browser
       description: |
         <a href="{{ outputs().vm1URL }}">{{ outputs().vm1Name }}</a>

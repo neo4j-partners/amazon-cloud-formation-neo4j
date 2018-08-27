@@ -59,7 +59,7 @@ echo $(cat <<JSON
         "value": ${CORE_NODES}
     },
     "VmSize": {
-        "value": "Standard_E4s_v3"
+        "value": "Standard_A1"
     },
     "AdminUserName": {
         "value": "${USERNAME}"
@@ -96,8 +96,17 @@ JSON
 ) > .parameters.json
 
 echo "Parameters have been prepared."
-echo "Validating entire setup"
 
+echo "Jinja Expansion"
+# Expand all jinja templates into regular JSON
+for file in arm/*.json.jinja ; do
+    # Bash magic that removes jinja extension.  foo.json.jinja -> foo.json
+    jsonFile=${file%.jinja}
+    echo $jsonFile
+    pipenv run python3 generate.py --template "$file" > "$jsonFile" ; 
+done
+
+echo "Validating entire setup"    
 if ! az group deployment validate \
      --template-file arm/mainTemplate.json \
      --parameters @.parameters.json \
@@ -110,7 +119,9 @@ echo "Deploying templates to S3..."
 
 # Results in HTTP location:
 # https://s3.amazonaws.com/neo4j-arm/test/
-s3cmd put -P arm/*.json arm/*.sh s3://neo4j-arm/test/
+# Only put the JSON and the shell stuff, not the jinja.
+shopt -s extglob
+s3cmd put -P arm/!(*.jinja) s3://neo4j-arm/test/
 
 echo "When ready to deploy, run this command:"
 

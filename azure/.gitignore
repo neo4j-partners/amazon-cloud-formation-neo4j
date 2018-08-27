@@ -1,3 +1,6 @@
 .parameters.json
 generated.json
 tmp-packer
+
+# JSON files in this dir are generated, the jinja is versioned
+arm/*.json

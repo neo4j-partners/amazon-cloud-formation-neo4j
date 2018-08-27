@@ -37,7 +37,11 @@ with open('generated.json', 'w') as f:
 
 # Re-parse and export pretty-printed, since template jinja mixture gets ugly
 # and hard to read fast.
-parsed = json.loads(tmpl_content.strip())
+try:
+      parsed = json.loads(tmpl_content.strip())
+except e:
+      raise Exception("Generated JSON for %s is invalid: %s" % (args.template, str(e)), e)
+
 # print(json.dumps(parsed))
 # Prettyprint
 print(json.dumps(parsed, indent=2, sort_keys=False))

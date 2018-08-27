@@ -26,7 +26,7 @@ if [ -z "${USERNAME}" ]; then
 fi
 
 if [ -z "${RESOURCE_GROUP}" ] ; then
-   export RESOURCE_GROUP=RG-testdeploy-$(head -c 3 /dev/urandom | base64)
+   export RESOURCE_GROUP=RG-testdeploy-$(head -c 3 /dev/urandom | base64 | sed 's/[^a-zA-Z0-9]/X/g')
 fi
 
 if [ -z "${DEPLOYMENT}" ]; then
@@ -36,18 +36,6 @@ fi
 
 if [ -z "${LOCATION}" ]; then
     LOCATION="East US"
-fi
-
-# Resource groups should be created for all things which share
-# a lifecycle.  Deployments also can't delete all of their underlying
-# resources, so we will destroy all deployment resources by actually
-# deleting the entire group.
-echo "Checking $RESOURCE_GROUP"
-if ! az group show --name "${RESOURCE_GROUP}" &> /dev/null; then
-    if ! az group create --name "${RESOURCE_GROUP}" --location "${LOCATION}"; then
-        echo "Failed to create necessary resource group ${RESOURCE_GROUP}"
-        exit $?
-    fi
 fi
 
 echo $(cat <<JSON
@@ -104,7 +92,24 @@ for file in arm/*.json.jinja ; do
     jsonFile=${file%.jinja}
     echo $jsonFile
     pipenv run python3 generate.py --template "$file" > "$jsonFile" ; 
+    if [ $? -ne 0 ] ; then
+        echo "Template generation of $file failed; aborting"
+        echo "Check your template syntax and try again"
+        exit 1
+    fi
 done
+
+# Resource groups should be created for all things which share
+# a lifecycle.  Deployments also can't delete all of their underlying
+# resources, so we will destroy all deployment resources by actually
+# deleting the entire group.
+echo "Checking $RESOURCE_GROUP"
+if ! az group show --name "${RESOURCE_GROUP}" &> /dev/null; then
+    if ! az group create --name "${RESOURCE_GROUP}" --location "${LOCATION}"; then
+        echo "Failed to create necessary resource group ${RESOURCE_GROUP}"
+        exit $?
+    fi
+fi
 
 echo "Validating entire setup"    
 if ! az group deployment validate \

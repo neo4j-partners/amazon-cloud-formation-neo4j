@@ -12,6 +12,10 @@ if [ -z "${CORE_NODES}" ]; then
     CORE_NODES=3
 fi
 
+if [ -z "${READ_REPLICAS}" ]; then
+    READ_REPLICAS=2
+fi
+
 if [ -z "${NEO4J_PASSWORD}" ]; then
     read -p "Neo4j Password: " -s NEO4J_PASSWORD
     echo
@@ -45,6 +49,9 @@ echo $(cat <<JSON
     },
     "CoreNodes": {
         "value": ${CORE_NODES}
+    },
+    "ReadReplicas": {
+        "value": ${READ_REPLICAS}
     },
     "VmSize": {
         "value": "Standard_A1"

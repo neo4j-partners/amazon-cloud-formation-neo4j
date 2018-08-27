@@ -186,14 +186,14 @@
 },
 {
     "type": "Microsoft.Resources/deployments",
-    "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]",
     "apiVersion": "2017-05-10",
     "dependsOn": [
-        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, padLeft(copyIndex(),3,'0'))]"
+        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '{{dbms_mode}}', padLeft(copyIndex(),3,'0'))]"
     ],
     "copy": {
         "name": "vmExtLoop",
-        "count": "[parameters('CoreNodes')]"
+        "count": "[parameters('{{ count_parameter }}')]"
     },
     "properties": {
         "mode": "Incremental",

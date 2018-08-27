@@ -110,7 +110,7 @@ echo "Deploying templates to S3..."
 
 # Results in HTTP location:
 # https://s3.amazonaws.com/neo4j-arm/test/
-s3cmd put -P arm/* s3://neo4j-arm/test/
+s3cmd put -P arm/*.json arm/*.sh s3://neo4j-arm/test/
 
 echo "When ready to deploy, run this command:"
 

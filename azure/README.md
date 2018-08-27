@@ -22,6 +22,23 @@ requires a fully-qualified public URL in order to resolve other files that belon
 
 Two directories test and arm correspond to local dev testing and finished deployed version.
 
+## Jinja Templating
+
+Because the ARM templating language is flat JSON, the code in flat JSON is very much not DRY.
+Jinja templating is used (as with the other cloud hosting providers) to abstract away some
+bits.  This also means that the generate python script must be used to expand the template into
+the JSON that is seen by ARM.
+
+This process works similar to the way the Amazon templates works:
+
+```
+pipenv run python3 generate.py --template somefile.json.jinja > somefile.json
+```
+
+This command expands the template and saves the resulting JSON.  As part of the create script,
+this process is run on all of the jinja templates to prepare them for upload to S3, and
+interpretation by Azure ARM.
+
 ## Relevant Documentation
 
 - [Azure Resource Manager Documentation](https://docs.microsoft.com/en-us/azure/azure-resource-manager/)

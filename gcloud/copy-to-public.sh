@@ -8,9 +8,9 @@
 
 # PACKER_IMAGE=
 
-if [ -z $PACKER_IMAGE ] ; 
+if [ -z $PACKER_IMAGE ] ; then
     echo "You must explicitly set PACKER_IMAGE at the top of this script to avoid errors"
-    exit 1
+    exit 1 ;
 fi
 
 PROJECT=launcher-development-191917
@@ -22,29 +22,56 @@ PUBLIC_PROJECT=launcher-public
 gcloud config set project $PROJECT
 gcloud config set compute/zone $ZONE
 
-# Create image from packer instance
-gcloud compute instances create $TARGET \
-   --scopes https://www.googleapis.com/auth/cloud-platform \
-   --image-project $PROJECT \
-   --tags neo4j \
-   --image=$PACKER_IMAGE
+# Apply a google-specific license URL to the image, and then
+# copy it over the public project.
+license_and_copy() {
+    echo "Licensing and copying image $PROJECT -> $PUBLIC_PROJECT"
 
-# Immediately delete, but keep the disk, because the next
-# step builds the licensed image from the disk.  Script doesn't
-# support licensing an image (the one we already created) directly.
-gcloud compute instances delete $TARGET --keep-disks=all
+    echo "Creating instance..."
+    # Create image from packer instance
+    gcloud compute instances create $TARGET \
+    --scopes https://www.googleapis.com/auth/cloud-platform \
+    --image-project $PROJECT \
+    --tags neo4j \
+    --image=$PACKER_IMAGE
 
-# This step creates a new image from the disk, licenses it,
-# and copies it to the destination public project.
-# Path relative to packer directory.
-# The disk by default gets the same name as the VM we created.
-python2.7 partner-utils/image_creator.py --project $PROJECT --disk $TARGET \
-   --name $PACKER_IMAGE --description "Neo4j Enterprise" \
-   --family neo4j-enterprise \
-   --destination-project $PUBLIC_PROJECT \
-   --license $PUBLIC_PROJECT/neo4j-enterprise-causal-cluster
+    # Immediately delete, but keep the disk, because the next
+    # step builds the licensed image from the disk.  Script doesn't
+    # support licensing an image (the one we already created) directly.
+    echo "Deleting licensable instance and keeping disk"
+    gcloud compute instances delete $TARGET --keep-disks=all
 
-# If all of the steps above succeeded, the remaining disk leftover from
-# the VM isn't needed.
-gcloud compute disks delete $TARGET
+    # This step creates a new image from the disk, licenses it,
+    # and copies it to the destination public project.
+    # Path relative to packer directory.
+    # The disk by default gets the same name as the VM we created.
+    echo "Licensing disk and creating target public image"
+    python2.7 partner-utils/image_creator.py --project $PROJECT --disk $TARGET \
+    --name $PACKER_IMAGE --description "Neo4j Enterprise" \
+    --family neo4j-enterprise \
+    --destination-project $PUBLIC_PROJECT \
+    --license $PUBLIC_PROJECT/neo4j-enterprise-causal-cluster
+
+    # If all of the steps above succeeded, the remaining disk leftover from
+    # the VM isn't needed.
+    echo "Deleting license disk/cleanup"
+    gcloud compute disks delete $TARGET
+}
+
+# Community image doesn't require a license URL, just copy it.
+just_copy() {
+    echo "Copying image without license; $PROJECT -> $PUBLIC_PROJECT"
+    gcloud compute --project="$PUBLIC_PROJECT" images create \
+        "$PACKER_IMAGE" \
+        --source-image="$PACKER_IMAGE" \
+        --source-image-project="$PROJECT"
+}
+
+if [[ $PACKER_IMAGE == *enterprise* ]] ; then
+    license_and_copy ;
+elif [[ $PACKER_IMAGE == *community* ]] ; then
+    just_copy ;
+else 
+    echo "Unrecognized PACKER_IMAGE; not community, not enterprise"
+fi
 

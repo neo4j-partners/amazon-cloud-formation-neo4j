@@ -17,10 +17,6 @@
             "type": "string"
         },
 
-        "SubnetAddressPrefix": {
-            "type": "string"
-        },
-
         "Location": {
             "type": "string",
             "defaultValue": "[resourceGroup().location]"
@@ -52,7 +48,7 @@
                     {
                         "name": "[parameters('SubnetName')]",
                         "properties": {
-                            "addressPrefix": "[parameters('SubnetAddressPrefix')]"
+                            "addressPrefix": "10.0.1.0/24"
                         }
                     }
                 ]

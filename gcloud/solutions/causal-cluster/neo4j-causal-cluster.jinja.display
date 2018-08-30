@@ -10,6 +10,8 @@ description:
   url: https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace
   version: 3.4.6
   documentations:
+  - title: Register your Neo4j Instance / Get a New License
+    url: https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace
   - title: Neo4j Documentation
     url: https://neo4j.com/docs/
     description: All Neo4j Documentation
@@ -22,6 +24,10 @@ description:
       Need a helping hand?
       Reach out to our online community.
     url: https://support.neo4j.com/hc/en-us
+  - title: Neo4j Online community
+    descriptionHtml: |-
+      Participate in Neo4j community discussions
+    url: https://community.neo4j.com/
   icon: '@media/solution-name_small.png'
 
 input:
@@ -97,7 +103,7 @@ runtime:
     type: TYPE_GCE_VM_SSH
     action: '{{ outputs().vm1SelfLink }}'
   suggestedActions:
-    - heading: Register Your Cloud Instance of Neo4j
+    - heading: Register Your Cloud Instance of Neo4j, or get a New License
     description: |
         <a href="https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace">Register here</a>
     - heading: Connect to the Neo4j Browser

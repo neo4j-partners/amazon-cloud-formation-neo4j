@@ -16,9 +16,19 @@
  # Note that this template has many ARM parameter/variable dependencies, generally taken from
  # mainTemplate.json and clusterTemplate.json
  #}
+ {%
+    set safe_dbms_mode = dbms_mode.replace('_', '-').lower()
+ %}
 {
+    {# 
+     # DOCS: https://docs.microsoft.com/en-us/azure/virtual-machines/windows/manage-availability#configure-multiple-virtual-machines-in-an-availability-set-for-redundancy 
+     # Update domains control how many machines could be restarted/updated.
+     # Fault domains control hardware co-location.  Availability sets let us spread our VMs out
+     # across these domains so that a power source failure or needed VM upgrade can't interrupt the
+     # entire cluster, or even the entire read replica set.
+     #}
     "type": "Microsoft.Compute/availabilitySets",
-    "name": "[concat(variables('namePrefixes').availabilitySet, '-{{dbms_mode}}')]",
+    "name": "[concat(variables('namePrefixes').availabilitySet, '-', '{{safe_dbms_mode}}')]",
     "apiVersion": "2018-06-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
@@ -33,7 +43,7 @@
 },
 {
     "type": "Microsoft.Resources/deployments",
-    "name": "IPListConstructor{{dbms_mode}}",
+    "name": "IPListConstructor-{{dbms_mode}}",
     "apiVersion": "2017-05-10",
     "dependsOn": [],
     "properties": {
@@ -43,8 +53,15 @@
             "contentVersion": "1.0.0.0"
         },
         "parameters": {
+            "name": {
+                "value": "{{dbms_mode}}"
+            },
             "subnetCIDR": {
-                "value": "[parameters('SubnetAddressPrefix')]"
+                {% if dbms_mode == "CORE" %}
+                "value": "10.0.1.0/25"
+                {% else %}
+                "value": "10.0.1.128/25"
+                {% endif %}
             },
             "addressCount": {
                 "value": "[parameters('{{count_parameter}}')]"
@@ -57,13 +74,13 @@
 },
 {
     "type": "Microsoft.Network/publicIPAddresses",
-    "name": "[concat(variables('namePrefixes').publicIP, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat(variables('namePrefixes').publicIP, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
     "apiVersion": "2017-08-01",
     "location": "[parameters('Location')]",
     "properties": {
         "publicIPAllocationMethod": "[parameters('PublicIPAllocationMethod')]",
         "dnsSettings": {
-            "domainNameLabel": "[concat('node', padLeft(copyIndex(),3,'0'))]"
+            "domainNameLabel": "[toLower(concat(parameters('ClusterName'), '-', '{{safe_dbms_mode}}-node-', copyIndex()))]"
         }                
     },
     "copy": {
@@ -73,7 +90,7 @@
 },
 {
     "type": "Microsoft.Network/networkInterfaces",
-    "name": "[concat(variables('namePrefixes').nic, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat(variables('namePrefixes').nic, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
     "apiVersion": "2017-10-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
@@ -87,14 +104,14 @@
                     },
                     "privateIPAllocationMethod": "Dynamic",
                     "publicIPAddress": {
-                        "id": "[concat(variables('resourceIDs').publicIP, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]"
+                        "id": "[concat(variables('resourceIDs').publicIP, '-', '{{safe_dbms_mode}}', '-', copyIndex())]"
                     }
                 }
             }
         ],
         "dnsSettings": {
             "dnsServers": [],
-            "internalDnsNameLabel": "[concat('node', padLeft(copyIndex(),3,'0'))]"
+            "internalDnsNameLabel": "[toLower(concat(parameters('ClusterName'), '-', '{{safe_dbms_mode}}-node-', copyIndex()))]"
         },
         "enableIPForwarding": false,
         "networkSecurityGroup": {
@@ -106,15 +123,15 @@
         "count": "[parameters('{{count_parameter}}')]"
     },
     "dependsOn": [
-        "[concat(variables('resourceIDs').publicIP, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
+        "[concat(variables('resourceIDs').publicIP, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
         "VirtualNetwork",
-        "IPListConstructor{{dbms_mode}}",
+        "IPListConstructor-{{dbms_mode}}",
         "[variables('namePrefixes').nsg]"
     ]
 }, 
 {
     "type": "Microsoft.Compute/virtualMachines",
-    "name": "[concat(variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
     "apiVersion": "2018-04-01",
     "location": "[parameters('Location')]",
     "tags": {
@@ -127,13 +144,24 @@
         "dbms_connector_http_listen_address": "[concat('0.0.0.0:', string(parameters('Neo4jHttpPort')))]",
         "dbms_connector_bolt_listen_address": "[concat('0.0.0.0:', string(parameters('Neo4jBoltPort')))]",
         "causal_clustering_minimum_core_cluster_size_at_formation": "3",
-        "causal_clustering_initial_discovery_members": "node000:5000,node001:5000,node002:5000",
+
+        {#
+         # Gnarly concatenation ahead.   General format we're going for is:
+         # node1DNS:5000,node2DNS:5000,node3DNS:5000
+         #
+         # Note that no matter how many core nodes the cluster has, the initial discovery members of 3 is
+         # enough for them to all find themselves.  Also, since min size is 3, doing first 3 is always safe.
+         #
+         # Pattern for one DNS entry is:
+         # concat(parameters('ClusterName'), '-', 'core-node-0')
+         #}
+        "causal_clustering_initial_discovery_members": "[toLower(concat(parameters('ClusterName'), '-', 'core-node-0:5000,', parameters('ClusterName'), '-', 'core-node-1:5000,', parameters('ClusterName'), '-', 'core-node-2:5000'))]",
         "causal_clustering_discovery_type": "LIST",
         "dbms_connector_bolt_tls_level": "OPTIONAL"
     },
     "properties": {
         "availabilitySet": {
-            "id": "[concat(variables('resourceIDs').availabilitySet, '-{{dbms_mode}}')]"
+            "id": "[concat(variables('resourceIDs').availabilitySet, '-', '{{safe_dbms_mode}}')]"
         },
         "hardwareProfile": {
             "vmSize": "[parameters('VmSize')]"
@@ -141,7 +169,7 @@
         "storageProfile": {
             "imageReference": "[variables('imageReference')]",
             "osDisk": {
-                "name": "[concat(variables('namePrefixes').vm,'-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'), '-OS')]",
+                "name": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex(), '-OS')]",
                 "createOption": "fromImage",
                 "managedDisk": {
                     "storageAccountType": "Standard_LRS"
@@ -150,7 +178,7 @@
             "dataDisks": [
                 {
                     "lun": 0,
-                    "name": "[concat(variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'),'-Data-0')]",
+                    "name": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex(), '-Data-0')]",
                     "createOption": "Empty",
                     "managedDisk": {
                         "storageAccountType": "Standard_LRS"
@@ -161,7 +189,7 @@
             ]
         },
         "osProfile": {
-            "computerName": "[concat(variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
+            "computerName": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
             "adminUsername": "[parameters('AdminUserName')]",
             "linuxConfiguration": "[variables('authConfig').linuxConfiguration]",
             "secrets": [],
@@ -170,7 +198,7 @@
         "networkProfile": {
             "networkInterfaces": [
                 {
-                    "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0')))]"
+                    "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', '{{safe_dbms_mode}}', '-', copyIndex()))]"
                 }
             ]
         }
@@ -180,16 +208,16 @@
         "count": "[parameters('{{ count_parameter }}')]"
     },
     "dependsOn": [
-        "[concat(variables('resourceIDs').availabilitySet, '-{{dbms_mode}}')]",
-        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0')))]"
+        "[concat(variables('resourceIDs').availabilitySet, '-', '{{safe_dbms_mode}}')]",
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', '{{safe_dbms_mode}}', '-', copyIndex()))]"
     ]
 },
 {
     "type": "Microsoft.Resources/deployments",
-    "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]",
+    "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
     "apiVersion": "2017-05-10",
     "dependsOn": [
-        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]"
+        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]"
     ],
     "copy": {
         "name": "vmExtLoop",
@@ -203,7 +231,7 @@
         },
         "parameters": {
             "VmName": {
-                "value": "[concat(variables('namePrefixes').vm, '-{{dbms_mode}}-', padLeft(copyIndex(),3,'0'))]"
+                "value": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]"
             },
             "Location": {
                 "value": "[parameters('Location')]"

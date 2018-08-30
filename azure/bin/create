@@ -4,10 +4,6 @@
 # templates.  Most of it can be controlled from the outside by setting env vars.
 ########################################################################################
 
-if [ -z "${CLUSTERNAME}" ]; then
-    CLUSTERNAME="neo4j-test"
-fi
-
 if [ -z "${CORE_NODES}" ]; then
     CORE_NODES=3
 fi
@@ -29,8 +25,15 @@ if [ -z "${USERNAME}" ]; then
     USERNAME=$(whoami)
 fi
 
+SEED=$(head -c 3 /dev/urandom | base64 | sed 's/[^a-zA-Z0-9]/X/g')
+
 if [ -z "${RESOURCE_GROUP}" ] ; then
-   export RESOURCE_GROUP=RG-testdeploy-$(head -c 3 /dev/urandom | base64 | sed 's/[^a-zA-Z0-9]/X/g')
+   export RESOURCE_GROUP="RG-${SEED}"
+fi
+
+if [ -z "${CLUSTERNAME}" ]; then
+    # Must always be < 11 chars.
+    CLUSTERNAME="neo4j-${SEED}"
 fi
 
 if [ -z "${DEPLOYMENT}" ]; then
@@ -146,11 +149,19 @@ if [ $? -ne 0 ] ; then
     exit 1
 fi
 
-echo "When ready to deploy, run this command:"
+echo
+echo "When finished with the resource group, execute:"
+echo az group delete -n "${RESOURCE_GROUP}" --no-wait --yes
+echo
 
-echo az group deployment create \
+echo "============================================"
+echo "===== SETUP COMPLETE BEGINNING DEPLOY ======"
+echo "============================================"
+
+az group deployment create \
     --template-file arm/mainTemplate.json \
     --parameters @./.parameters.json \
     --resource-group "${RESOURCE_GROUP}" \
     --name "${DEPLOYMENT}"
+
 

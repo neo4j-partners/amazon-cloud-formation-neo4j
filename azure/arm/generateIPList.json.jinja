@@ -2,6 +2,9 @@
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
+        "name": {
+            "type": "string"
+        },
         "firstOnSubnet": {
             "type": "int",
             "defaultValue": 4,
@@ -43,14 +46,14 @@
         "topOctet": "[variables('NetworkAddressParts')[0]]",
         "intNetworkAddress": "[int(add(0,add(mul(variables('NetworkAddressPartsInt')[1],65536),add(mul(variables('NetworkAddressPartsInt')[2],256),variables('NetworkAddressPartsInt')[3]))))]",
         "firstAddress": "[add(parameters('firstOnSubnet'), variables('intNetworkAddress'))]",
-        "stepNamePrefix": "IPList-concatStep-"
+        "stepNamePrefix": "[concat(parameters('name'), '-IPList-concatStep-')]"
     },
     "resources": [
         {
             "comments": "Dummy Step 0 to get a one-behind starting state for iterative list build from empty list",
             "type": "Microsoft.Resources/deployments",
             "name": "[concat(variables('stepNamePrefix'), '0')]",
-            "apiVersion": "2016-09-01",
+            "apiVersion": "2017-05-10",
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {

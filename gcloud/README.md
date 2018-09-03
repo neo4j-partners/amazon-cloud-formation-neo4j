@@ -7,8 +7,14 @@ add-ons have been installed.
 # A Warning
 
 Google's launcher documentation isn't great in spots, and there are a bunch of small
-WTFs.  Our technical POC was Emily Bates <emilybates@google.com> who was super helpful,
-and can answer technical questions.
+WTFs.  
+
+POCs:
+
+* Google Marketplace Ops Team cloud-partner-onboarding@google.com 
+* Previous technical POC Emily Bates <emilybates@google.com> who was super helpful,
+and can answer technical questions, but may have moved on.
+* Tor Ulstein <toruls@google.com> previously copied on threads related to our solution
 
 Read this entire README carefully, there is a lot of info on gotchas and specific instructions
 that you won't be able to find via google.

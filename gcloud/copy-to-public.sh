@@ -6,10 +6,10 @@
 # Please read the packer/README.md about these steps before using this script.
 ################################################################################
 
-# PACKER_IMAGE=
+PACKER_IMAGE=$1
 
 if [ -z $PACKER_IMAGE ] ; then
-    echo "You must explicitly set PACKER_IMAGE at the top of this script to avoid errors"
+    echo "Call me with the name of a packer image you want to copy/license"
     exit 1 ;
 fi
 

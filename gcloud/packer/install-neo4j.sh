@@ -70,6 +70,11 @@ install_plugin () {
     fi
 }
 
+echo ''
+echo '#########################################'
+echo '########## NEO4J PLUGIN INSTALL #########'
+echo '#########################################'
+
 install_plugin "APOC" "$apoc_jar"
 install_plugin "Graph Algos" "$graphalgos_jar"
 

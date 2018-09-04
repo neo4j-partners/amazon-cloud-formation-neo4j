@@ -45,33 +45,15 @@
                 "bladeTitle": "Neo4j Settings",
                 "elements": [
                     {
-                        "name": "Neo4jVersion",
-                        "type": "Microsoft.Common.DropDown",
-                        "label": "Neo4j Version",
-                        "defaultValue": "Most recent version",
+                        "name": "ClusterName",
+                        "type": "Microsoft.Common.TextBox",
+                        "label": "Neo Cluster Name",
+                        "defaultValue": "neo",
+                        "toolTip": "The name for your Neo4j cluster.  Used for VM and other name prefixes.",
                         "constraints": {
-                            "allowedValues": [
-                                {
-                                    "label": "Latest version",
-                                    "value": "default"
-                                },
-                                {
-                                    "label": "Neo4j 3.4",
-                                    "value": "default"
-                                },
-                                {
-                                    "label": "Neo4j 3.3",
-                                    "value": "3.3"
-                                },
-                                {
-                                    "label": "Neo4j 3.2",
-                                    "value": "3.2"
-                                },
-                                {
-                                    "label": "Neo4j 3.1",
-                                    "value": "3.1"
-                                }
-                            ]
+                            "required": true,
+                            "regex": "^[a-zA-Z0-9\\-]{1,11}$",
+                            "validationMessage": "Alphanumeric characters, and dash(-) are allowed.  The value must be 1-11 characters long."
                         }
                     },
                     {
@@ -85,44 +67,6 @@
                         "constraints": {
                             "required": true,
                             "regex": "^(?:(?=.*[a-z])(?:(?=.*[A-Z])(?=.*[\\d\\W])|(?=.*\\W)(?=.*\\d))|(?=.*\\W)(?=.*[A-Z])(?=.*\\d)).{12,72}$"
-                        }
-                    },
-                    {
-                        "name": "sslCert",
-                        "type": "Microsoft.Common.FileUpload",
-                        "label": "SSL Certificate",
-                        "toolTip": "SSL certificate (domain.cert) to use for HTTPS access. By default a self-signed certificate is generated.",
-                        "constraints": {
-                            "required": false,
-                            "accept": ".cert"
-                        },
-                        "options": {
-                            "uploadMode": "file"
-                        }
-                    },
-                    {
-                        "name": "sslKey",
-                        "type": "Microsoft.Common.FileUpload",
-                        "label": "SSL Private Key",
-                        "toolTip": "SSL private key (domain.key) to use for HTTPS access. By default a self-signed certificate is generated.",
-                        "constraints": {
-                            "required": false,
-                            "accept": ".key"
-                        },
-                        "options": {
-                            "uploadMode": "file"
-                        }
-                    },
-                    {
-                        "name": "ClusterName",
-                        "type": "Microsoft.Common.TextBox",
-                        "label": "Neo Cluster Name",
-                        "defaultValue": "neo",
-                        "toolTip": "The name for your Neo4j cluster.  Used for VM and other name prefixes.",
-                        "constraints": {
-                            "required": true,
-                            "regex": "^[a-zA-Z0-9\\-]{1,11}$",
-                            "validationMessage": "Alphanumeric characters, and dash(-) are allowed.  The value must be 1-11 characters long."
                         }
                     },
                     {

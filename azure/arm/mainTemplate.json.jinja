@@ -46,6 +46,11 @@
             "defaultValue": "ubuntu"
         },
 
+        "AdminAuthType": {
+            "type": "string",
+            "allowedValues": [ "sshpublickey", "password" ]
+        },
+
         "AdminCredential": {
             "type": "securestring",
             "defaultValue": null
@@ -167,6 +172,9 @@
                     },
                     "AdminUserName": {
                         "value": "[parameters('AdminUserName')]"
+                    },
+                    "AdminAuthType": {
+                        "value": "[parameters('AdminAuthType')]"
                     },
                     "AdminCredential": {
                         "value": "[parameters('AdminCredential')]"

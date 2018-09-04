@@ -65,6 +65,9 @@ echo $(cat <<JSON
     "AdminUserName": {
         "value": "${USERNAME}"
     },
+    "AdminAuthType": {
+        "value": "sshpublickey"
+    },
     "AdminCredential": {
         "value": "${PUBKEY}"
     },

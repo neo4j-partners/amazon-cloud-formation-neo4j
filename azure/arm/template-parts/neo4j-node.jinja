@@ -191,9 +191,9 @@
         "osProfile": {
             "computerName": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
             "adminUsername": "[parameters('AdminUserName')]",
+            "adminPassword": "[variables('authConfig').adminPassword]",
             "linuxConfiguration": "[variables('authConfig').linuxConfiguration]",
             "secrets": [],
-            "adminPassword": "[variables('authConfig').adminPassword]"
         },
         "networkProfile": {
             "networkInterfaces": [

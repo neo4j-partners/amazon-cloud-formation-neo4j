@@ -103,10 +103,10 @@ runtime:
     type: TYPE_GCE_VM_SSH
     action: '{{ outputs().vm1SelfLink }}'
   suggestedActions:
-    - heading: Register Your Cloud Instance of Neo4j, or get a New License
-    description: |
+    - heading: "Register Your Cloud Instance of Neo4j, or get a New License"
+      description: |
         <a href="https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace">Register here</a>
-    - heading: Connect to the Neo4j Browser
+    - heading: "Connect to the Neo4j Browser"
       description: |
         <a href="{{ outputs().vm1URL }}">{{ outputs().vm1Name }}</a>
         <a href="{{ outputs().vm2URL }}">{{ outputs().vm2Name }}</a>

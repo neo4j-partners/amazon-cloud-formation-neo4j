@@ -7,11 +7,15 @@ description:
   logo: '@media/solution-name_store.png'
   tagline: 'Neo4j Enterprise: Causal Clustering'
   title: Neo4j Enterprise
-  url: https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace
+  url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
   version: 3.4.7
   documentations:
-  - title: Register your Neo4j Instance / Get a New License
-    url: https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace
+  - title: Register Neo4j Instance/Get a License
+    url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
+    description: License Registration
+    destinations:
+    - DESTINATION_SOLUTION_DETAILS
+    - DESTINATION_POST_DEPLOY
   - title: Neo4j Documentation
     url: https://neo4j.com/docs/
     description: All Neo4j Documentation
@@ -103,10 +107,9 @@ runtime:
     type: TYPE_GCE_VM_SSH
     action: '{{ outputs().vm1SelfLink }}'
   suggestedActions:
-    - heading: "Register Your Cloud Instance of Neo4j, or get a New License"
-      description: |
-        <a href="https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace">Register here</a>
-    - heading: "Connect to the Neo4j Browser"
+    - heading: Register Your Cloud Instance of Neo4j or get a New License
+      description: '<a href="https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace">Register here</a>'
+    - heading: Connect to the Neo4j Browser
       description: |
         <a href="{{ outputs().vm1URL }}">{{ outputs().vm1Name }}</a>
         <a href="{{ outputs().vm2URL }}">{{ outputs().vm2Name }}</a>

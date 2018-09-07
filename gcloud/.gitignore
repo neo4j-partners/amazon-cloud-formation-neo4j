@@ -1,2 +1,3 @@
 # GCP service account credentials
 packer-sa.json
+.DS_Store

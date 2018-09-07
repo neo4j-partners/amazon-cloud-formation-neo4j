@@ -24,7 +24,7 @@ Causal clusters:
 Generate from Jinja template, upload to S3, and validate.
 
 ```
-export VERSION=3.4.4
+export VERSION=3.4.7
 S3BUCKET=neo4j-cloudformation
 GEN_STACK=neo4j-enterprise-stack-$VERSION-test.json
 pipenv run python3 generate.py --template deploy.jinja > $GEN_STACK && \
@@ -36,7 +36,7 @@ aws cloudformation validate-template \
 Standalone:
 
 ```
-export VERSION=3.4.4
+export VERSION=3.4.7
 S3BUCKET=neo4j-cloudformation
 GEN_STACK=neo4j-enterprise-standalone-stack-$VERSION-test.json
 pipenv run python3 generate.py --template deploy-standalone.jinja > $GEN_STACK && \

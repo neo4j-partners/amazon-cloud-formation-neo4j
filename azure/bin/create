@@ -17,8 +17,14 @@ if [ -z "${NEO4J_PASSWORD}" ]; then
     echo
 fi
 
-if [ -z "${PUBKEY}" ]; then
-    PUBKEY=$(cat ~/.ssh/id_rsa.pub)
+if [ -z "${ADMIN_CREDENTIAL}" ]; then
+    ADMIN_CREDENTIAL=$(cat ~/.ssh/id_rsa.pub)
+    # ADMIN_CREDENTIAL="p0_p01l;ST55"
+fi
+
+if [ -z "${ADMIN_AUTH_TYPE}" ]; then
+    ADMIN_AUTH_TYPE="sshpublickey"
+    # ADMIN_AUTH_TYPE="password"
 fi
 
 if [ -z "${USERNAME}" ]; then
@@ -59,6 +65,9 @@ echo $(cat <<JSON
     "VmSize": {
         "value": "Standard_A1"
     },
+    "DataDiskType": {
+        "value": "StandardSSD_LRS"
+    },
     "DataDiskSizeGB": {
         "value": 512
     },
@@ -66,25 +75,10 @@ echo $(cat <<JSON
         "value": "${USERNAME}"
     },
     "AdminAuthType": {
-        "value": "sshpublickey"
+        "value": "${ADMIN_AUTH_TYPE}"
     },
     "AdminCredential": {
-        "value": "${PUBKEY}"
-    },
-    "VNetResourceGroupName": {
-        "value": "${RESOURCE_GROUP}"
-    },
-    "VNetName": {
-        "value": "neoVnet"
-    },
-    "VNetAddressPrefix": {
-        "value": "10.0.0.0/16"
-    },
-    "SubnetName": {
-        "value": "NeoVnetSubnet1"
-    },
-    "SubnetAddressPrefix": {
-        "value": "10.0.1.0/24"
+        "value": "${ADMIN_CREDENTIAL}"
     },
     "PublicIPAllocationMethod": {
         "value": "Static"

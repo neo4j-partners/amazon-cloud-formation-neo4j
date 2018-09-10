@@ -35,6 +35,12 @@
             "defaultValue": "Standard_D4_v2"
         },
 
+        "DataDiskType": {
+            "type": "string",
+            "defaultValue": "Standard_LRS",
+            "allowedValues": [ "Standard_LRS", "StandardSSD_LRS" ]
+        },
+
         "DataDiskSizeGB": {
             "type": "int",
             "minValue": 5,
@@ -54,26 +60,6 @@
         "AdminCredential": {
             "type": "securestring",
             "defaultValue": null
-        },
-
-        "VNetName": {
-            "type": "string"
-        },
-
-        "VNetAddressPrefix": {
-            "type": "string"
-        },
-
-        "VNetResourceGroupName": {
-            "type": "string"
-        },
-
-        "SubnetName": {
-            "type": "string"
-        },
-
-        "SubnetAddressPrefix": {
-            "type": "string"
         },
 
         "PublicIPAllocationMethod": {
@@ -167,6 +153,9 @@
                     "VmSize": {
                         "value": "[parameters('VmSize')]"
                     },
+                    "DataDiskType": {
+                        "value": "[parameters('DataDiskType')]"
+                    },
                     "DataDiskSizeGB": {
                         "value": "[parameters('DataDiskSizeGB')]"
                     },
@@ -178,21 +167,6 @@
                     },
                     "AdminCredential": {
                         "value": "[parameters('AdminCredential')]"
-                    },
-                    "VNetName": {
-                        "value": "[parameters('VNetName')]"
-                    },
-                    "VNetAddressPrefix": {
-                        "value": "[parameters('VNetAddressPrefix')]"
-                    },
-                    "VNetResourceGroupName": {
-                        "value": "[parameters('VNetResourceGroupName')]"
-                    },
-                    "SubnetName": {
-                        "value": "[parameters('SubnetName')]"
-                    },
-                    "SubnetAddressPrefix": {
-                        "value": "[parameters('SubnetAddressPrefix')]"
                     },
                     "PublicIPAllocationMethod": {
                         "value": "[parameters('PublicIPAllocationMethod')]"

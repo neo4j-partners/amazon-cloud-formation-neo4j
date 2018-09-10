@@ -100,7 +100,7 @@
                 "name": "ipconfig1",
                 "properties": {
                     "subnet": {
-                        "id": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/', parameters('SubnetName'))]"
+                        "id": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/NeoVnetSubnet1')]"
                     },
                     "privateIPAllocationMethod": "Dynamic",
                     "publicIPAddress": {
@@ -132,7 +132,7 @@
 {
     "type": "Microsoft.Compute/virtualMachines",
     "name": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
-    "apiVersion": "2018-04-01",
+    "apiVersion": "2018-06-01",
     "location": "[parameters('Location')]",
     "tags": {
         "provider": "B9442746-5BFF-4E2F-BC90-1F49C5791FAA",
@@ -181,7 +181,7 @@
                     "name": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex(), '-Data-0')]",
                     "createOption": "Empty",
                     "managedDisk": {
-                        "storageAccountType": "Standard_LRS"
+                        "storageAccountType": "[parameters('DataDiskType')]"
                     },
                     "caching": "None",
                     "diskSizeGB": "[parameters('DataDiskSizeGB')]"
@@ -193,7 +193,7 @@
             "adminUsername": "[parameters('AdminUserName')]",
             "adminPassword": "[variables('authConfig').adminPassword]",
             "linuxConfiguration": "[variables('authConfig').linuxConfiguration]",
-            "secrets": [],
+            "secrets": []
         },
         "networkProfile": {
             "networkInterfaces": [

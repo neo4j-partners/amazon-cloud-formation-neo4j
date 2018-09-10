@@ -48,7 +48,7 @@
                         "name": "ClusterName",
                         "type": "Microsoft.Common.TextBox",
                         "label": "Neo Cluster Name",
-                        "defaultValue": "neo",
+                        "defaultValue": "neo4j",
                         "toolTip": "The name for your Neo4j cluster.  Used for VM and other name prefixes.",
                         "constraints": {
                             "required": true,
@@ -63,10 +63,10 @@
                             "password": "Neo4j password",
                             "confirmPassword": "Confirm Neo4j password"
                         },
-                        "toolTip": "The password used to authenticate with the 'neo4j' user as 12-72 characters. Must include at least 3 of: 1 lower case character, 1 upper case character, 1 number, and 1 special character.",
+                        "toolTip": "The password used to authenticate with the 'neo4j' user as 8 or more characters. Must include at least 3 of: 1 lower case character, 1 upper case character, 1 number, and 1 special character.",
                         "constraints": {
                             "required": true,
-                            "regex": "^(?:(?=.*[a-z])(?:(?=.*[A-Z])(?=.*[\\d\\W])|(?=.*\\W)(?=.*\\d))|(?=.*\\W)(?=.*[A-Z])(?=.*\\d)).{12,72}$"
+                            "regex": "^(?:(?=.*[a-z])(?:(?=.*[A-Z])(?=.*[\\d\\W])|(?=.*\\W)(?=.*\\d))|(?=.*\\W)(?=.*[A-Z])(?=.*\\d)).{8,72}$"
                         }
                     },
                     {
@@ -145,65 +145,44 @@
                         "visible": true
                     },
                     {
-                        "name": "VNet",
-                        "type": "Microsoft.Network.VirtualNetworkCombo",
-                        "label": {
-                            "virtualNetwork": "Virtual network for the Cluster",
-                            "subnets": "Subnet for VMs"
-                        },
-                        "toolTip": {
-                            "virtualNetwork": "",
-                            "subnets": ""
-                        },
-                        "defaultValue": {
-                            "name": "neo-vnet-01",
-                            "addressPrefixSize": "/24"
-                        },
+                        "name": "DataDiskType",
+                        "type": "Microsoft.Common.OptionsGroup",
+                        "label": "Data Disk Type",
+                        "defaultValue": "StandardSSD_LRS",
+                        "toolTip": "",
                         "constraints": {
-                            "minAddressPrefixSize": "/27"
-                        },
-                        "options": {
-                            "hideExisting": true
-                        },
-                        "subnets": {
-                            "cluster": {
-                                "label": "Subnet for Cluster VMs",
-                                "defaultValue": {
-                                    "name": "clusterSubnet",
-                                    "addressPrefixSize": "/24"
-                                },
-                                "constraints": {
-                                    "minAddressPrefixSize": "/27",
-                                    "minAddressCount": 12,
-                                    "requireContiguousAddresses": true
-                                }
+                            "allowedValues": [
+                            {
+                                "label": "Solid State Disk (StandardSSD_LRS)",
+                                "value": "StandardSSD_LRS"
+                            },
+                            {
+                                "label": "Standard Disk (Standard_LRS)",
+                                "value": "Standard_LRS"
                             }
+                            ],
+                            "required": true
                         },
                         "visible": true
                     },
                     {
-                        "name": "PublicIP",
-                        "type": "Microsoft.Network.PublicIpAddressCombo",
-                        "label": {
-                            "publicIpAddress": "Public IP address",
-                            "domainNameLabel": "None"
-                        },
-                        "toolTip": {
-                            "publicIpAddress": "Public IP address where Neo4j will be accessible. Select None if you don't want Neo4j to be publically accessible.",
-                            "domainNameLabel": ""
-                        },
-                        "defaultValue": {
-                            "publicIpAddressName": "NeoIP001"
-                        },
+                        "name": "PublicIPAllocationMethod",
+                        "type": "Microsoft.Common.OptionsGroup",
+                        "label": "Public IP Allocation Method",
+                        "defaultValue": "Dynamic",
+                        "toolTip": "",
                         "constraints": {
-                            "required": {
-                                "domainNameLabel": false
+                            "allowedValues": [
+                            {
+                                "label": "Dynamic",
+                                "value": "Dynamic"
+                            },
+                            {
+                                "label": "Static",
+                                "value": "Static"
                             }
-                        },
-                        "options": {
-                            "hideNone": false,
-                            "hideExisting": false,
-                            "hideDomainNameLabel": true
+                            ],
+                            "required": true
                         },
                         "visible": true
                     }
@@ -216,19 +195,16 @@
             "CoreNodes": "[int(steps('neo4jConfig').CoreNodes)]",
             "ReadReplicas": "[int(steps('neo4jConfig').ReadReplicas)]",
             "VmSize": "[steps('neo4jConfig').VmSize]",
-            "DataDiskSizeGB": "[steps('neo4jConfig').DataDiskSizeGB]",
+            "DataDiskType": "[steps('neo4jConfig').DataDiskType]",
+            "DataDiskSizeGB": "[int(steps('neo4jConfig').DataDiskSizeGB)]",
             "AdminUserName": "[basics('AdminUserName')]",
             "AdminAuthType": "[toLower(basics('adminCredentials').authenticationType)]",
             "AdminCredential": "[coalesce(basics('adminCredentials').password,basics('adminCredentials').sshPublicKey)]",
-            "VNetNewOrExisting": "[toLower(steps('neo4jConfig').VNet.newOrExisting)]",
-            "VNetName": "[steps('neo4jConfig').VNet.name]",
-            "VNetResourceGroupName": "[steps('neo4jConfig').VNet.resourceGroup]",
-            "VNetAddressPrefix": "[first(steps('neo4jConfig').VNet.addressPrefixes)]",
-            "SubnetName": "[steps('neo4jConfig').VNet.subnets.cluster.name]",
-            "SubnetAddressPrefix": "[steps('neo4jConfig').VNet.subnets.cluster.addressPrefix]",
-            "SubnetStartAddress": "[steps('neo4jConfig').VNet.subnets.cluster.startAddress]",
-            "PublicIPNewOrExistingOrNone": "[toLower(steps('neo4jConfig').PublicIP.newOrExistingOrNone)]",
-            "Neo4jPassword": "[steps('neo4jConfig').Neo4jPassword]"
+            "PublicIPAllocationMethod": "[steps('neo4jConfig').PublicIPAllocationMethod]",
+            "Neo4jPassword": "[steps('neo4jConfig').Neo4jPassword]",
+            "Neo4jBoltPort": 7687,
+            "Neo4jHttpsPort": 7473,
+            "Neo4jHttpPort": 7474
         }
     }
 }

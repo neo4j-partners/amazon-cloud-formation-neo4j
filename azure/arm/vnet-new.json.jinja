@@ -8,13 +8,10 @@
         
         "NetworkAddressPrefix": {
             "type": "string",
+            "defaultValue": "10.0.0.0/16",
             "metadata": {
                 "description": "CIDR for Virtual Network, e.g., 1.2.3.4/16"
             }
-        },
-
-        "SubnetName": {
-            "type": "string"
         },
 
         "Location": {
@@ -46,7 +43,7 @@
                 },
                 "subnets": [
                     {
-                        "name": "[parameters('SubnetName')]",
+                        "name": "NeoVnetSubnet1",
                         "properties": {
                             "addressPrefix": "10.0.1.0/24"
                         }

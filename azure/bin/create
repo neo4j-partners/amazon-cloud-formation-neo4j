@@ -155,10 +155,12 @@ echo "============================================"
 echo "===== SETUP COMPLETE BEGINNING DEPLOY ======"
 echo "============================================"
 
-az group deployment create \
+time az group deployment create \
     --template-file arm/mainTemplate.json \
     --parameters @./.parameters.json \
     --resource-group "${RESOURCE_GROUP}" \
-    --name "${DEPLOYMENT}"
+    --name "${DEPLOYMENT}" > .deploy.json
+
+echo "Deploy finished.  Details in .deploy.json"
 
 

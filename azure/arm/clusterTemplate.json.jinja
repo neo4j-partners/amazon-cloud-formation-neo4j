@@ -141,6 +141,8 @@
         },
         "imageReference": "[variables('imageReferenceTest')]",
         "authConfig-sshpublickey": {
+            "adminUsername": "[parameters('AdminUserName')]",
+            "adminPassword": "",
             "linuxConfiguration": {
                 "disablePasswordAuthentication": true,
                 "ssh": {
@@ -151,13 +153,11 @@
                         }
                     ]
                 }
-            },
-            "adminPassword": ""
+            }
         },
         "authConfig-password": {
-            "linuxConfiguration": {
-                "disablePasswordAuthentication": false
-            },
+            "adminUsername": "[parameters('AdminUserName')]",
+            "linuxConfiguration": null,
             "adminPassword": "[parameters('AdminCredential')]"
         },
         "authConfig": "[variables(concat('authConfig-',parameters('AdminAuthType')))]"        

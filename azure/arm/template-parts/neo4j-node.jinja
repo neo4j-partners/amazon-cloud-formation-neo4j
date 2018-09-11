@@ -208,6 +208,16 @@
         "count": "[parameters('{{ count_parameter }}')]"
     },
     "dependsOn": [
+        {#
+         # For read replicas, make them dependent on the core nodes.
+         # This prevents race startup conditions that mess up RR polling.
+         #}
+        {% if dbms_mode == "READ_REPLICA" %}
+            {% for n in range(0, 3) %}
+                "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-', 'core-{{n}}')]",
+            {% endfor %}
+        {% endif %}
+
         "[concat(variables('resourceIDs').availabilitySet, '-', '{{safe_dbms_mode}}')]",
         "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', '{{safe_dbms_mode}}', '-', copyIndex()))]"
     ]

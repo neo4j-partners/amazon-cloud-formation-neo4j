@@ -10,12 +10,15 @@ echo "Stopping Neo4j" | tee -a $LOGFILE
 /bin/systemctl stop neo4j.service 2>&1 | tee -a $LOGFILE
 
 echo `date` | tee -a $LOGFILE
-echo "Post deploy actions complete" 2>&1 | tee -a $LOGFILE
-env 2>&1 | tee -a $LOGFILE
 
 # Guarantee empty DB
 /bin/rm -rf /var/lib/neo4j/data/databases/graph.db/ 2>&1 | tee -a $LOGFILE
-/usr/bin/neo4j-admin unbind
+/usr/bin/neo4j-admin unbind 2>&1 | tee -a $LOGFILE
+
+echo "Post deploy actions complete" 2>&1 | tee -a $LOGFILE
+env 2>&1 | tee -a $LOGFILE
+
+echo "CLOUDMARK" >> /var/log/neo4j/debug.log
 
 echo "Restarting Neo4j fresh"
 /bin/systemctl start neo4j.service 2>&1 | tee -a $LOGFILE

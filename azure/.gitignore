@@ -1,4 +1,5 @@
 .parameters.json
+.deploy.json
 generated.json
 tmp-packer
 

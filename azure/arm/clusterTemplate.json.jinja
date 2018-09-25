@@ -140,27 +140,17 @@
             "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/{{image}}"
         },
         "imageReference": "[variables('imageReferenceTest')]",
-        "authConfig-sshpublickey": {
-            "adminUsername": "[parameters('AdminUserName')]",
-            "adminPassword": "",
-            "linuxConfiguration": {
-                "disablePasswordAuthentication": true,
-                "ssh": {
-                    "publicKeys": [
-                        {
-                            "path": "[concat('/home/', parameters('AdminUserName'),'/.ssh/authorized_keys')]",
-                            "keyData": "[parameters('AdminCredential')]"
-                        }
-                    ]
-                }
+        "linuxConfiguration": {
+            "disablePasswordAuthentication": true,
+            "ssh": {
+                "publicKeys": [
+                    {
+                        "path": "[concat('/home/', parameters('AdminUserName'),'/.ssh/authorized_keys')]",
+                        "keyData": "[parameters('AdminCredential')]"
+                    }
+                ]
             }
-        },
-        "authConfig-password": {
-            "adminUsername": "[parameters('AdminUserName')]",
-            "linuxConfiguration": null,
-            "adminPassword": "[parameters('AdminCredential')]"
-        },
-        "authConfig": "[variables(concat('authConfig-',parameters('AdminAuthType')))]"        
+        }
     },
     "resources": [
         {#
@@ -170,13 +160,13 @@
         {
             "type": "Microsoft.Network/networkSecurityGroups",
             "name": "[variables('namePrefixes').nsg]",
-            "apiVersion": "2017-10-01",
+            "apiVersion": "2018-07-01",
             "location": "[parameters('Location')]",
             "tags": "[parameters('Neo4JTags')]",
             "properties": {
                 "securityRules": [
                     {
-                        "name": "default-allow-ssh",
+                        "name": "AllowSSH",
                         "properties": {
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
@@ -189,7 +179,7 @@
                         }
                     },
                     {
-                        "name": "allow-http",
+                        "name": "AllowHTTP",
                         "properties": {
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
@@ -202,7 +192,7 @@
                         }
                     },
                     {
-                        "name": "allow-https",
+                        "name": "AllowHTTPS",
                         "properties": {
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
@@ -215,7 +205,7 @@
                         }
                     },
                     {
-                        "name": "allow-bolt",
+                        "name": "AllowBolt",
                         "properties": {
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
@@ -228,7 +218,7 @@
                         }
                     },
                     {
-                        "name": "neo4j-cluster-communication",
+                        "name": "Neo4jClusterCommunication",
                         "properties": {
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
@@ -241,7 +231,7 @@
                         }
                     },
                     {
-                        "name": "neo4j-transaction-communication",
+                        "name": "Neo4jTransactions",
                         "properties": {
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
@@ -254,7 +244,7 @@
                         }
                     },
                     {
-                        "name": "neo4j-raft-communication",
+                        "name": "Neo4jRaft",
                         "properties": {
                             "protocol": "Tcp",
                             "sourcePortRange": "*",
@@ -267,7 +257,7 @@
                         }
                     },
                     {
-                        "name": "neo4j-backup",
+                        "name": "Neo4jBackup",
                         "properties": {
                             "protocol": "Tcp",
                             "sourcePortRange": "*",

@@ -190,9 +190,9 @@
         },
         "osProfile": {
             "computerName": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
-            "adminUsername": "[variables('authConfig').adminUsername]",
-            "adminPassword": "[variables('authConfig').adminPassword]",
-            "linuxConfiguration": "[variables('authConfig').linuxConfiguration]"
+            "adminUsername": "[parameters('AdminUserName')]",
+            "adminPassword": "[parameters('AdminCredential')]",
+            "linuxConfiguration": "[if(equals(parameters('AdminAuthType'), 'password'), json('null'), variables('linuxConfiguration'))]"
         },
         "networkProfile": {
             "networkInterfaces": [

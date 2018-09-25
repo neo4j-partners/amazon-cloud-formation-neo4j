@@ -5,3 +5,6 @@ tmp-packer
 
 # JSON files in this dir are generated, the jinja is versioned
 arm/*.json
+
+# Exfil tmp cluster logs
+neo4j-*

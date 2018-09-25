@@ -155,6 +155,9 @@ echo "============================================"
 echo "===== SETUP COMPLETE BEGINNING DEPLOY ======"
 echo "============================================"
 
+startTime=`date`
+echo "Start Time: $startTime"
+
 time az group deployment create \
     --template-file arm/mainTemplate.json \
     --parameters @./.parameters.json \
@@ -162,5 +165,11 @@ time az group deployment create \
     --name "${DEPLOYMENT}" > .deploy.json
 
 echo "Deploy finished.  Details in .deploy.json"
+echo 
+echo "Start time was $startTime"
+echo
+echo "When finished with the resource group, execute:"
+echo az group delete -n "${RESOURCE_GROUP}" --no-wait --yes
+echo
 
 

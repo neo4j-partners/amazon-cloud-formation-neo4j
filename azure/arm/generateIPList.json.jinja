@@ -74,7 +74,7 @@
             "comments": "Build a list of NAT rules by appending this one to the previous iteration's result",
             "type": "Microsoft.Resources/deployments",
             "name": "[concat(variables('stepNamePrefix'), copyIndex(1))]",
-            "apiVersion": "2016-09-01",
+            "apiVersion": "2017-05-10",
             "dependsOn": [
                 "[concat(variables('stepNamePrefix'), copyIndex())]"
             ],

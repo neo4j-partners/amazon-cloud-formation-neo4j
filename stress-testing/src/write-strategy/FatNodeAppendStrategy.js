@@ -22,7 +22,7 @@ class FatNodeAppendStrategy extends Strategy {
         const r = p - 10000;
 
         const data = [];
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 1000; i++) {
             data.push(uuid.v4());
         }
 

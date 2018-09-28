@@ -2,23 +2,165 @@
  # This sub-template creates a collection of VMs, and resources necessary for those VMs,
  # including IP addresses, availability sets, and so on.
  #
- # This is a template snippet and is not valid JSON on its own when expanded, it is intended
- # to be included in the larger clusterTemplate.
- #
- # Intention behind this snippet is to be able to create a node set as either CORE or READ_REPLICA
+  # Intention behind this snippet is to be able to create a node set as either CORE or READ_REPLICA
  # with all dependent resources.
  # 
- # Requires jinja variables:
- #     dbms_mode = (CORE|READ_REPLICA)
- #     count_parameter e.g. "CoreNodes" - the name of the ARM parameter containing the number of
- #     VMs to generate.
- #
  # Note that this template has many ARM parameter/variable dependencies, generally taken from
  # mainTemplate.json and clusterTemplate.json
  #}
  {%
-    set safe_dbms_mode = dbms_mode.replace('_', '-').lower()
+  set image = "neo4j-enterprise-1-3.4.7-apoc_2018-09-11T12_14_38Z"
  %}
+ {
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "Location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]"
+        },
+
+        "ClusterName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 11
+        },
+
+        "DBMS_MODE": {
+            "type": "string"
+        },
+
+        "NodePrefix": {
+            "type": "string"
+        },
+
+        "N": {
+            "type": "int"
+        },
+
+        "VmSize": {
+            "type": "string"
+        },
+
+        "DataDiskType": {
+            "type": "string"
+        },
+
+        "DataDiskSizeGB": {
+            "type": "int",
+            "minValue": 5,
+            "defaultValue": 1024
+        },
+
+        "AdminUserName": {
+            "type": "securestring"
+        },
+
+        "AdminAuthType": {
+            "type": "string",
+            "allowedValues": ["sshpublickey", "password"]
+        },
+
+        "AdminCredential": {
+            "type": "securestring",
+            "defaultValue": null
+        },
+
+        "PublicIPAllocationMethod": {
+            "type": "string",
+            "allowedValues": ["Static", "Dynamic"]
+        },
+
+        "Neo4jPassword": {
+            "type": "securestring"
+        },
+
+        "Neo4jHttpsPort": {
+            "type": "int"
+        },
+
+        "Neo4jHttpPort": {
+            "type": "int"
+        },
+
+        "Neo4jBoltPort": {
+            "type": "int"
+        },
+        
+        "Neo4jClusterPort": {
+            "type": "int",
+            "defaultValue": 5000,
+            "metadata": {
+                "description": "The port used for communication between instances in the cluster"
+            }
+        },
+
+        "Neo4jTransactionPort": {
+            "type": "int",
+            "defaultValue": 6000,
+            "metadata": {
+                "description": "The port used to read transaction data from the master"
+            }
+        },
+
+        "Neo4jRaftPort": {
+            "type": "int",
+            "defaultValue": 7000,
+            "metadata": {
+                "description": "The port used to read transaction data from the master"
+            }
+        },
+
+        "Neo4JTags": {
+            "type": "object",
+            "metadata": {
+                "description": "Dictionary of tags to apply to the various resources"
+            }
+        },
+
+        "ArtifactsBase": {
+            "type": "string",
+            "metadata": {
+                "artifactsBaseUrl": "",
+                "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
+            },
+            "defaultValue": "https://s3.amazonaws.com/neo4j-arm/test"
+        }
+    },
+    "variables": {
+        "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
+        "namePrefixes": {
+            "nic": "[concat(parameters('ClusterName'),'-nic')]",
+            "nsg": "[concat(parameters('ClusterName'),'-sg')]",
+            "storage": "[concat(toLower(trim(parameters('ClusterName'))), uniqueString(resourceGroup().id))]",
+            "vm": "[concat(parameters('ClusterName'),'-vm')]",
+            "publicIP": "[concat(parameters('ClusterName'),'-public-ip')]",
+            "availabilitySet": "[concat(parameters('ClusterName'), '-as')]"
+        },
+        "VNetName": "[concat(parameters('ClusterName'),'-vnet')]",
+        "resourceIDs": {
+            "availabilitySet": "[resourceId('Microsoft.Compute/availabilitySets', variables('namePrefixes').availabilitySet)]",
+            "publicIP": "[resourceId('Microsoft.Network/publicIPAddresses', variables('namePrefixes').publicIP)]",
+            "virtualNetwork": "[resourceId(resourceGroup().name, 'Microsoft.Network/virtualNetworks', variables('VNetName'))]"
+        },
+        "imageReferenceTest": {
+            "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/{{image}}"
+        },
+        "imageReference": "[variables('imageReferenceTest')]",
+        "linuxConfiguration": {
+            "disablePasswordAuthentication": true,
+            "ssh": {
+                "publicKeys": [
+                    {
+                        "path": "[concat('/home/', parameters('AdminUserName'),'/.ssh/authorized_keys')]",
+                        "keyData": "[parameters('AdminCredential')]"
+                    }
+                ]
+            }
+        }
+    },
+    "resources": [
+    
 {
     {# 
      # DOCS: https://docs.microsoft.com/en-us/azure/virtual-machines/windows/manage-availability#configure-multiple-virtual-machines-in-an-availability-set-for-redundancy 
@@ -27,8 +169,9 @@
      # across these domains so that a power source failure or needed VM upgrade can't interrupt the
      # entire cluster, or even the entire read replica set.
      #}
+    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Compute/availabilitySets",
-    "name": "[concat(variables('namePrefixes').availabilitySet, '-', '{{safe_dbms_mode}}')]",
+    "name": "[concat(variables('namePrefixes').availabilitySet, '-', parameters('NodePrefix'))]",
     "apiVersion": "2018-06-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
@@ -42,8 +185,9 @@
     "dependsOn": []
 },
 {
+    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Resources/deployments",
-    "name": "IPListConstructor-{{dbms_mode}}",
+    "name": "[concat('IPListConstructor', parameters('NodePrefix')]",
     "apiVersion": "2017-05-10",
     "dependsOn": [],
     "properties": {
@@ -54,17 +198,13 @@
         },
         "parameters": {
             "name": {
-                "value": "{{dbms_mode}}"
+                "value": "[parameters('NodePrefix')]"
             },
             "subnetCIDR": {
-                {% if dbms_mode == "CORE" %}
-                "value": "10.0.1.0/25"
-                {% else %}
-                "value": "10.0.1.128/25"
-                {% endif %}
+                "value": "[if(equals(parameters('NodePrefix'), 'core'), '10.0.1.0/25', '10.0.1.128/25')]"
             },
             "addressCount": {
-                "value": "[parameters('{{count_parameter}}')]"
+                "value": "[parameters('N')]"
             },
             "ArtifactsBase": {
                 "value": "[parameters('ArtifactsBase')]"
@@ -73,24 +213,26 @@
     }
 },
 {
+    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Network/publicIPAddresses",
-    "name": "[concat(variables('namePrefixes').publicIP, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
+    "name": "[concat(variables('namePrefixes').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2017-08-01",
     "location": "[parameters('Location')]",
     "properties": {
         "publicIPAllocationMethod": "[parameters('PublicIPAllocationMethod')]",
         "dnsSettings": {
-            "domainNameLabel": "[toLower(concat(parameters('ClusterName'), '-', '{{safe_dbms_mode}}-node-', copyIndex()))]"
+            "domainNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex()))]"
         }                
     },
     "copy": {
-        "name": "ip{{dbms_mode}}CI",
-        "count": "[parameters('{{count_parameter}}')]"
+        "name": "[concat('ip', parameters('NodePrefix'), 'CI')]",
+        "count": "[parameters('N')]"
     }
 },
 {
+    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Network/networkInterfaces",
-    "name": "[concat(variables('namePrefixes').nic, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
+    "name": "[concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2017-10-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
@@ -104,14 +246,14 @@
                     },
                     "privateIPAllocationMethod": "Dynamic",
                     "publicIPAddress": {
-                        "id": "[concat(variables('resourceIDs').publicIP, '-', '{{safe_dbms_mode}}', '-', copyIndex())]"
+                        "id": "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
                     }
                 }
             }
         ],
         "dnsSettings": {
             "dnsServers": [],
-            "internalDnsNameLabel": "[toLower(concat(parameters('ClusterName'), '-', '{{safe_dbms_mode}}-node-', copyIndex()))]"
+            "internalDnsNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex()))]"
         },
         "enableIPForwarding": false,
         "networkSecurityGroup": {
@@ -120,25 +262,26 @@
     },
     "copy": {
         "name": "nicCI",
-        "count": "[parameters('{{count_parameter}}')]"
+        "count": "[parameters('N')]"
     },
     "dependsOn": [
-        "[concat(variables('resourceIDs').publicIP, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
+        "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
         "VirtualNetwork",
-        "IPListConstructor-{{dbms_mode}}",
+        "[concat('IPListConstructor-', parameters('NodePrefix'))]",
         "[variables('namePrefixes').nsg]"
     ]
 }, 
 {
+    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Compute/virtualMachines",
-    "name": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
+    "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2018-06-01",
     "location": "[parameters('Location')]",
     "tags": {
         "provider": "B9442746-5BFF-4E2F-BC90-1F49C5791FAA",
         "neo4jURL": "https://neo4j.com/",
         "licensing": "https://neo4j.com/lp/enterprise-cloud/?utm_content=azure-marketplace",
-        "dbms_mode": "{{ dbms_mode }}",
+        "dbms_mode": "[parameters('DBMS_MODE')]",
         "neo4j_mode": "cluster",
         "dbms_connector_https_listen_address": "[concat('0.0.0.0:', string(parameters('Neo4jHttpsPort')))]",
         "dbms_connector_http_listen_address": "[concat('0.0.0.0:', string(parameters('Neo4jHttpPort')))]",
@@ -161,7 +304,7 @@
     },
     "properties": {
         "availabilitySet": {
-            "id": "[concat(variables('resourceIDs').availabilitySet, '-', '{{safe_dbms_mode}}')]"
+            "id": "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]"
         },
         "hardwareProfile": {
             "vmSize": "[parameters('VmSize')]"
@@ -169,7 +312,7 @@
         "storageProfile": {
             "imageReference": "[variables('imageReference')]",
             "osDisk": {
-                "name": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex(), '-OS')]",
+                "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex(), '-OS')]",
                 "createOption": "fromImage",
                 "managedDisk": {
                     "storageAccountType": "Standard_LRS"
@@ -178,7 +321,7 @@
             "dataDisks": [
                 {
                     "lun": 0,
-                    "name": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex(), '-Data-0')]",
+                    "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex(), '-Data-0')]",
                     "createOption": "Empty",
                     "managedDisk": {
                         "storageAccountType": "[parameters('DataDiskType')]"
@@ -189,7 +332,7 @@
             ]
         },
         "osProfile": {
-            "computerName": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
+            "computerName": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
             "adminUsername": "[parameters('AdminUserName')]",
             "adminPassword": "[parameters('AdminCredential')]",
             "linuxConfiguration": "[if(equals(parameters('AdminAuthType'), 'password'), json('null'), variables('linuxConfiguration'))]"
@@ -197,40 +340,42 @@
         "networkProfile": {
             "networkInterfaces": [
                 {
-                    "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', '{{safe_dbms_mode}}', '-', copyIndex()))]"
+                    "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex()))]"
                 }
             ]
         }
     },
     "copy": {
-        "name": "vm{{ dbms_mode }}CI",
-        "count": "[parameters('{{ count_parameter }}')]"
+        "name": "[concat('vm', parameters('DBMS_MODE'), 'CI')]",
+        "count": "[parameters('N')]"
     },
     "dependsOn": [
         {#
          # For read replicas, make them dependent on the core nodes.
          # This prevents race startup conditions that mess up RR polling.
-         #}
+         
         {% if dbms_mode == "READ_REPLICA" %}
             {% for n in range(0, 3) %}
                 "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-', 'core-{{n}}')]",
             {% endfor %}
         {% endif %}
 
-        "[concat(variables('resourceIDs').availabilitySet, '-', '{{safe_dbms_mode}}')]",
-        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', '{{safe_dbms_mode}}', '-', copyIndex()))]"
+        "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex()))]"
+        #}
     ]
 },
 {
+    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Resources/deployments",
-    "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]",
+    "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2017-05-10",
     "dependsOn": [
-        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]"
+        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]"
     ],
     "copy": {
         "name": "vmExtLoop",
-        "count": "[parameters('{{ count_parameter }}')]"
+        "count": "[parameters('N')]"
     },
     "properties": {
         "mode": "Incremental",
@@ -240,7 +385,7 @@
         },
         "parameters": {
             "VmName": {
-                "value": "[concat(variables('namePrefixes').vm, '-', '{{safe_dbms_mode}}', '-', copyIndex())]"
+                "value": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]"
             },
             "Location": {
                 "value": "[parameters('Location')]"
@@ -253,4 +398,6 @@
             }
         }
     }
+}
+    ]
 }

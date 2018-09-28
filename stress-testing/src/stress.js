@@ -26,12 +26,13 @@ const concurrency = { concurrency: (!Number.isNaN(p) && p > 0) ? p : 10 };
 // By tweaking the distribution of these numbers you can control how frequently
 // each strategy is executed.
 const probabilityTable = [
-  [ 0.001, 'fatnodeWrite' ],
-  [ 0.002, 'naryWrite' ],
-  [ 0.25, 'mergeWrite' ],
+  [ 0.1, 'fatnodeWrite' ],
+  [ 0.2, 'naryWrite' ],
+  [ 0.3, 'mergeWrite' ],
+  [ 0.4, 'randomLinkage' ],
   [ 0.50, 'aggregateRead' ],
-  [ 0.55, 'metadataRead' ],
-  [ 0.60, 'longPathRead' ],
+  [ 0.60, 'metadataRead' ],
+  [ 0.70, 'longPathRead' ],
   [ 1, 'rawWrite' ],
 ];
 
@@ -74,6 +75,7 @@ const NAryTreeStrategy = require('./write-strategy/NAryTreeStrategy');
 const FatNodeAppendStrategy = require('./write-strategy/FatNodeAppendStrategy');
 const MergeWriteStrategy = require('./write-strategy/MergeWriteStrategy');
 const RawWriteStrategy = require('./write-strategy/RawWriteStrategy');
+const RandomLinkageStrategy = require('./write-strategy/RandomLinkageStrategy');
 const AggregateReadStrategy = require('./read-strategy/AggregateReadStrategy');
 const MetadataReadStrategy = require('./read-strategy/MetadataReadStrategy');
 const LongPathReadStrategy = require('./read-strategy/LongPathReadStrategy');
@@ -84,6 +86,7 @@ const strategies = {
   fatnodeWrite: new FatNodeAppendStrategy({}),
   mergeWrite: new MergeWriteStrategy({ n: 1000000 }),
   rawWrite: new RawWriteStrategy({ n: 10 }),
+  randomLinkage: new RandomLinkageStrategy({ n: 1000000 }),
 
   // READ STRATEGIES
   aggregateRead: new AggregateReadStrategy({}),

@@ -9,7 +9,7 @@ if [ -z "${CORE_NODES}" ]; then
 fi
 
 if [ -z "${READ_REPLICAS}" ]; then
-    READ_REPLICAS=2
+    READ_REPLICAS=1
 fi
 
 if [ -z "${NEO4J_PASSWORD}" ]; then
@@ -17,14 +17,16 @@ if [ -z "${NEO4J_PASSWORD}" ]; then
     echo
 fi
 
+# These are only for test deploys.  Password is meaningless, and these
+# test clusters get deleted typically <= 1 hour after they're created.
 if [ -z "${ADMIN_CREDENTIAL}" ]; then
     ADMIN_CREDENTIAL=$(cat ~/.ssh/id_rsa.pub)
-    # ADMIN_CREDENTIAL="p0_p01l;ST55"
+    #ADMIN_CREDENTIAL="p0_p01l;ST55"
 fi
 
 if [ -z "${ADMIN_AUTH_TYPE}" ]; then
     ADMIN_AUTH_TYPE="sshpublickey"
-    # ADMIN_AUTH_TYPE="password"
+    #ADMIN_AUTH_TYPE="password"
 fi
 
 if [ -z "${USERNAME}" ]; then

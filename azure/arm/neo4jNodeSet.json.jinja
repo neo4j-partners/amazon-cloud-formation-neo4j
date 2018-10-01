@@ -30,6 +30,14 @@
             "type": "string"
         },
 
+        "SubnetID": {
+            "type": "string"
+        },
+
+        "NetworkSecurityGroupId": {
+            "type": "string"
+        },
+
         "NodePrefix": {
             "type": "string"
         },
@@ -131,7 +139,6 @@
         "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
         "namePrefixes": {
             "nic": "[concat(parameters('ClusterName'),'-nic')]",
-            "nsg": "[concat(parameters('ClusterName'),'-sg')]",
             "storage": "[concat(toLower(trim(parameters('ClusterName'))), uniqueString(resourceGroup().id))]",
             "vm": "[concat(parameters('ClusterName'),'-vm')]",
             "publicIP": "[concat(parameters('ClusterName'),'-public-ip')]",
@@ -169,7 +176,6 @@
      # across these domains so that a power source failure or needed VM upgrade can't interrupt the
      # entire cluster, or even the entire read replica set.
      #}
-    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Compute/availabilitySets",
     "name": "[concat(variables('namePrefixes').availabilitySet, '-', parameters('NodePrefix'))]",
     "apiVersion": "2018-06-01",
@@ -185,9 +191,8 @@
     "dependsOn": []
 },
 {
-    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Resources/deployments",
-    "name": "[concat('IPListConstructor', parameters('NodePrefix')]",
+    "name": "[concat('IPListConstructor-', parameters('NodePrefix'))]",
     "apiVersion": "2017-05-10",
     "dependsOn": [],
     "properties": {
@@ -213,7 +218,6 @@
     }
 },
 {
-    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Network/publicIPAddresses",
     "name": "[concat(variables('namePrefixes').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2017-08-01",
@@ -230,7 +234,6 @@
     }
 },
 {
-    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Network/networkInterfaces",
     "name": "[concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2017-10-01",
@@ -241,9 +244,7 @@
             {
                 "name": "ipconfig1",
                 "properties": {
-                    "subnet": {
-                        "id": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/NeoVnetSubnet1')]"
-                    },
+                    "subnet": { "id": "[parameters('SubnetID')]" },
                     "privateIPAllocationMethod": "Dynamic",
                     "publicIPAddress": {
                         "id": "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
@@ -257,7 +258,7 @@
         },
         "enableIPForwarding": false,
         "networkSecurityGroup": {
-            "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]"
+            "id": "[parameters('NetworkSecurityGroupId')]"
         }
     },
     "copy": {
@@ -266,13 +267,10 @@
     },
     "dependsOn": [
         "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
-        "VirtualNetwork",
-        "[concat('IPListConstructor-', parameters('NodePrefix'))]",
-        "[variables('namePrefixes').nsg]"
+        "[concat('IPListConstructor-', parameters('NodePrefix'))]"
     ]
 }, 
 {
-    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Compute/virtualMachines",
     "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2018-06-01",
@@ -350,23 +348,11 @@
         "count": "[parameters('N')]"
     },
     "dependsOn": [
-        {#
-         # For read replicas, make them dependent on the core nodes.
-         # This prevents race startup conditions that mess up RR polling.
-         
-        {% if dbms_mode == "READ_REPLICA" %}
-            {% for n in range(0, 3) %}
-                "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-', 'core-{{n}}')]",
-            {% endfor %}
-        {% endif %}
-
         "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
         "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex()))]"
-        #}
     ]
 },
 {
-    "condition": "[greater(parameters('N'), 0)]",
     "type": "Microsoft.Resources/deployments",
     "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2017-05-10",

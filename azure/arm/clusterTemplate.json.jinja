@@ -298,9 +298,9 @@
          # given cluster topology role.
          #}
          {
-            "condition": "[greater(parameters('ClusterNodes'), 0)]",
+            "condition": "[greater(parameters('CoreNodes'), 0)]",
             "type": "Microsoft.Resources/deployments",
-            "name": "VirtualNetwork",
+            "name": "Neo4jCoreNodeSet",
             "apiVersion": "2017-05-10",
             "properties": {
                 "mode": "Incremental",
@@ -309,21 +309,35 @@
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {
-                    "NodePrefix": "core",
-                    "DBMS_MODE": "CORE",
-                    "N": "[parameters('CoreNodes')]",
-                    "Location": "[parameters('Location')]",
-                    "Neo4jPassword": "[parameters('Neo4jPassword')]",
-                    "ArtifactsBase": "[parameters('ArtifactsBase')]",
-                    "AdminUserName": "[parameters('AdminUserName')]",
-                    "AdminCredential": "[parameters('AdminCredential')]",
-                    "DataDiskType": "[parameters('DataDiskType')]",
-                    "DataDiskSizeGB": "[parameters('DataDiskSizeGB')]",
-                    "ClusterName": "[parameters('ClusterName')]",
-                    "VmSize": "[parameters('VmSize')]",
-                    "Neo4jHttpsPort": "[parameters('Neo4jHttpsPort')]",
-                    "Neo4jHttpPort": "[parameters('Neo4jHttpPort')]",
-                    "Neo4jBoltPort": "[parameters('Neo4jBoltPort')]"
+                    "NodePrefix": { "value": "core" },
+                    "DBMS_MODE": { "value": "CORE" },
+                    "SubnetId": { "value": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/NeoVnetSubnet1')]" },
+                    "NetworkSecurityGroupId": { "value": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]" },
+
+                    "N": { "value": "[parameters('CoreNodes')]" },
+                    "Location": { "value": "[parameters('Location')]" },
+                    
+                    "DataDiskType": { "value": "[parameters('DataDiskType')]" },
+                    "DataDiskSizeGB": { "value": "[parameters('DataDiskSizeGB')]" },
+
+                    "AdminUserName": { "value": "[parameters('AdminUserName')]" },
+                    "AdminAuthType": { "value": "[parameters('AdminAuthType')]" },
+                    "AdminCredential": { "value": "[parameters('AdminCredential')]" },
+                    "PublicIPAllocationMethod": { "value": "[parameters('PublicIPAllocationMethod')]" },
+                    "Neo4jPassword": { "value": "[parameters('Neo4jPassword')]" },
+                    "Neo4jHttpsPort": { "value": "[parameters('Neo4jHttpsPort')]" },
+                    "Neo4jHttpPort": { "value": "[parameters('Neo4jHttpPort')]" },
+                    "Neo4jBoltPort": { "value": "[parameters('Neo4jBoltPort')]" },
+
+                    "Neo4jClusterPort": { "value": "[parameters('Neo4jClusterPort')]" },
+                    "Neo4jTransactionPort": { "value": "[parameters('Neo4jTransactionPort')]" },
+                    "Neo4jRaftPort": { "value": "[parameters('Neo4jRaftPort')]" },
+                    "Neo4jTags": { "value": "[parameters('Neo4jTags')]" },
+
+                    "ClusterName": { "value": "[parameters('ClusterName')]" },
+                    "VmSize": { "value": "[parameters('VmSize')]" },
+
+                    "ArtifactsBase": { "value": "[parameters('ArtifactsBase')]" }
                 }
             }
          }

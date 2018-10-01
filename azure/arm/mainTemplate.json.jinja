@@ -1,4 +1,3 @@
-{# Set main Neo4j Azure image used in these templates here. #}
 {
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
@@ -159,28 +158,11 @@
         "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
         "namePrefixes": {
             "nic": "[concat(parameters('ClusterName'),'-nic')]",
-            "nsg": "[concat(parameters('ClusterName'),'-sg')]",
-            "storage": "[concat(toLower(trim(parameters('ClusterName'))), uniqueString(resourceGroup().id))]",
-            "vm": "[concat(parameters('ClusterName'),'-vm')]",
-            "publicIP": "[concat(parameters('ClusterName'),'-public-ip')]",
-            "availabilitySet": "[concat(parameters('ClusterName'), '-as')]"
+            "nsg": "[concat(parameters('ClusterName'),'-sg')]"
         },
         "VNetName": "[concat(parameters('ClusterName'),'-vnet')]",
         "resourceIDs": {
-            "availabilitySet": "[resourceId('Microsoft.Compute/availabilitySets', variables('namePrefixes').availabilitySet)]",
-            "publicIP": "[resourceId('Microsoft.Network/publicIPAddresses', variables('namePrefixes').publicIP)]",
             "virtualNetwork": "[resourceId(resourceGroup().name, 'Microsoft.Network/virtualNetworks', variables('VNetName'))]"
-        },
-        "linuxConfiguration": {
-            "disablePasswordAuthentication": true,
-            "ssh": {
-                "publicKeys": [
-                    {
-                        "path": "[concat('/home/', parameters('AdminUserName'),'/.ssh/authorized_keys')]",
-                        "keyData": "[parameters('AdminCredential')]"
-                    }
-                ]
-            }
         }
     },
     "resources": [
@@ -379,19 +361,5 @@
                 }
             }
          }
-
-         {#
-        {% with
-             count_parameter='CoreNodes',
-             dbms_mode="CORE" %}
-           {% include 'arm/template-parts/neo4j-node.jinja' %},
-        {% endwith %}
-
-        {% with
-             count_parameter='ReadReplicas',
-             dbms_mode='READ_REPLICA' %}
-           {% include 'arm/template-parts/neo4j-node.jinja' %}
-        {% endwith %}
-        #}
     ]
 }

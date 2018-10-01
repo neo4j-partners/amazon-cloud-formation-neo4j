@@ -139,21 +139,17 @@
         "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
         "namePrefixes": {
             "nic": "[concat(parameters('ClusterName'),'-nic')]",
-            "storage": "[concat(toLower(trim(parameters('ClusterName'))), uniqueString(resourceGroup().id))]",
             "vm": "[concat(parameters('ClusterName'),'-vm')]",
             "publicIP": "[concat(parameters('ClusterName'),'-public-ip')]",
             "availabilitySet": "[concat(parameters('ClusterName'), '-as')]"
         },
-        "VNetName": "[concat(parameters('ClusterName'),'-vnet')]",
         "resourceIDs": {
             "availabilitySet": "[resourceId('Microsoft.Compute/availabilitySets', variables('namePrefixes').availabilitySet)]",
-            "publicIP": "[resourceId('Microsoft.Network/publicIPAddresses', variables('namePrefixes').publicIP)]",
-            "virtualNetwork": "[resourceId(resourceGroup().name, 'Microsoft.Network/virtualNetworks', variables('VNetName'))]"
+            "publicIP": "[resourceId('Microsoft.Network/publicIPAddresses', variables('namePrefixes').publicIP)]"
         },
-        "imageReferenceTest": {
+        "imageReference": {
             "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/{{image}}"
         },
-        "imageReference": "[variables('imageReferenceTest')]",
         "linuxConfiguration": {
             "disablePasswordAuthentication": true,
             "ssh": {

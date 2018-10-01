@@ -1,3 +1,4 @@
+{# Set main Neo4j Azure image used in these templates here. #}
 {
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
@@ -12,22 +13,28 @@
             "minLength": 1,
             "maxLength": 11,
             "metadata": {
-                "description": "Storage Account is most restrictive at 24 char name cap, UniqueID is 13, so 24-13=11."
+                "description": "Neo4j cluster name, which is included in DNS and resource naming"
             }
         },
 
         "CoreNodes": {
             "type": "int",
             "minValue": 3,
+            "maxValue": 9,
             "defaultValue": 3,
-            "maxValue": 9
+            "metadata": {
+                "description": "The number of core nodes in the Neo4j cluster architecture"
+            }
         },
 
         "ReadReplicas": {
             "type": "int",
             "minValue": 0,
             "defaultValue": 0,
-            "maxValue": 9
+            "maxValue": 9,
+            "metadata": {
+                "description": "The number of read replicas in the Neo4j cluster architecture"
+            }
         },
 
         "VmSize": {
@@ -38,7 +45,8 @@
         "DataDiskType": {
             "type": "string",
             "defaultValue": "Standard_LRS",
-            "allowedValues": [ "Standard_LRS", "StandardSSD_LRS" ]
+            "defaultValue": "Standard_LRS",
+            "allowedValues": [ "Standard_LRS", "StandardSSD_LRS" ]            
         },
 
         "DataDiskSizeGB": {
@@ -54,30 +62,27 @@
 
         "AdminAuthType": {
             "type": "string",
-            "allowedValues": [ "sshpublickey", "password" ]
+            "allowedValues": ["sshpublickey", "password"]
         },
 
         "AdminCredential": {
             "type": "securestring",
-            "defaultValue": null
+            "defaultValue": null,
+            "metadata": {
+                "description": "The SSH public key or admin password, depending on AdminAuthType"
+            }
         },
 
         "PublicIPAllocationMethod": {
             "type": "string",
-            "allowedValues": [ "Static", "Dynamic" ],
-            "defaultValue": "Dynamic"
+            "allowedValues": ["Static", "Dynamic"]
         },
 
         "Neo4jPassword": {
             "type": "securestring",
-            "defaultValue": ""
-        },
-
-        "Neo4jBoltPort": {
-            "type": "int",
-            "defaultValue": 7687,
+            "defaultValue": "",
             "metadata": {
-                "description": "The port to use for (public) BOLT access to the primary instance."
+                "description": "Password used to access the neo4j user in neo4j"
             }
         },
 
@@ -97,6 +102,38 @@
             }
         },
 
+        "Neo4jBoltPort": {
+            "type": "int",
+            "defaultValue": 7687,
+            "metadata": {
+                "description": "The port to use for (public) BOLT access to the primary instance."
+            }
+        },
+        
+        "Neo4jClusterPort": {
+            "type": "int",
+            "defaultValue": 5000,
+            "metadata": {
+                "description": "The port used for communication between instances in the cluster"
+            }
+        },
+
+        "Neo4jTransactionPort": {
+            "type": "int",
+            "defaultValue": 6000,
+            "metadata": {
+                "description": "The port used to read transaction data from the master"
+            }
+        },
+
+        "Neo4jRaftPort": {
+            "type": "int",
+            "defaultValue": 7000,
+            "metadata": {
+                "description": "The port used to read transaction data from the master"
+            }
+        },
+
         "Neo4JTags": {
             "type": "object",
             "defaultValue": {
@@ -105,7 +142,7 @@
                 "licensing": "https://neo4j.com/licensing"
             },
             "metadata": {
-                "description": "Azure Marketplace usage ID (do not change)"
+                "description": "Dictionary of tags to apply to the various resources"
             }
         },
 
@@ -113,84 +150,248 @@
             "type": "string",
             "metadata": {
                 "artifactsBaseUrl": "",
-                "description": "Base URL at which Marketplace package files are stored. Do not remove or change. Value adjusted automatically during Marketplace submission process."
+                "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
             },
             "defaultValue": "https://s3.amazonaws.com/neo4j-arm/test"
         }
     },
     "variables": {
         "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
-        "Neo4JTags": {
-            "provider": "[toUpper(parameters('Neo4JTags').provider)]"
+        "namePrefixes": {
+            "nic": "[concat(parameters('ClusterName'),'-nic')]",
+            "nsg": "[concat(parameters('ClusterName'),'-sg')]",
+            "storage": "[concat(toLower(trim(parameters('ClusterName'))), uniqueString(resourceGroup().id))]",
+            "vm": "[concat(parameters('ClusterName'),'-vm')]",
+            "publicIP": "[concat(parameters('ClusterName'),'-public-ip')]",
+            "availabilitySet": "[concat(parameters('ClusterName'), '-as')]"
+        },
+        "VNetName": "[concat(parameters('ClusterName'),'-vnet')]",
+        "resourceIDs": {
+            "availabilitySet": "[resourceId('Microsoft.Compute/availabilitySets', variables('namePrefixes').availabilitySet)]",
+            "publicIP": "[resourceId('Microsoft.Network/publicIPAddresses', variables('namePrefixes').publicIP)]",
+            "virtualNetwork": "[resourceId(resourceGroup().name, 'Microsoft.Network/virtualNetworks', variables('VNetName'))]"
+        },
+        "linuxConfiguration": {
+            "disablePasswordAuthentication": true,
+            "ssh": {
+                "publicKeys": [
+                    {
+                        "path": "[concat('/home/', parameters('AdminUserName'),'/.ssh/authorized_keys')]",
+                        "keyData": "[parameters('AdminCredential')]"
+                    }
+                ]
+            }
         }
     },
     "resources": [
+        {#
+         # Network security group defines firewall rules for all nodes.
+         # This security group is inherited by all cores and read replicas.
+         #}
         {
-            "comments": "Build the VMs, including the needed resources such as Storage Accounts, VNET, etc.",
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "name": "[variables('namePrefixes').nsg]",
+            "apiVersion": "2018-07-01",
+            "location": "[parameters('Location')]",
+            "tags": "[parameters('Neo4JTags')]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "AllowSSH",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "22",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1000,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "AllowHTTP",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jHttpPort'))]",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1010,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "AllowHTTPS",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jHttpsPort'))]",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1020,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "AllowBolt",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jBoltPort'))]",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1030,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Neo4jClusterCommunication",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jClusterPort'))]",
+                            "sourceAddressPrefix": "VirtualNetwork",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1040,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Neo4jTransactions",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jTransactionPort'))]",
+                            "sourceAddressPrefix": "VirtualNetwork",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1050,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Neo4jRaft",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[string(parameters('Neo4jRaftPort'))]",
+                            "sourceAddressPrefix": "VirtualNetwork",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1060,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Neo4jBackup",
+                        "properties": {
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "6362",
+                            "sourceAddressPrefix": "VirtualNetwork",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 1070,
+                            "direction": "Inbound"
+                        }
+                    }
+                ]
+            },
+            "dependsOn": []
+        },
+        {#
+         # The Virtual Network (with subnets and in locations) defines the networking environment
+         # for all nodes in the cluster.
+         #}
+        {
             "type": "Microsoft.Resources/deployments",
-            "name": "CreateNeo4jCausalCluster",
+            "name": "VirtualNetwork",
             "apiVersion": "2017-05-10",
-            "dependsOn": [],
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "uri": "[concat(variables('artifactsBase'), 'clusterTemplate.json')]",
+                    "uri": "[concat(variables('artifactsBase'), 'vnet-new.json')]",
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {
+                    "NetworkName": {
+                        "value": "[variables('VNetName')]"
+                    },
                     "Location": {
                         "value": "[parameters('Location')]"
                     },
-                    "ClusterName": {
-                        "value": "[parameters('ClusterName')]"
-                    },
-                    "CoreNodes": {
-                        "value": "[parameters('CoreNodes')]"
-                    },
-                    "ReadReplicas": {
-                        "value": "[parameters('ReadReplicas')]"
-                    },
-                    "VmSize": {
-                        "value": "[parameters('VmSize')]"
-                    },
-                    "DataDiskType": {
-                        "value": "[parameters('DataDiskType')]"
-                    },
-                    "DataDiskSizeGB": {
-                        "value": "[parameters('DataDiskSizeGB')]"
-                    },
-                    "AdminUserName": {
-                        "value": "[parameters('AdminUserName')]"
-                    },
-                    "AdminAuthType": {
-                        "value": "[parameters('AdminAuthType')]"
-                    },
-                    "AdminCredential": {
-                        "value": "[parameters('AdminCredential')]"
-                    },
-                    "PublicIPAllocationMethod": {
-                        "value": "[parameters('PublicIPAllocationMethod')]"
-                    },
-                    "Neo4jPassword": {
-                        "value": "[parameters('Neo4jPassword')]"
-                    },
-                    "Neo4jBoltPort": {
-                        "value": "[parameters('Neo4jBoltPort')]"
-                    },
-                    "Neo4jHttpsPort": {
-                        "value": "[parameters('Neo4jHttpsPort')]"
-                    },
-                    "Neo4jHttpPort": {
-                        "value": "[parameters('Neo4jHttpPort')]"
-                    },
-                    "ArtifactsBase": {
-                        "value": "[parameters('ArtifactsBase')]"
-                    },
                     "Neo4JTags": {
-                        "value": "[variables('Neo4JTags')]"
+                        "value": "[parameters('Neo4JTags')]"
                     }
                 }
             }
-        }
+        },
+        {#
+         # The following included sub-template creates all IP addresses and virtual machines for the
+         # given cluster topology role.
+         #}
+         {
+            "condition": "[greater(parameters('CoreNodes'), 0)]",
+            "type": "Microsoft.Resources/deployments",
+            "name": "Neo4jCoreNodeSet",
+            "apiVersion": "2017-05-10",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(variables('artifactsBase'), 'neo4jNodeSet.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "NodePrefix": { "value": "core" },
+                    "DBMS_MODE": { "value": "CORE" },
+                    "SubnetId": { "value": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/NeoVnetSubnet1')]" },
+                    "NetworkSecurityGroupId": { "value": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]" },
+
+                    "N": { "value": "[parameters('CoreNodes')]" },
+                    "Location": { "value": "[parameters('Location')]" },
+                    
+                    "DataDiskType": { "value": "[parameters('DataDiskType')]" },
+                    "DataDiskSizeGB": { "value": "[parameters('DataDiskSizeGB')]" },
+
+                    "AdminUserName": { "value": "[parameters('AdminUserName')]" },
+                    "AdminAuthType": { "value": "[parameters('AdminAuthType')]" },
+                    "AdminCredential": { "value": "[parameters('AdminCredential')]" },
+                    "PublicIPAllocationMethod": { "value": "[parameters('PublicIPAllocationMethod')]" },
+                    "Neo4jPassword": { "value": "[parameters('Neo4jPassword')]" },
+                    "Neo4jHttpsPort": { "value": "[parameters('Neo4jHttpsPort')]" },
+                    "Neo4jHttpPort": { "value": "[parameters('Neo4jHttpPort')]" },
+                    "Neo4jBoltPort": { "value": "[parameters('Neo4jBoltPort')]" },
+
+                    "Neo4jClusterPort": { "value": "[parameters('Neo4jClusterPort')]" },
+                    "Neo4jTransactionPort": { "value": "[parameters('Neo4jTransactionPort')]" },
+                    "Neo4jRaftPort": { "value": "[parameters('Neo4jRaftPort')]" },
+                    "Neo4jTags": { "value": "[parameters('Neo4jTags')]" },
+
+                    "ClusterName": { "value": "[parameters('ClusterName')]" },
+                    "VmSize": { "value": "[parameters('VmSize')]" },
+
+                    "ArtifactsBase": { "value": "[parameters('ArtifactsBase')]" }
+                }
+            }
+         }
+
+         {#
+        {% with
+             count_parameter='CoreNodes',
+             dbms_mode="CORE" %}
+           {% include 'arm/template-parts/neo4j-node.jinja' %},
+        {% endwith %}
+
+        {% with
+             count_parameter='ReadReplicas',
+             dbms_mode='READ_REPLICA' %}
+           {% include 'arm/template-parts/neo4j-node.jinja' %}
+        {% endwith %}
+        #}
     ]
 }

@@ -11,29 +11,42 @@
         "ClusterName": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 11
+            "maxLength": 11,
+            "metadata": {
+                "description": "Neo4j cluster name, which is included in DNS and resource naming"
+            }
         },
 
         "CoreNodes": {
             "type": "int",
             "minValue": 3,
             "maxValue": 9,
-            "defaultValue": 3
+            "defaultValue": 3,
+            "metadata": {
+                "description": "The number of core nodes in the Neo4j cluster architecture"
+            }
         },
 
         "ReadReplicas": {
             "type": "int",
             "minValue": 0,
             "defaultValue": 0,
-            "maxValue": 9
+            "maxValue": 9,
+            "metadata": {
+                "description": "The number of read replicas in the Neo4j cluster architecture"
+            }
         },
 
         "VmSize": {
-            "type": "string"
+            "type": "string",
+            "defaultValue": "Standard_D4_v2"
         },
 
         "DataDiskType": {
-            "type": "string"
+            "type": "string",
+            "defaultValue": "Standard_LRS",
+            "defaultValue": "Standard_LRS",
+            "allowedValues": [ "Standard_LRS", "StandardSSD_LRS" ]            
         },
 
         "DataDiskSizeGB": {
@@ -43,7 +56,8 @@
         },
 
         "AdminUserName": {
-            "type": "securestring"
+            "type": "securestring",
+            "defaultValue": "ubuntu"
         },
 
         "AdminAuthType": {
@@ -53,7 +67,10 @@
 
         "AdminCredential": {
             "type": "securestring",
-            "defaultValue": null
+            "defaultValue": null,
+            "metadata": {
+                "description": "The SSH public key or admin password, depending on AdminAuthType"
+            }
         },
 
         "PublicIPAllocationMethod": {
@@ -62,19 +79,35 @@
         },
 
         "Neo4jPassword": {
-            "type": "securestring"
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Password used to access the neo4j user in neo4j"
+            }
         },
 
         "Neo4jHttpsPort": {
-            "type": "int"
+            "type": "int",
+            "defaultValue": 7473,
+            "metadata": {
+                "description": "The port to use for (public) HTTPS access."
+            }
         },
 
         "Neo4jHttpPort": {
-            "type": "int"
+            "type": "int",
+            "defaultValue": 7474,
+            "metadata": {
+                "description": "The port to use for (private) HTTP access. This is used by the load balancer probes. Must not conflict with other ports."
+            }
         },
 
         "Neo4jBoltPort": {
-            "type": "int"
+            "type": "int",
+            "defaultValue": 7687,
+            "metadata": {
+                "description": "The port to use for (public) BOLT access to the primary instance."
+            }
         },
         
         "Neo4jClusterPort": {
@@ -103,6 +136,11 @@
 
         "Neo4JTags": {
             "type": "object",
+            "defaultValue": {
+                "provider": "B9442746-5BFF-4E2F-BC90-1F49C5791FAA",
+                "neo4jURL": "https://neo4j.com/",
+                "licensing": "https://neo4j.com/licensing"
+            },
             "metadata": {
                 "description": "Dictionary of tags to apply to the various resources"
             }

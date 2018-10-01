@@ -41,6 +41,10 @@ if (!process.env.NEO4J_URI) {
   process.exit(1);
 }
 
+if (!process.env.NEO4J_URI || !process.env.NEO4J_USER || !process.env.NEO4J_PASSWORD) {
+  throw new Error('One or more of necessary NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD env vars missing');
+}
+
 console.log('Connecting to ', process.env.NEO4J_URI);
 
 const driver = neo4j.driver(process.env.NEO4J_URI,
@@ -122,6 +126,8 @@ const arr = Array.apply(null, { length: TOTAL_HITS }).map(Number.call, Number);
 console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ', probabilityTable);
 process.on('SIGINT', sigintHandler);
 
+let exitCode = 0;
+
 Promise.all(setupPromises)
   .then(() => console.log(`Starting parallel strategies: concurrency ${concurrency.concurrency}`))
   .then(() => Promise.map(arr, item => runStrategy(driver).then(checkpoint), concurrency))
@@ -132,6 +138,7 @@ Promise.all(setupPromises)
       console.log(strategies[strat].lastQuery);
       console.log(strategies[strat].lastParams);
     });
+    exitCode = 1;
   })
   .finally(() => driver.close())
   .then(() => {
@@ -140,4 +147,6 @@ Promise.all(setupPromises)
       const strat = strategies[strategy];
       strat.summarize();
     });
+
+    process.exit(exitCode);
   })

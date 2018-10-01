@@ -11,6 +11,13 @@ env 2>&1 | tee -a $LOGFILE
 
 # echo "CLOUDMARK" >> /var/log/neo4j/debug.log
 
+# Because in Azure it's possible to choose password auth in most common deploys,
+# SSH has to be configured to permit this possibility.
+echo "Enabling SSH password access" | tee -a $LOGFILE
+sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config 2>&1 | tee -a $LOGFILE
+echo "Restarting SSH daemon" | tee -a $LOGFILE
+sudo service ssh restart 2>&1 | tee -a $LOGFILE
+
 sudo apt-get update 2>&1 | tee -a $LOGFILE
 
 # Loop waiting for neo4j service to start.

@@ -15,14 +15,11 @@
         "ArtifactsBase": {
             "type": "string",
             "metadata": {
-                "artifactsBaseUrl": "",
                 "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
             }
         }
     },
-    "variables": {
-        "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]"
-    },
+    "variables": {},
     "resources": [
         {
             "type": "Microsoft.Compute/virtualMachines/extensions",
@@ -36,7 +33,7 @@
                 "autoUpgradeMinorVersion": true,
                 "settings": {
                     "fileUris": [
-                        "[concat(variables('artifactsBase'), '../scripts/post-deploy.sh')]"
+                        "[concat(parameters('ArtifactsBase'), 'scripts/post-deploy.sh')]"
                     ]
                 },
                 "protectedSettings": {

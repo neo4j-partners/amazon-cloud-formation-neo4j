@@ -128,15 +128,12 @@
         "ArtifactsBase": {
             "type": "string",
             "metadata": {
-                "artifactsBaseUrl": "",
                 "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
-            },
-            "defaultValue": "https://s3.amazonaws.com/neo4j-arm/test"
+            }
         }
     },
     "variables": {
         "uniqueTag": "[uniqueString(resourceGroup().id, deployment().name)]",
-        "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
         "namePrefixes": {
             "nic": "[concat(parameters('ClusterName'),'-nic')]",
             "vm": "[concat(parameters('ClusterName'),'-vm')]",
@@ -334,7 +331,7 @@
     "properties": {
         "mode": "Incremental",
         "templateLink": {
-            "uri": "[concat(variables('artifactsBase'), 'scriptTemplate.json')]",
+            "uri": "[concat(parameters('ArtifactsBase'), 'nestedtemplates/scriptTemplate.json')]",
             "contentVersion": "1.0.0.0"
         },
         "parameters": {

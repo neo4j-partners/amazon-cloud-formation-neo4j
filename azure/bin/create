@@ -88,8 +88,8 @@ echo $(cat <<JSON
     "Neo4jPassword": {
         "value": "${NEO4J_PASSWORD}"
     },
-    "ArtifactsBase": {
-        "value": "https://s3.amazonaws.com/neo4j-arm/test"
+    "_artifactsLocation": {
+        "value": "https://s3.amazonaws.com/neo4j-arm/test/"
     }
 }
 JSON

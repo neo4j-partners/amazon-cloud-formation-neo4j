@@ -65,7 +65,7 @@ echo $(cat <<JSON
         "value": ${READ_REPLICAS}
     },
     "VmSize": {
-        "value": "Standard_A1"
+        "value": "Standard_A1_v2"
     },
     "DataDiskType": {
         "value": "StandardSSD_LRS"

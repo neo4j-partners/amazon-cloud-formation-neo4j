@@ -16,8 +16,7 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "Location": {
-            "type": "string",
-            "defaultValue": "[resourceGroup().location]"
+            "type": "string"
         },
 
         "ClusterName": {
@@ -136,6 +135,7 @@
         }
     },
     "variables": {
+        "uniqueTag": "[uniqueString(resourceGroup().id, deployment().name)]",
         "artifactsBase": "[concat(parameters('ArtifactsBase'),'/')]",
         "namePrefixes": {
             "nic": "[concat(parameters('ClusterName'),'-nic')]",
@@ -187,33 +187,6 @@
     "dependsOn": []
 },
 {
-    "type": "Microsoft.Resources/deployments",
-    "name": "[concat('IPListConstructor-', parameters('NodePrefix'))]",
-    "apiVersion": "2017-05-10",
-    "dependsOn": [],
-    "properties": {
-        "mode": "Incremental",
-        "templateLink": {
-            "uri": "[concat(variables('artifactsBase'), 'generateIPList.json')]",
-            "contentVersion": "1.0.0.0"
-        },
-        "parameters": {
-            "name": {
-                "value": "[parameters('NodePrefix')]"
-            },
-            "subnetCIDR": {
-                "value": "[if(equals(parameters('NodePrefix'), 'core'), '10.0.1.0/25', '10.0.1.128/25')]"
-            },
-            "addressCount": {
-                "value": "[parameters('N')]"
-            },
-            "ArtifactsBase": {
-                "value": "[parameters('ArtifactsBase')]"
-            }
-        }
-    }
-},
-{
     "type": "Microsoft.Network/publicIPAddresses",
     "name": "[concat(variables('namePrefixes').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2017-08-01",
@@ -221,7 +194,7 @@
     "properties": {
         "publicIPAllocationMethod": "[parameters('PublicIPAllocationMethod')]",
         "dnsSettings": {
-            "domainNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex()))]"
+            "domainNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex(), '-', variables('uniqueTag')))]"
         }                
     },
     "copy": {
@@ -262,8 +235,7 @@
         "count": "[parameters('N')]"
     },
     "dependsOn": [
-        "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
-        "[concat('IPListConstructor-', parameters('NodePrefix'))]"
+        "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
     ]
 }, 
 {

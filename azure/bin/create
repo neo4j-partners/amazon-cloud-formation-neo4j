@@ -99,7 +99,7 @@ echo "Parameters have been prepared."
 
 echo "Jinja Expansion"
 # Expand all jinja templates into regular JSON
-for file in arm/*.json.jinja ; do
+for file in arm/*.json.jinja arm/nestedtemplates/*.json.jinja ; do
     # Bash magic that removes jinja extension.  foo.json.jinja -> foo.json
     jsonFile=${file%.jinja}
     echo $jsonFile

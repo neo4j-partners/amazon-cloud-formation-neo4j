@@ -29,7 +29,7 @@ license_and_copy() {
 
     echo "Creating instance..."
     # Create image from packer instance
-    gcloud compute instances create $TARGET \
+    gcloud --quiet compute instances create $TARGET \
     --scopes https://www.googleapis.com/auth/cloud-platform \
     --image-project $PROJECT \
     --tags neo4j \
@@ -39,7 +39,7 @@ license_and_copy() {
     # step builds the licensed image from the disk.  Script doesn't
     # support licensing an image (the one we already created) directly.
     echo "Deleting licensable instance and keeping disk"
-    gcloud compute instances delete $TARGET --keep-disks=all
+    gcloud --quiet compute instances delete $TARGET --keep-disks=all
 
     # This step creates a new image from the disk, licenses it,
     # and copies it to the destination public project.
@@ -55,7 +55,7 @@ license_and_copy() {
     # If all of the steps above succeeded, the remaining disk leftover from
     # the VM isn't needed.
     echo "Deleting license disk/cleanup"
-    gcloud compute disks delete $TARGET
+    gcloud --quiet compute disks delete $TARGET
 }
 
 # Community image doesn't require a license URL, just copy it.

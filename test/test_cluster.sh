@@ -93,6 +93,9 @@ for core_endpoint in $(get_bolt_endpoints_for_core); do
 
     test="Core host $CORES -- $core_endpoint has APOC installed correctly"
     runtest "$test" "RETURN apoc.version();" "$core_endpoint"
+
+    test="Core host $CORES -- $core_endpoint has Graph Algos installed correctly"
+    runtest "$test" "RETURN algo.version();" "$core_endpoint"
 done
 
 # Test for data replication.

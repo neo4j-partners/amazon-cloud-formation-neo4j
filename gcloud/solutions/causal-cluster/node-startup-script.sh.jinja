@@ -11,14 +11,6 @@
             sudo apt-get update 2>&1 | tee -a $LOGFILE
             sudo apt-get -y --only-upgrade install google-cloud-sdk 2>&1 | tee -a $LOGFILE
 
-            # Stop database, delete underlying data, remove cluster binding, restart.
-            # Guarantees clean consistent startup state, first-time discovery, and a 
-            # unique store ID for UDC reporting.
-            /bin/systemctl stop neo4j.service 2>&1 | tee -a $LOGFILE
-            /usr/bin/neo4j-admin unbind 2>&1 | tee -a $LOGFILE
-            /bin/rm -rf /var/lib/neo4j/data/databases/graph.db/ 2>&1 | tee -a $LOGFILE
-            /bin/systemctl start neo4j.service 2>&1 | tee -a $LOGFILE
-
             # Loop waiting for neo4j service to start.
             while true; do
                 if curl -s -I http://localhost:7474 | grep "200 OK"; then

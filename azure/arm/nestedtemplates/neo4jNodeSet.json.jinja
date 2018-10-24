@@ -144,9 +144,11 @@
             "availabilitySet": "[resourceId('Microsoft.Compute/availabilitySets', variables('namePrefixes').availabilitySet)]",
             "publicIP": "[resourceId('Microsoft.Network/publicIPAddresses', variables('namePrefixes').publicIP)]"
         },
+{#
         "imageReference": {
             "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/resourceGroups/neo4j-public/providers/Microsoft.Compute/images/{{image}}"
         },
+#}
         "linuxConfiguration": {
             "disablePasswordAuthentication": true,
             "ssh": {
@@ -265,6 +267,14 @@
         "causal_clustering_discovery_type": "LIST",
         "dbms_connector_bolt_tls_level": "OPTIONAL"
     },
+    {#
+     # For local testing, comment out the "plan" object, and swap the "imageReference" below.
+     #}
+    "plan": {
+        "name": "neo4j_3_4_9_apoc",
+        "publisher": "neo4j",
+        "product": "neo4j-enterprise-preview"
+    },
     "properties": {
         "availabilitySet": {
             "id": "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]"
@@ -273,7 +283,15 @@
             "vmSize": "[parameters('VmSize')]"
         },
         "storageProfile": {
+			"imageReference": {
+                "publisher": "neo4j",
+                "offer": "neo4j-enterprise-preview",
+                "sku": "neo4j_3_4_9_apoc",
+                "version": "latest"
+			},
+{#            
             "imageReference": "[variables('imageReference')]",
+#}
             "osDisk": {
                 "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex(), '-OS')]",
                 "createOption": "fromImage",

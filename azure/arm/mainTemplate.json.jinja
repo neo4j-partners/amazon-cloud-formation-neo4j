@@ -173,6 +173,22 @@
     },
     "resources": [
         {#
+         # Customer usage attribution: https://docs.microsoft.com/en-us/azure/marketplace/azure-partner-customer-usage-attribution#create-guids
+         #}
+        {
+            "apiVersion": "2018-02-01",
+            "name": "pid-4369ca20-8490-56cc-a96d-1076a554627b",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "Incremental",
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "resources": []
+                }
+            }
+        },        
+        {#
          # Network security group defines firewall rules for all nodes.
          # This security group is inherited by all cores and read replicas.
          #}

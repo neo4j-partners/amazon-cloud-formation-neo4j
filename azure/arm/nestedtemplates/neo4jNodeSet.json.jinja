@@ -349,7 +349,7 @@
     "properties": {
         "mode": "Incremental",
         "templateLink": {
-            "uri": "[concat(parameters('ArtifactsBase'), 'nestedtemplates/scriptTemplate.json')]",
+            "uri": "[uri(parameters('ArtifactsBase'), 'nestedtemplates/scriptTemplate.json')]",
             "contentVersion": "1.0.0.0"
         },
         "parameters": {

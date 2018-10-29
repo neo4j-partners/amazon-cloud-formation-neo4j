@@ -303,7 +303,7 @@
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "uri": "[concat(parameters('_artifactsLocation'), 'nestedtemplates/vnet-new.json')]",
+                    "uri": "[uri(parameters('_artifactsLocation'), 'nestedtemplates/vnet-new.json')]",
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {
@@ -331,16 +331,60 @@
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "uri": "[concat(parameters('_artifactsLocation'), 'nestedtemplates/neo4jNodeSet.json')]",
+                    "uri": "[uri(parameters('_artifactsLocation'), 'nestedtemplates/neo4jNodeSet.json')]",
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {
                     "NodePrefix": { "value": "core" },
                     "DBMS_MODE": { "value": "CORE" },
-                    "SubnetId": { "value": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/NeoVnetSubnet1')]" },
+                    "SubnetID": { "value": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/NeoVnetSubnet1')]" },
                     "NetworkSecurityGroupId": { "value": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]" },
 
                     "N": { "value": "[parameters('CoreNodes')]" },
+                    "Location": { "value": "[parameters('Location')]" },
+                    
+                    "DataDiskType": { "value": "[parameters('DataDiskType')]" },
+                    "DataDiskSizeGB": { "value": "[parameters('DataDiskSizeGB')]" },
+
+                    "AdminUserName": { "value": "[parameters('AdminUserName')]" },
+                    "AdminAuthType": { "value": "[parameters('AdminAuthType')]" },
+                    "AdminCredential": { "value": "[parameters('AdminCredential')]" },
+                    "PublicIPAllocationMethod": { "value": "[parameters('PublicIPAllocationMethod')]" },
+                    "Neo4jPassword": { "value": "[parameters('Neo4jPassword')]" },
+                    "Neo4jHttpsPort": { "value": "[parameters('Neo4jHttpsPort')]" },
+                    "Neo4jHttpPort": { "value": "[parameters('Neo4jHttpPort')]" },
+                    "Neo4jBoltPort": { "value": "[parameters('Neo4jBoltPort')]" },
+
+                    "Neo4jClusterPort": { "value": "[parameters('Neo4jClusterPort')]" },
+                    "Neo4jTransactionPort": { "value": "[parameters('Neo4jTransactionPort')]" },
+                    "Neo4jRaftPort": { "value": "[parameters('Neo4jRaftPort')]" },
+                    "Neo4jTags": { "value": "[parameters('Neo4jTags')]" },
+
+                    "ClusterName": { "value": "[parameters('ClusterName')]" },
+                    "VmSize": { "value": "[parameters('VmSize')]" },
+
+                    "ArtifactsBase": { "value": "[parameters('_artifactsLocation')]" }
+                }
+            }
+         },
+         {
+            "condition": "[greater(parameters('ReadReplicas'), 0)]",
+            "type": "Microsoft.Resources/deployments",
+            "name": "Neo4jReadReplicaNodeSet",
+            "apiVersion": "2017-05-10",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[uri(parameters('_artifactsLocation'), 'nestedtemplates/neo4jNodeSet.json')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "NodePrefix": { "value": "readreplica" },
+                    "DBMS_MODE": { "value": "READ_REPLICA" },
+                    "SubnetID": { "value": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/NeoVnetSubnet1')]" },
+                    "NetworkSecurityGroupId": { "value": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]" },
+
+                    "N": { "value": "[parameters('ReadReplicas')]" },
                     "Location": { "value": "[parameters('Location')]" },
                     
                     "DataDiskType": { "value": "[parameters('DataDiskType')]" },

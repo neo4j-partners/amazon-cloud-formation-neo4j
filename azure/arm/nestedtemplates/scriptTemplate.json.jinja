@@ -33,7 +33,7 @@
                 "autoUpgradeMinorVersion": true,
                 "settings": {
                     "fileUris": [
-                        "[concat(parameters('ArtifactsBase'), 'scripts/post-deploy.sh')]"
+                        "[uri(parameters('ArtifactsBase'), 'scripts/post-deploy.sh')]"
                     ]
                 },
                 "protectedSettings": {

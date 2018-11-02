@@ -1,0 +1,315 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "Location": {
+      "type": "string"
+    },
+    "ClusterName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 11
+    },
+    "DBMS_MODE": {
+      "type": "string"
+    },
+    "SubnetID": {
+      "type": "string"
+    },
+    "NetworkSecurityGroupId": {
+      "type": "string"
+    },
+    "NodePrefix": {
+      "type": "string"
+    },
+    "N": {
+      "type": "int"
+    },
+    "VmSize": {
+      "type": "string"
+    },
+    "DataDiskType": {
+      "type": "string"
+    },
+    "DataDiskSizeGB": {
+      "type": "int",
+      "minValue": 5,
+      "defaultValue": 1024
+    },
+    "AdminUserName": {
+      "type": "securestring"
+    },
+    "AdminAuthType": {
+      "type": "string",
+      "allowedValues": [
+        "sshpublickey",
+        "password"
+      ]
+    },
+    "AdminCredential": {
+      "type": "securestring",
+      "defaultValue": null
+    },
+    "PublicIPAllocationMethod": {
+      "type": "string",
+      "allowedValues": [
+        "Static",
+        "Dynamic"
+      ]
+    },
+    "Neo4jPassword": {
+      "type": "securestring"
+    },
+    "Neo4jHttpsPort": {
+      "type": "int"
+    },
+    "Neo4jHttpPort": {
+      "type": "int"
+    },
+    "Neo4jBoltPort": {
+      "type": "int"
+    },
+    "Neo4jClusterPort": {
+      "type": "int",
+      "defaultValue": 5000,
+      "metadata": {
+        "description": "The port used for communication between instances in the cluster"
+      }
+    },
+    "Neo4jTransactionPort": {
+      "type": "int",
+      "defaultValue": 6000,
+      "metadata": {
+        "description": "The port used to read transaction data from the master"
+      }
+    },
+    "Neo4jRaftPort": {
+      "type": "int",
+      "defaultValue": 7000,
+      "metadata": {
+        "description": "The port used to read transaction data from the master"
+      }
+    },
+    "Neo4JTags": {
+      "type": "object",
+      "metadata": {
+        "description": "Dictionary of tags to apply to the various resources"
+      }
+    },
+    "ArtifactsBase": {
+      "type": "string",
+      "metadata": {
+        "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
+      }
+    }
+  },
+  "variables": {
+    "uniqueTag": "[uniqueString(resourceGroup().id, deployment().name)]",
+    "namePrefixes": {
+      "nic": "[concat(parameters('ClusterName'),'-nic')]",
+      "vm": "[concat(parameters('ClusterName'),'-vm')]",
+      "publicIP": "[concat(parameters('ClusterName'),'-public-ip')]",
+      "availabilitySet": "[concat(parameters('ClusterName'), '-as')]"
+    },
+    "resourceIDs": {
+      "availabilitySet": "[resourceId('Microsoft.Compute/availabilitySets', variables('namePrefixes').availabilitySet)]",
+      "publicIP": "[resourceId('Microsoft.Network/publicIPAddresses', variables('namePrefixes').publicIP)]"
+    },
+    "linuxConfiguration": {
+      "disablePasswordAuthentication": true,
+      "ssh": {
+        "publicKeys": [
+          {
+            "path": "[concat('/home/', parameters('AdminUserName'),'/.ssh/authorized_keys')]",
+            "keyData": "[parameters('AdminCredential')]"
+          }
+        ]
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Compute/availabilitySets",
+      "name": "[concat(variables('namePrefixes').availabilitySet, '-', parameters('NodePrefix'))]",
+      "apiVersion": "2018-06-01",
+      "location": "[parameters('Location')]",
+      "tags": "[parameters('Neo4JTags')]",
+      "properties": {
+        "platformUpdateDomainCount": 20,
+        "platformFaultDomainCount": 3
+      },
+      "sku": {
+        "name": "Aligned"
+      },
+      "dependsOn": []
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[concat(variables('namePrefixes').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
+      "apiVersion": "2017-08-01",
+      "location": "[parameters('Location')]",
+      "properties": {
+        "publicIPAllocationMethod": "[parameters('PublicIPAllocationMethod')]",
+        "dnsSettings": {
+          "domainNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex(), '-', variables('uniqueTag')))]"
+        }
+      },
+      "copy": {
+        "name": "[concat('ip', parameters('NodePrefix'), 'CI')]",
+        "count": "[parameters('N')]"
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex())]",
+      "apiVersion": "2017-10-01",
+      "location": "[parameters('Location')]",
+      "tags": "[parameters('Neo4JTags')]",
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "subnet": {
+                "id": "[parameters('SubnetID')]"
+              },
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
+              }
+            }
+          }
+        ],
+        "dnsSettings": {
+          "dnsServers": [],
+          "internalDnsNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex()))]"
+        },
+        "enableIPForwarding": false,
+        "networkSecurityGroup": {
+          "id": "[parameters('NetworkSecurityGroupId')]"
+        }
+      },
+      "copy": {
+        "name": "nicCI",
+        "count": "[parameters('N')]"
+      },
+      "dependsOn": [
+        "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
+      ]
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
+      "apiVersion": "2018-06-01",
+      "location": "[parameters('Location')]",
+      "tags": {
+        "provider": "B9442746-5BFF-4E2F-BC90-1F49C5791FAA",
+        "neo4jURL": "https://neo4j.com/",
+        "licensing": "https://neo4j.com/lp/enterprise-cloud/?utm_content=azure-marketplace",
+        "dbms_mode": "[parameters('DBMS_MODE')]",
+        "neo4j_mode": "cluster",
+        "dbms_connector_https_listen_address": "[concat('0.0.0.0:', string(parameters('Neo4jHttpsPort')))]",
+        "dbms_connector_http_listen_address": "[concat('0.0.0.0:', string(parameters('Neo4jHttpPort')))]",
+        "dbms_connector_bolt_listen_address": "[concat('0.0.0.0:', string(parameters('Neo4jBoltPort')))]",
+        "causal_clustering_minimum_core_cluster_size_at_formation": "3",
+        "causal_clustering_initial_discovery_members": "[toLower(concat(parameters('ClusterName'), '-', 'core-node-0:5000,', parameters('ClusterName'), '-', 'core-node-1:5000,', parameters('ClusterName'), '-', 'core-node-2:5000'))]",
+        "causal_clustering_discovery_type": "LIST",
+        "dbms_connector_bolt_tls_level": "OPTIONAL"
+      },
+      "plan": {
+        "name": "neo4j_3_4_9_apoc",
+        "publisher": "neo4j",
+        "product": "neo4j-enterprise-preview"
+      },
+      "properties": {
+        "availabilitySet": {
+          "id": "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]"
+        },
+        "hardwareProfile": {
+          "vmSize": "[parameters('VmSize')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "neo4j",
+            "offer": "neo4j-enterprise-preview",
+            "sku": "neo4j_3_4_9_apoc",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex(), '-OS')]",
+            "createOption": "fromImage",
+            "managedDisk": {
+              "storageAccountType": "Standard_LRS"
+            }
+          },
+          "dataDisks": [
+            {
+              "lun": 0,
+              "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex(), '-Data-0')]",
+              "createOption": "Empty",
+              "managedDisk": {
+                "storageAccountType": "[parameters('DataDiskType')]"
+              },
+              "caching": "None",
+              "diskSizeGB": "[parameters('DataDiskSizeGB')]"
+            }
+          ]
+        },
+        "osProfile": {
+          "computerName": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
+          "adminUsername": "[parameters('AdminUserName')]",
+          "adminPassword": "[parameters('AdminCredential')]",
+          "linuxConfiguration": "[if(equals(parameters('AdminAuthType'), 'password'), json('null'), variables('linuxConfiguration'))]"
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex()))]"
+            }
+          ]
+        }
+      },
+      "copy": {
+        "name": "[concat('vm', parameters('DBMS_MODE'), 'CI')]",
+        "count": "[parameters('N')]"
+      },
+      "dependsOn": [
+        "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex()))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
+      "apiVersion": "2017-05-10",
+      "dependsOn": [
+        "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]"
+      ],
+      "copy": {
+        "name": "vmExtLoop",
+        "count": "[parameters('N')]"
+      },
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[uri(parameters('ArtifactsBase'), 'nestedtemplates/scriptTemplate.json')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "VmName": {
+            "value": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]"
+          },
+          "Location": {
+            "value": "[parameters('Location')]"
+          },
+          "Password": {
+            "value": "[parameters('Neo4jPassword')]"
+          },
+          "ArtifactsBase": {
+            "value": "[parameters('ArtifactsBase')]"
+          }
+        }
+      }
+    }
+  ]
+}

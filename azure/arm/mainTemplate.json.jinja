@@ -82,7 +82,6 @@
 
         "AdminCredential": {
             "type": "securestring",
-            "defaultValue": null,
             "metadata": {
                 "description": "The SSH public key or admin password, depending on AdminAuthType"
             }
@@ -319,7 +318,7 @@
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "uri": "[uri(parameters('_artifactsLocation'), 'nestedtemplates/vnet-new.json')]",
+                    "uri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/vnet-new.json', parameters('_artifactsLocationSasToken')))]",
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {
@@ -347,7 +346,7 @@
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "uri": "[uri(parameters('_artifactsLocation'), 'nestedtemplates/neo4jNodeSet.json')]",
+                    "uri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/neo4jNodeSet.json', parameters('_artifactsLocationSasToken')))]",
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {
@@ -379,7 +378,8 @@
                     "ClusterName": { "value": "[parameters('ClusterName')]" },
                     "VmSize": { "value": "[parameters('VmSize')]" },
 
-                    "ArtifactsBase": { "value": "[parameters('_artifactsLocation')]" }
+                    "ArtifactsBase": { "value": "[parameters('_artifactsLocation')]" },
+                    "_artifactsLocationSasToken": { "value": "[parameters('_artifactsLocationSasToken')]" }
                 }
             }
          },
@@ -423,7 +423,8 @@
                     "ClusterName": { "value": "[parameters('ClusterName')]" },
                     "VmSize": { "value": "[parameters('VmSize')]" },
 
-                    "ArtifactsBase": { "value": "[parameters('_artifactsLocation')]" }
+                    "ArtifactsBase": { "value": "[parameters('_artifactsLocation')]" },
+                    "_artifactsLocationSasToken": { "value": "[parameters('_artifactsLocationSasToken')]" }
                 }
             }
          }

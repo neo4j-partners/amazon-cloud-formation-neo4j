@@ -69,8 +69,7 @@
         },
 
         "AdminCredential": {
-            "type": "securestring",
-            "defaultValue": null
+            "type": "securestring"
         },
 
         "PublicIPAllocationMethod": {
@@ -130,6 +129,10 @@
             "metadata": {
                 "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
             }
+        },
+
+        "_artifactsLocationSasToken": {
+            "type": "string"
         }
     },
     "variables": {
@@ -178,7 +181,7 @@
     "tags": "[parameters('Neo4JTags')]",
     "properties": {
         "platformUpdateDomainCount": 20,
-        "platformFaultDomainCount": 3
+        "platformFaultDomainCount": 2
     },
     "sku": {
         "name": "Aligned"
@@ -220,10 +223,6 @@
                 }
             }
         ],
-        "dnsSettings": {
-            "dnsServers": [],
-            "internalDnsNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex()))]"
-        },
         "enableIPForwarding": false,
         "networkSecurityGroup": {
             "id": "[parameters('NetworkSecurityGroupId')]"
@@ -273,7 +272,7 @@
     "plan": {
         "name": "neo4j_3_4_9_apoc",
         "publisher": "neo4j",
-        "product": "neo4j-enterprise-preview"
+        "product": "neo4j-enterprise"
     },
     "properties": {
         "availabilitySet": {
@@ -285,7 +284,7 @@
         "storageProfile": {
 			"imageReference": {
                 "publisher": "neo4j",
-                "offer": "neo4j-enterprise-preview",
+                "offer": "neo4j-enterprise",
                 "sku": "neo4j_3_4_9_apoc",
                 "version": "latest"
 			},
@@ -349,7 +348,7 @@
     "properties": {
         "mode": "Incremental",
         "templateLink": {
-            "uri": "[uri(parameters('ArtifactsBase'), 'nestedtemplates/scriptTemplate.json')]",
+            "uri": "[uri(parameters('ArtifactsBase'), concat('nestedtemplates/scriptTemplate.json', parameters('_artifactsLocationSasToken')))]",
             "contentVersion": "1.0.0.0"
         },
         "parameters": {
@@ -364,6 +363,9 @@
             },
             "ArtifactsBase": {
                 "value": "[parameters('ArtifactsBase')]"
+            },
+            "_artifactsLocationSasToken": {
+                "value": "[parameters('_artifactsLocationSasToken')]"
             }
         }
     }

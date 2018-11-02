@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "NetworkName": {
+      "type": "string"
+    },
+    "NetworkAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/16",
+      "metadata": {
+        "description": "CIDR for Virtual Network, e.g., 1.2.3.4/16"
+      }
+    },
+    "Location": {
+      "type": "string"
+    },
+    "Neo4JTags": {
+      "type": "object",
+      "metadata": {
+        "description": "resource tags to be applied to the new VNET"
+      }
+    }
+  },
+  "variables": {},
+  "resources": [
+    {
+      "comments": "Define a new Virtual Network in the current resource group",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "[parameters('NetworkName')]",
+      "apiVersion": "2017-10-01",
+      "location": "[parameters('Location')]",
+      "tags": "[parameters('Neo4JTags')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('NetworkAddressPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "NeoVnetSubnet1",
+            "properties": {
+              "addressPrefix": "10.0.1.0/24"
+            }
+          }
+        ]
+      },
+      "dependsOn": []
+    }
+  ],
+  "outputs": {
+    "vnetResourceID": {
+      "type": "string",
+      "value": "[resourceID('Microsoft.Network/virtualNetworks', parameters('NetworkName'))]"
+    }
+  }
+}

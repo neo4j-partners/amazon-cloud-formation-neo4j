@@ -10,17 +10,11 @@
 echo My cluster prefix arg is $1
 prefix=$1
 
-if [ -z "$2" ] ; then
-  cores=3
-else 
-  cores=$2
-fi
+echo My cluster suffix arg is $2
+suffix=$2
 
-if [ -z "$3" ]; then
-  read_replicas=2
-else
-  read_replicas=$3
-fi
+cores=3
+read_replicas=1
 
 USER=davidallen
 
@@ -29,7 +23,7 @@ exfil_logs () {
     idx=$2
     LOGDIR=/var/log/neo4j
 
-    host="$prefix-$mode-node-$idx.eastus.cloudapp.azure.com"
+    host="$prefix-$mode-node-$idx-$suffix.eastus.cloudapp.azure.com"
 
     dir="$prefix/$mode-$idx"
     mkdir -p "$prefix/${mode}-${idx}"

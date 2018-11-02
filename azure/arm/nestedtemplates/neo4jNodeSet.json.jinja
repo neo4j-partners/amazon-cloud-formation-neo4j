@@ -223,6 +223,13 @@
                 }
             }
         ],
+        {# This bit is critical because it assigns an internal DNS address to each node, which in turn 
+         # is referenced in initial_cluster_members by the nodes
+         #}
+        "dnsSettings": {
+            "dnsServers": [],
+            "internalDnsNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex()))]"
+        },        
         "enableIPForwarding": false,
         "networkSecurityGroup": {
             "id": "[parameters('NetworkSecurityGroupId')]"

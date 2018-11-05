@@ -21,10 +21,14 @@ class MetadataReadStrategy extends Strategy {
 
         const f = () => {
             let query;
-            if (i % 2 === 0) {
+            const choice = i % 3;
+
+            if (i === 0) {
                 query = "CALL db.labels()";
-            } else {
+            } else if(i === 1) {
                 query = "CALL db.propertyKeys()";
+            } else {
+                query = "CALL okapi.schema()";
             }
 
             return this.session.run(query, {});

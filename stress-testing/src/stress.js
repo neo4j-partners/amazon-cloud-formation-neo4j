@@ -31,7 +31,7 @@ const probabilityTable = [
   [ 0.3, 'mergeWrite' ],
   [ 0.4, 'randomLinkage' ],
   [ 0.50, 'aggregateRead' ],
-  [ 0.60, 'metadataRead' ],
+  // [ 0.60, 'metadataRead' ],
   [ 0.70, 'longPathRead' ],
   [ 1, 'rawWrite' ],
 ];

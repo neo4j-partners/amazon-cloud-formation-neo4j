@@ -3,7 +3,7 @@
 # https://neo4j.com/docs/operations-manual/current/installation/linux/debian/
 
 echo '#########################################'
-echo '####### BEGINNING NEO4J INSTALL #########'
+echo '#######        SYSTEM UPDATE    #########'
 echo '#########################################'
 
 echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-selections
@@ -14,9 +14,15 @@ echo 'deb http://debian.neo4j.org/repo stable/' | sudo tee -a /etc/apt/sources.l
 sudo apt-get update
 sudo apt-get --yes upgrade
 
+echo '#########################################'
+echo '####### BEGINNING NEO4J INSTALL #########'
+echo '#########################################'
+
 if [ $neo4j_edition = "community" ]; then
+    echo "neo4j=$neo4j_version"
     sudo apt-get --yes install neo4j=$neo4j_version
 else
+    echo "neo4j-enterprise=$neo4j_version"
     sudo apt-get --yes install neo4j-enterprise=$neo4j_version
 fi
 

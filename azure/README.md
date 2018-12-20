@@ -71,6 +71,13 @@ the Azure Storage Explorer.
 
 If all of that sounds complex and confusing...that's because it is.
 
+Once a VHD is produced by packer, you have to generate a SAS URL to the VHD, which is what you need
+to update the marketplace.  Guidance on generating the SAS URL can be found here:
+
+https://docs.microsoft.com/en-us/azure/marketplace-publishing/marketplace-publishing-vm-image-creation#52-get-the-shared-access-signature-uri-for-your-vm-images
+
+I use the Microsoft Storage Explorer tool to generate it.
+
 ## Best Practices for Packaging (ARM)
 
 https://github.com/Azure/azure-quickstart-templates/blob/master/1-CONTRIBUTION-GUIDE/best-practices.md#deployment-artifacts-nested-templates-scripts

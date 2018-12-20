@@ -6,29 +6,57 @@ from AMI ID to region.
 ## Neo4j Enterprise 3.5.0 with APOC & Graph Algos
 
 ```
-ap-northeast-1: ami-0dbc8b832baab9469
-ap-southeast-1: ami-03c0b3da5cd1fdf02
-eu-central-1: ami-09a248cb19691b2e7
-eu-west-1: ami-0593fc47fcbb15d5e
-sa-east-1: ami-0eb9103f250157cbf
-us-east-1: ami-0bfc0ef6fd84e58a5
-us-east-2: ami-058032ecf50af4890
-us-west-1: ami-0c0c9816925562d30
-us-west-2: ami-0d01ab04cf74172e7
+ap-northeast-1: ami-027bfc45e7a0d326b
+ap-southeast-1: ami-04ca85ef40ab14036
+eu-central-1: ami-0ec0b1a8674ced943
+eu-west-1: ami-02928a280309263ae
+sa-east-1: ami-081f7d05597b82afa
+us-east-1: ami-06bdb7d6853fcbbff
+us-east-2: ami-09ecbe81c2144c129
+us-west-1: ami-0771e6489f6f49cfd
+us-west-2: ami-01c219e785bd79557
 ```
 
 ## Neo4j Community 3.5.0 with APOC & Graph Algos
 
 ```
-ap-northeast-1: ami-0d8ce6433b387cc9f
-ap-southeast-1: ami-0fde440d3352774bb
-eu-central-1: ami-04811c74d624e43be
-eu-west-1: ami-0ce595a5437daa3e3
-sa-east-1: ami-03c09037daf37d4e9
-us-east-1: ami-0329cba6488570ca9
-us-east-2: ami-00ef3068462737950
-us-west-1: ami-08a4f78fca0b9ae77
-us-west-2: ami-04994cc8bfafe48cd
+ap-northeast-1: ami-0bbf162bd3f6abf5a
+ap-southeast-1: ami-0975ad9ce16984cec
+eu-central-1: ami-0c4cc78b7860556e0
+eu-west-1: ami-009d39039cc933936
+sa-east-1: ami-0f0f0ad3e4d31a5d9
+us-east-1: ami-0577fa276d9f58a33
+us-east-2: ami-064127f57e0752ba0
+us-west-1: ami-0b09bfb51311c1e3c
+us-west-2: ami-0f2de5df05297f771
+```
+
+## Neo4j Enterprise 3.4.11 with APOC & Graph Algos
+
+```
+ap-northeast-1: ami-0f4d427ef7ca7c428
+ap-southeast-1: ami-0671de47eef5758bc
+eu-central-1: ami-08b7837d2c3cefb28
+eu-west-1: ami-0a7086d81e58cf711
+sa-east-1: ami-04a40072c107acc73
+us-east-1: ami-0ee041bfb765749bb
+us-east-2: ami-064bfb37c18502276
+us-west-1: ami-00b293f14cbf734f2
+us-west-2: ami-036c2d9792ac18066
+```
+
+## Neo4j Community 3.4.11 with APOC & Graph Algos
+
+```
+ap-northeast-1: ami-0669ea1d345c754c4
+ap-southeast-1: ami-05c5a374660bd2a4b
+eu-central-1: ami-0950ab3ec405129e8
+eu-west-1: ami-007cb81615e0cf296
+sa-east-1: ami-0fc5e8ceb96bbdecf
+us-east-1: ami-031ec85b76d868353
+us-east-2: ami-0c5cdcbe901885075
+us-west-1: ami-0b04d0fe3519c1f69
+us-west-2: ami-02de1d94e6085322f
 ```
 
 ## Neo4j Enterprise 3.4.9 with APOC & Graph Algos

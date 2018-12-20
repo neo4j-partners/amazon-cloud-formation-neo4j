@@ -78,19 +78,16 @@ Deregister example: `aws ec2 deregister-image --image-id ami-650be718 --region u
 
 ## Create CloudFormation Stack
 
-Check needed parameters in the generated CF stack file first, and do not copy/paste
-the below, but customize it.
+See the `deploy-stack.sh` shell script.
+
+To get the status of a stack being deployed:
 
 ```
-aws cloudformation create-stack \
-   --stack-name StackyMcGrapherston \
-   --template-body file://neo4j-enterprise-stack.json \
-   --parameters ParameterKey=ClusterNodes,ParameterValue=3 \
-                ParameterKey=InstanceType,ParameterValue=m3.medium \
-                ParameterKey=NetworkWhitelist,ParameterValue=0.0.0.0/8 \
-                ParameterKey=Password,ParameterValue=s00pers3cret \
-                ParameterKey=SSHKeyName,ParameterValue=davidallen-aws-neo4j \
-                ParameterKey=VolumeSizeGB,ParameterValue=37 \
-                ParameterKey=VolumeType,ParameterValue=gp2 \
-  --capabilities CAPABILITY_NAMED_IAM
+aws cloudformation describe-stacks --stack-name $STACKNAME --region $REGION | jq -r .Stacks[0].StackStatus
+```
+
+To delete
+
+```
+aws cloudformation delete-stack --stack-name $STACKNAME --region $REGION
 ```

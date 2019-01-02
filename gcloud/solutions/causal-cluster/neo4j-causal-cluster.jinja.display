@@ -1,14 +1,14 @@
 description:
   author:
     title: Neo4j
-    descriptionHtml: 'Neo4j, Inc. is the graph company behind Neo4j, the #1 platform for connected data. The Neo4j graph platform helps organizations make sense of their data by revealing how people, processes, and digital systems are interrelated.'
-    shortDescription: 'Neo4j, Inc. is the graph company behind Neo4j, the #1 platform for connected data. The Neo4j graph platform helps organizations make sense of their data by revealing how people, processes, and digital systems are interrelated.'
-  descriptionHtml: Neo4j is a high-performance graph database platform used today by hundreds of thousands of companies and organizations in almost all industries. Use cases include matchmaking, network management, software analytics, scientific research, package routing, organizational and project management, real-time recommendations, social networks, fraud detection, cybersecurity and more.
+    descriptionHtml: <p>Neo4j is used today by thousands of companies and organizations in almost all industries, including financial services, government, energy, technology, retail, and manufacturing (click here to see customers). Over 1,000 developers and architects across the industries are Neo4j Certified Professionals, and you can be too!</p><p>Neo4j is referred to as a native graph database because it implements the property graph model to the storage level and uses native graph processing (index-free adjacency). Neo4j does not just rely on graph processing and in-memory libraries, but also provides enterprise-required database capabilities including ACID transaction compliance, cluster support, and runtime failover, making it suitable to use graph data in production scenarios.</p>
+    shortDescription: Neo4j is an open-source, NoSQL, native graph database that provides an ACID-compliant transactional backend for your applications. The Enterprise Edition includes all that Community Edition has to offer, plus extra enterprise requirements such as backups, clustering, and failover abilities.
+  descriptionHtml: <p>Neo4j is an open-source, NoSQL, native graph database that provides an ACID-compliant transactional backend for your applications. The Enterprise Edition includes all that Community Edition has to offer, plus extra enterprise requirements such as backups, clustering, and failover abilities.</p><p>Neo4j is referred to as a native graph database because it efficiently implements the property graph model down to the storage level. This means that the data is stored exactly as you whiteboard it, and the database uses pointers to navigate and traverse the graph. In contrast to graph processing or in-memory libraries, Neo4j also provides full database characteristics, including ACID transaction compliance, cluster support, and runtime failover – making it suitable to use graphs for data in production scenarios.</p>  
   logo: '@media/solution-name_store.png'
   tagline: 'Neo4j Enterprise: Causal Clustering'
   title: Neo4j Enterprise
   url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
-  version: 3.4.9
+  version: 3.5.1
   documentations:
   - title: Register Neo4j Instance/Get a License
     url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
@@ -124,6 +124,6 @@ runtime:
 
 annotations:
   autogenSpecType: 'MULTI_VM'
-  vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-3-4-9-apoc
+  vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-3-5-1-apoc
 
 metadata_version: v1

@@ -3,7 +3,7 @@
 This file tracks when AMIs were built by edition & version, storing the original mapping
 from AMI ID to region.
 
-## Neo4j Enterprise 3.5.11 with APOC & Graph Algos
+## Neo4j Enterprise 3.5.1 with APOC & Graph Algos
 
 ```
 ap-northeast-1: ami-032150637dfa87637

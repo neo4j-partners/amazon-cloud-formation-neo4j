@@ -106,6 +106,46 @@ This command expands the template and saves the resulting JSON.  As part of the 
 this process is run on all of the jinja templates to prepare them for upload to S3, and
 interpretation by Azure ARM.
 
+## Updating ARM templates for new versions
+
+In the neo4j node set jinja templates, the "plan" object must be updated with details of the new
+offer, and the "imageReference" under storage profile as well.  
+
+In the marketplace portal, Offer IDs, Publisher IDs, names, and SKUs can be used to complete these fields.
+
+While it is possible to test the cluster templates against a local image, it requires changing the structure of the template just a bit as documented in that jinja template.  In general it's easier to 
+test and deploy the baseline image as a stand-alone product first, and then to test the cluster templates against the published marketplace stand-alone image to eliminate things which could go wrong in coordinating two different publish steps.
+
+Once the new VM image is published to the marketplace, before it can be programmatically deployed you
+have to accept legal terms.  Here's how to do that.
+
+Find the URN of the image:
+
+```
+az vm image list --all --publisher neo4j --offer neo4j-enterprise-3_5 --query '[0].urn'
+```
+
+Then grab that URN and accept terms of it:
+
+```
+$ az vm image accept-terms --urn neo4j:neo4j-enterprise-3_5:neo4j_3_5_1_apoc:3.5.1
+{
+  "accepted": true,
+  "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-3_5/plans/neo4j_3_5_1_apoc/agreements/current",
+  "licenseTextLink": "https://storelegalterms.blob.core.windows.net/legalterms/3E5ED_legalterms_NEO4J%253a24NEO4J%253a2DENTERPRISE%253a2D3%253a5F5%253a24NEO4J%253a5F3%253a5F5%253a5F1%253a5FAPOC%253a246B7QTJUDYN6IZQG4Y3VB33CWFLLCG3UGG7D2MIVE4PWNDHNYELSYU66EVZTSTHSFNRIATQXPV75ARRST64F6GK35S73HJKZL5H42P2Y.txt",
+  "name": "neo4j_3_5_1_apoc",
+  "plan": "neo4j_3_5_1_apoc",
+  "privacyPolicyLink": "https://neo4j.com/privacy-policy/",
+  "product": "neo4j-enterprise-3_5",
+  "publisher": "neo4j",
+  "retrieveDatetime": "2019-01-04T13:07:09.8321069Z",
+  "signature": "UG4V7654Q2BDFQUDHLJR73Y2QFAUG2UGCBLEPYPZ5HS3LWJ4WMOXTD2NQME2QNM3T7J3YIYFJ2F75FEWKFHLR2ATXAJUWYXDK3IDJEA",
+  "type": "Microsoft.MarketplaceOrdering/offertypes"
+}
+```
+
+ARM deployments can now work against that published VM.
+
 ## Relevant Documentation
 
 - [Azure Resource Manager Documentation](https://docs.microsoft.com/en-us/azure/azure-resource-manager/)

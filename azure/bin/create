@@ -65,13 +65,13 @@ echo $(cat <<JSON
         "value": ${READ_REPLICAS}
     },
     "VmSize": {
-        "value": "Standard_A1_v2"
+        "value": "Standard_B2ms"
     },
     "DataDiskType": {
         "value": "StandardSSD_LRS"
     },
     "DataDiskSizeGB": {
-        "value": 512
+        "value": 256
     },
     "AdminUserName": {
         "value": "${USERNAME}"

@@ -14,10 +14,13 @@
  */
 const neo4j = require('neo4j-driver').v1;
 const Promise = require('bluebird');
-const uuid = require('uuid');
+const yargs = require('yargs');
+const args = yargs.argv;
 
-const TOTAL_HITS = 100000;
-const p = Number(process.env.CONCURRENCY);
+const TOTAL_HITS = args.n || 100000;
+
+// Allow user to set concurrency through either the flag --concurrency or by env var.
+const p = Number(args.concurrency) || Number(process.env.CONCURRENCY);
 const concurrency = { concurrency: (!Number.isNaN(p) && p > 0) ? p : 10 };
 
 // Each time, a random number is chosen, and this table is scanned through.
@@ -25,7 +28,7 @@ const concurrency = { concurrency: (!Number.isNaN(p) && p > 0) ? p : 10 };
 // So for example if the random number is 0.30, then aggregateRead is executed.
 // By tweaking the distribution of these numbers you can control how frequently
 // each strategy is executed.
-const probabilityTable = [
+let probabilityTable = [
   [ 0.1, 'fatnodeWrite' ],
   [ 0.2, 'naryWrite' ],
   [ 0.3, 'mergeWrite' ],
@@ -35,6 +38,11 @@ const probabilityTable = [
   [ 0.70, 'longPathRead' ],
   [ 1, 'rawWrite' ],
 ];
+
+if (args.workload) {
+  console.log('Loading workload ', args.workload);
+  probabilityTable = require(args.workload);
+}
 
 if (!process.env.NEO4J_URI) {
   console.error('Set env vars NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD');
@@ -123,7 +131,8 @@ const setupPromises = Object.keys(strategies).map(key => strategies[key].setup(d
 // Pre-run this prior to script: FOREACH (id IN range(0,1000) | MERGE (:Node {id:id}));
 const arr = Array.apply(null, { length: TOTAL_HITS }).map(Number.call, Number);
 
-console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ', probabilityTable);
+console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ');
+console.log(JSON.stringify(probabilityTable, null, 2));
 process.on('SIGINT', sigintHandler);
 
 let exitCode = 0;

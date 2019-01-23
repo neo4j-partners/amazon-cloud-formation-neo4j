@@ -24,7 +24,17 @@ class RawWriteStrategy extends Strategy {
     run(driver) {
         this.lastQuery = `
         FOREACH (id IN range(0,${this.n}) | 
-            CREATE (:RawWriteNode {id:id * rand(), uuid: $uuid})-[:rawrite]->(:RawWriteNode { id:id * rand(), uuid: $uuid })
+            CREATE (:RawWriteNode {
+                id:id * rand(), 
+                uuid: $uuid,
+                f1: rand(), f2: rand(), f3: rand(), f4: rand(), f5: rand(),
+                created: datetime()
+            })-[:rawrite]->(:RawWriteNode { 
+                id:id * rand(), 
+                uuid: $uuid,
+                f1: rand(), f2: rand(), f3: rand(), f4: rand(), f5: rand(),
+                created: datetime()
+            })
         );`;
         
         this.lastParams = { uuid: uuid.v4() };

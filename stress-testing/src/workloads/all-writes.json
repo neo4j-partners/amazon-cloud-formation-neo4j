@@ -1,0 +1,7 @@
+[
+    [ 0.2, "fatnodeWrite" ],
+    [ 0.4, "naryWrite" ],
+    [ 0.6, "mergeWrite" ],
+    [ 0.8, "randomLinkage" ],
+    [ 1, "rawWrite" ]
+]

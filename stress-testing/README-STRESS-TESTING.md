@@ -12,6 +12,20 @@ export NEO4J_URI=bolt+routing://my-cloud-host:7687
 node stress.js
 ```
 
+Alternatively, you can pass some arguments, like this:
+
+```
+export NEO4J_USER=neo4j
+export NEO4J_PASSWORD=supersecret
+export NEO4J_URI=bolt+routing://my-cloud-host:7687
+
+node stress.js --concurrency 10 --n 20 --workload /path/to/read-workload.json
+```
+
+This would run the read workload in batches of 20, with 10 concurrent queries.
+
+See the `workloads` directory for the format of the probability table.
+
 # Building Stress Testing as a Docker Container
 
 ```

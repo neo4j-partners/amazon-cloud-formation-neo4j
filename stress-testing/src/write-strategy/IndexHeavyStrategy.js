@@ -8,7 +8,7 @@ const MAX_STAR_SIZE = 100;
 class IndexHeavyStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'StarWriteStrategy';
+        this.name = 'IndexHeavyStrategy';
         this.n = props.n || MAX_STAR_SIZE;
     }
 
@@ -22,6 +22,7 @@ class IndexHeavyStrategy extends Strategy {
             'CREATE INDEX ON :Customer(email)',
             'CREATE INDEX ON :Customer(username)',
             'CREATE INDEX ON :Customer(created)',
+            'CREATE INDEX ON :Customer(score)',
             'CREATE INDEX ON :Address(location)',
             'CREATE INDEX ON :Address(created)',
             'CREATE INDEX ON :Address(zip)',
@@ -36,6 +37,7 @@ class IndexHeavyStrategy extends Strategy {
             'CREATE INDEX ON :Address(countryCode)',
             'CREATE INDEX ON :Address(state)',
             'CREATE INDEX ON :Address(stateAbbr)',
+            'CREATE INDEX ON :Address(score)',
         ];
 
         return Promise.map(queries, q => session.run(q))
@@ -50,7 +52,8 @@ class IndexHeavyStrategy extends Strategy {
                 c.id = $id,
                 c.name = $name, 
                 c.email = $email,
-                c.created = datetime()
+                c.created = datetime(),
+                c.score = rand()
             
             WITH c
             
@@ -66,7 +69,8 @@ class IndexHeavyStrategy extends Strategy {
                 country: $country,
                 county: $county,
                 countryCode: $countryCode,
-                state: $state, stateAbbr: $stateAbbr
+                state: $state, stateAbbr: $stateAbbr,
+                score: rand()
             })
             CREATE (c)-[:address]->(a)
         `;        
@@ -91,7 +95,6 @@ class IndexHeavyStrategy extends Strategy {
         params.longitude = Number(faker.address.longitude());
 
         fakeFuncs.forEach(f => {
-            console.log('fake',f);
             params[f] = faker.address[f]();
         });
 

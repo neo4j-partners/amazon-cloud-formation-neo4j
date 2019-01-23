@@ -39,6 +39,11 @@ let probabilityTable = [
   [ 1, 'rawWrite' ],
 ];
 
+probabilityTable = [
+  [ 0.5, 'starWrite' ],
+  [ 1, 'indexHeavy' ],
+];
+
 if (args.workload) {
   console.log('Loading workload ', args.workload);
   probabilityTable = require(args.workload);
@@ -87,6 +92,8 @@ const NAryTreeStrategy = require('./write-strategy/NAryTreeStrategy');
 const FatNodeAppendStrategy = require('./write-strategy/FatNodeAppendStrategy');
 const MergeWriteStrategy = require('./write-strategy/MergeWriteStrategy');
 const RawWriteStrategy = require('./write-strategy/RawWriteStrategy');
+const StarWriteStrategy = require('./write-strategy/StarWriteStrategy');
+const IndexHeavyStrategy = require('./write-strategy/IndexHeavyStrategy');
 const RandomLinkageStrategy = require('./write-strategy/RandomLinkageStrategy');
 const AggregateReadStrategy = require('./read-strategy/AggregateReadStrategy');
 const MetadataReadStrategy = require('./read-strategy/MetadataReadStrategy');
@@ -99,6 +106,8 @@ const strategies = {
   mergeWrite: new MergeWriteStrategy({ n: 1000000 }),
   rawWrite: new RawWriteStrategy({ n: 10 }),
   randomLinkage: new RandomLinkageStrategy({ n: 1000000 }),
+  starWrite: new StarWriteStrategy({}),
+  indexHeavy: new IndexHeavyStrategy({}),
 
   // READ STRATEGIES
   aggregateRead: new AggregateReadStrategy({}),

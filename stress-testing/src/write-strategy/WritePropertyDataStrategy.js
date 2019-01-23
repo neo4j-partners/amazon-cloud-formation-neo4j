@@ -9,6 +9,7 @@ class WritePropertyDataStrategy extends Strategy {
     }
 
     setup(driver) {
+        super.setup(driver);
         const queries = [
             'CREATE INDEX ON :Node(id)',
             'FOREACH (id IN range(0,10000) | MERGE (:Node {id:id}));',
@@ -20,10 +21,6 @@ class WritePropertyDataStrategy extends Strategy {
     }
 
     run(driver) {
-        if (!this.session) {
-            this.session = driver.session();
-        }
-
         const p = this.randInt(10000);
         const r = p - 1000;
 
@@ -32,12 +29,12 @@ class WritePropertyDataStrategy extends Strategy {
             data.push(uuid.v4());
         }
 
-        const f = () => session.run(`
+        const f = (s = driver.session()) => s.writeTransaction(tx => tx.run(`
           MATCH (a:Node) WHERE a.id >= $r and a.id <= $p
           WITH a LIMIT 100
           SET a.list${randInt(100)} = $data SET a:WriteArray
           RETURN count(a);
-        `, { data, r, p });
+        `, { data, r, p }));
 
         return this.time(f);
     }

@@ -9,7 +9,10 @@ class Strategy {
         this.timings = [];
     }
 
-    setup(driver) { return Promise.resolve(true); }
+    setup(driver) { 
+        this.driver = driver;
+        return Promise.resolve(true); 
+    }
 
     getName() { return this.name; }
     run(driver) { 
@@ -37,12 +40,15 @@ class Strategy {
     time(somePromiseFunc, data={}) {
         const start = new Date().getTime();
 
-        return somePromiseFunc()
+        const session = this.driver.session();
+
+        return somePromiseFunc(session)
             .then(result => {
                 const end = new Date().getTime();
                 const elapsed = end - start;
                 this.timings.push(_.merge({ elapsed }, data));
             })
+            .finally(() => session.close());
     }
 
     randString(len) {

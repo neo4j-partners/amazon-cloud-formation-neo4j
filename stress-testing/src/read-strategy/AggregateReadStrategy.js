@@ -8,20 +8,12 @@ class AggregateReadStrategy extends Strategy {
         this.name = 'AggregateReadStrategy';
     }
 
-    setup(driver) {
-        return Promise.resolve();
-    }
-
     run(driver) {
-        if (!this.session) {
-            this.session = driver.session();
-        }
-
-        const f = () => this.session.run(`
+        const f = (s = driver.session()) => s.readTransaction(tx => tx.run(`
             MATCH (v:NAryTree) 
             WHERE id(v) % $r = 0
             RETURN min(v.val), max(v.val), stdev(v.val), count(v.val)`, 
-            { r: this.randInt(13) });
+            { r: this.randInt(13) }));
         
         return this.time(f);
     }

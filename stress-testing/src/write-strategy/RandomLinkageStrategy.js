@@ -9,15 +9,7 @@ class RandomLinkageStrategy extends Strategy {
         this.n = props.n || 1000000;
     }
 
-    setup(driver) {
-        return Promise.resolve(true);
-    }
-
     run(driver) {
-        if (!this.session) {
-            this.session = driver.session();
-        }
-
         this.lastQuery = `
             MATCH (a) 
             WITH a 
@@ -29,7 +21,7 @@ class RandomLinkageStrategy extends Strategy {
         `;
         
         this.lastParams = { idx1: this.randInt(this.n), idx2: this.randInt(this.n) };
-        const f = () => this.session.run(this.lastQuery, this.lastParams);
+        const f = (s = driver.session()) => s.writeTransaction(tx => tx.run(this.lastQuery, this.lastParams));
         return this.time(f);
     }
 }

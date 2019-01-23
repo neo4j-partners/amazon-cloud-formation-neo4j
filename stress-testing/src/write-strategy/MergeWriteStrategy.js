@@ -10,6 +10,8 @@ class MergeWriteStrategy extends Strategy {
     }
 
     setup(driver) {
+        super.setup(driver);
+        
         const queries = [
             'CREATE INDEX ON :MergeNode(id)',
             'FOREACH (id IN range(0,10000) | MERGE (:MergeNode {id:id}));',
@@ -21,10 +23,6 @@ class MergeWriteStrategy extends Strategy {
     }
 
     run(driver) {
-        if (!this.session) {
-            this.session = driver.session();
-        }
-
         this.lastQuery = `
         MERGE (n:MergeNode { id: $id1 }) ON CREATE SET n.uuid = $u1 SET n:SimpleWrite
         MERGE (p:MergeNode { id: $id2 }) ON CREATE SET p.uuid = $u2 SET p:SimpleWrite
@@ -42,7 +40,7 @@ class MergeWriteStrategy extends Strategy {
           r2: this.randInt(100000),
         };
 
-        const f = () => this.session.run(this.lastQuery, this.lastParams);
+        const f = (s = driver.session()) => s.writeTransaction(tx => tx.run(this.lastQuery, this.lastParams)).finally(() => s.close());
         return this.time(f);
     }
 }

@@ -9,10 +9,6 @@ class FatNodeAppendStrategy extends Strategy {
         this.label = props.label;
     }
 
-    setup(driver) {
-        return Promise.resolve();
-    }
-
     run(driver) {
         if (!this.session) {
             this.session = driver.session();
@@ -32,7 +28,8 @@ class FatNodeAppendStrategy extends Strategy {
             uuid: $uuid
         }))`;
         this.lastParams = { uuid: uuid.v4(), data };
-        const f = () => this.session.run(this.lastQuery, this.lastParams);
+        
+        const f = (s = driver.session()) => s.writeTransaction(tx => tx.run(this.lastQuery, this.lastParams));
         return this.time(f);
     }
 }

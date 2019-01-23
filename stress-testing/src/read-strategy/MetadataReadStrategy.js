@@ -8,18 +8,10 @@ class MetadataReadStrategy extends Strategy {
         this.name = 'MetadataReadStrategy';
     }
 
-    setup(driver) {
-        return Promise.resolve();
-    }
-
     run(driver) {
-        if (!this.session) {
-            this.session = driver.session();
-        }
-
         const i = this.randInt(50);
 
-        const f = () => {
+        const f = (s = driver.session()) => {
             let query;
             const choice = i % 3;
 
@@ -31,7 +23,7 @@ class MetadataReadStrategy extends Strategy {
                 query = "CALL okapi.schema()";
             }
 
-            return this.session.run(query, {});
+            return s.readTransaction(tx => tx.run(query, {}));
         };
         
         return this.time(f);

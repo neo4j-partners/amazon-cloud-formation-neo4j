@@ -33,16 +33,20 @@ let probabilityTable = [
   [ 0.2, 'naryWrite' ],
   [ 0.3, 'mergeWrite' ],
   [ 0.4, 'randomLinkage' ],
-  [ 0.50, 'aggregateRead' ],
+  [ 0.45, 'starWrite' ],
+  [ 0.55, 'indexHeavy' ],
+  [ 0.60, 'aggregateRead' ],
+  [ 0.695, 'randomAccess' ],
   // [ 0.60, 'metadataRead' ],
   [ 0.70, 'longPathRead' ],
   [ 1, 'rawWrite' ],
 ];
 
-probabilityTable = [
-  [ 0.5, 'starWrite' ],
-  [ 1, 'indexHeavy' ],
-];
+// probabilityTable = [
+//   [ 0.3, 'starWrite' ],
+//   [ 0.6, 'indexHeavy' ],
+//   [ 1, 'randomAccess' ],
+// ];
 
 if (args.workload) {
   console.log('Loading workload ', args.workload);
@@ -98,6 +102,7 @@ const RandomLinkageStrategy = require('./write-strategy/RandomLinkageStrategy');
 const AggregateReadStrategy = require('./read-strategy/AggregateReadStrategy');
 const MetadataReadStrategy = require('./read-strategy/MetadataReadStrategy');
 const LongPathReadStrategy = require('./read-strategy/LongPathReadStrategy');
+const RandomAccessReadStrategy = require('./read-strategy/RandomAccessReadStrategy');
 
 const strategies = {
   // WRITE STRATEGIES
@@ -113,6 +118,7 @@ const strategies = {
   aggregateRead: new AggregateReadStrategy({}),
   metadataRead: new MetadataReadStrategy({}),
   longPathRead: new LongPathReadStrategy({}),
+  randomAccess: new RandomAccessReadStrategy({}),
 };
 
 const runStrategy = (driver) => {

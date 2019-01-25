@@ -27,6 +27,18 @@ class Strategy {
         return this.timings;
     }
 
+    csv() {
+        const runs = this.timings.length;
+        const elapsedArr = this.timings.map(t => t.elapsed);
+        const avgV = elapsedArr.reduce((a, b) => a + b, 0) / runs || 0;
+        const minV = elapsedArr.reduce((min, p) => p < min ? p : min, elapsedArr[0] || 0);
+        const maxV = elapsedArr.reduce((max, p) => p > max ? p : max, elapsedArr[0] || 0);
+
+        return [
+            this.name, runs, avgV, minV, maxV
+        ].join(',') + '\n';
+    }
+
     summarize() {
         const runs = this.timings.length;
         const elapsedArr = this.timings.map(t => t.elapsed);

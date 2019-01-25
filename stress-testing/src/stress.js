@@ -18,6 +18,7 @@ const yargs = require('yargs');
 const args = yargs.argv;
 
 const TOTAL_HITS = args.n || 100000;
+const checkpointFrequency = args.checkpoint || process.env.CHECKPOINT_FREQUENCY || 50;
 
 // Allow user to set concurrency through either the flag --concurrency or by env var.
 const p = Number(args.concurrency) || Number(process.env.CONCURRENCY);
@@ -70,13 +71,15 @@ const driver = neo4j.driver(process.env.NEO4J_URI,
 
 const session = driver.session();
 
-const stats = { completed: 0 };
+const stats = { completed: 0, running: 0 };
 
 const checkpoint = data => {
    if (interrupted) { return data; }
 
    stats.completed++;
-   if(stats.completed % (process.env.CHECKPOINT_FREQUENCY || 50) === 0) {
+   stats.running = stats.running - 1;
+
+   if(stats.completed % checkpointFrequency === 0) {
      console.log(stats);
    }
    return data;
@@ -154,13 +157,18 @@ let exitCode = 0;
 
 Promise.all(setupPromises)
   .then(() => console.log(`Starting parallel strategies: concurrency ${concurrency.concurrency}`))
-  .then(() => Promise.map(arr, item => runStrategy(driver).then(checkpoint), concurrency))
+  .then(() => Promise.map(arr, item => {
+    stats.running++;
+    return runStrategy(driver).then(checkpoint);
+  }, concurrency))
   .catch(err => {
     console.error(err);
     Object.keys(strategies).forEach(strat => {
-      console.log(strat, 'last query');
-      console.log(strategies[strat].lastQuery);
-      console.log(strategies[strat].lastParams);
+      if (strategies[strat].lastQuery) {
+        console.log(strat, 'last query');
+        console.log(strategies[strat].lastQuery);
+        console.log(strategies[strat].lastParams);
+      }
     });
     exitCode = 1;
   })

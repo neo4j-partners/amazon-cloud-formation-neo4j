@@ -175,10 +175,15 @@ Promise.all(setupPromises)
   .finally(() => driver.close())
   .then(() => {
     console.log('Strategy report');
+    let totalElapsed = 0;
+
     Object.keys(strategies).forEach(strategy => {
       const strat = strategies[strategy];
+      totalElapsed = totalElapsed + strat.totalTimeSpent();
       strat.summarize();
     });
+
+    console.log(`BENCHMARK_ELAPSED=${totalElapsed}\n`);
 
     process.exit(exitCode);
   })

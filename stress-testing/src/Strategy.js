@@ -39,13 +39,27 @@ class Strategy {
         ].join(',') + '\n';
     }
 
+    totalTimeSpent() {
+        const elapsedArr = this.timings.map(t => t.elapsed);
+        const total = elapsedArr.reduce((a, b) => a + b, 0);
+        return total;
+    }
+
     summarize() {
         const runs = this.timings.length;
         const elapsedArr = this.timings.map(t => t.elapsed);
-        const avgV = elapsedArr.reduce((a, b) => a + b, 0) / runs || 0;
+        const total = this.totalTimeSpent();
+        const avgV = total / runs || 0;
         const minV = elapsedArr.reduce((min, p) => p < min ? p : min, elapsedArr[0] || 0);
         const maxV = elapsedArr.reduce((max, p) => p > max ? p : max, elapsedArr[0] || 0);
+        
+        const key = `BENCHMARK_${this.name}`;
 
+        console.log(`${key}_ELAPSED=${total}\n`);
+        console.log(`${key}_AVG=${avgV}\n`);
+        console.log(`${key}_MIN=${minV}\n`);
+        console.log(`${key}_MAX=${maxV}\n`);
+        console.log(`${key}_RUNS=${runs}\n`);
         console.log(`${this.name}: ${runs} runs avg ${avgV.toFixed(2)} ms min ${minV} ms max ${maxV} ms\n`);
     }
 

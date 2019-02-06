@@ -9,6 +9,13 @@ export REGION=us-east-1
 export SSHKEY=david.allen.local
 export DISK_GB=37
 export DISK_TYPE=gp2
+
+# Provisioned IOPS SSD
+# export DISK_TYPE=io1
+
+# Throughput optimized HDD
+# export DISK_TYPE=st1
+
 export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 
 # Returns a StackID that can be used to delete.

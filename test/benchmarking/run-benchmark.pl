@@ -7,7 +7,9 @@
 # and deletes the cluster upon completion.
 ###################################################################################
 use strict;
+use warnings;
 use Data::Dumper qw(Dumper);
+use BenchmarkResults qw(writeResults extractResults);
 
 my $provider = shift(@ARGV);
 my $benchmark = shift(@ARGV);
@@ -96,52 +98,35 @@ sub runBenchmark {
 
     my $cmd = "cd \"$benchmark\" && /bin/bash ./benchmark.sh \"$uri\" \"$password\" " . '2>&1 | tee -a "' . $logfile . '"';
     print "Running benchmark ... $cmd\n";
+    my $startTime = time();
     my $output = `$cmd`;
+    my $exitCode = $?; # Did benchmark script succeed or fail?
+    my $endTime = time();
 
     print "OVERALL BENCHMARK OUTPUT:\n";
     print $output;
 
-    my %benchmarkOutputs = ();
-    my @lines = split(/\n/, $output);
-    for my $line (@lines) {
-        chomp($line);
-        if($line =~ m/^BENCHMARK_(.*?)=(.*)$/) {
-            $benchmarkOutputs{$1} = $2;
-        }
-    }
-
-    return %benchmarkOutputs;
-}
-
-sub extractResults {
-    my $log = shift(@_);
-    local $/ = undef;
-
-    my $data = `cat "$log" | grep "^BENCHMARK_"`;
-    my @lines = split(/\n/, $data);
-
-    my %benchmarkOutputs = ();
-
-    for my $line (@lines) {
-        chomp($line);
-        $line =~ m/^BENCHMARK_(.*?)=(.*)?$/;
-        my $key = $1;
-        my $value = $2;
-        $benchmarkOutputs{$key} = $value;
-    }
-
-    return %benchmarkOutputs;
+    return (
+        "EXECUTION_TIME" => ($endTime - $startTime),
+        "EXIT_CODE" => $exitCode,
+        "TAG" => $tag,
+        "LOG_FILE" => $logfile,
+        "PROVIDER" => $providerShort,
+        "BENCHMARK" => $benchmarkShort,
+        "DATE" => $date
+    );
 }
 
 sub main {
+    # These lines are API requirements of what providers and benchmarks are.
     my $createCluster = "$provider/create.sh";
     my $deleteCluster = "$provider/delete.sh";
     my $benchmarkScript = "$benchmark/benchmark.sh";
 
     if (!(-f $createCluster)) {
-        die "Invalid provider $provider: this provider does not know how to create a cluster\n";
+        die "Invalid provider $provider: this provider does not know how to create an instance\n";
     } elsif (!(-f $deleteCluster)) {
-        die "Invalid provider $provider: this provider does not know how to delete a cluster\n";
+        die "Invalid provider $provider: this provider does not know how to delete an instance\n";
     } elsif (!(-f $benchmarkScript)) {
         die "Invalid benchmark $benchmark: this benchmark does not have a run script\n";
     }
@@ -149,8 +134,8 @@ sub main {
     my %hash = createStack($createCluster);
     print Dumper(\%hash);
 
-    my %outputs = runBenchmark($benchmark, $benchmarkScript, \%hash);
-    print Dumper(\%outputs);
+    my %properties = runBenchmark($benchmark, $benchmarkScript, \%hash);
+    writeResults($logfile, \%properties);
 
     print "Results extraction phase.\n";
     my %results = extractResults($logfile);

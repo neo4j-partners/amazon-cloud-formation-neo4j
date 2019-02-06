@@ -9,8 +9,16 @@ INITIAL_HEAP=2G
 MAX_HEAP=4G
 CONTAINER=benchmark-neo4j-$RUN_ID
 
-APOC=https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/3.5.0.1/apoc-3.5.0.1-all.jar
+APOC_VERSION=3.5.0.1
+APOC=https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/3.5.0.1/apoc-$APOC_VERSION-all.jar
 mkdir /tmp/$CONTAINER && wget -P /tmp/$CONTAINER $APOC
+
+# Output some stack settings.
+echo STACK_SETTING_PAGE_CACHE=$PAGE_CACHE
+echo STACK_SETTING_INITIAL_HEAP=$INITIAL_HEAP
+echo STACK_SETTING_MAX_HEAP=$MAX_HEAP
+echo STACK_SETTING_NEO4J=$NEO4J
+echo STACK_SETTING_APOC_VERSION=$APOC_VERSION
 
 echo $CONTAINER
 docker run -d --name "$CONTAINER" --rm \
@@ -25,7 +33,29 @@ docker run -d --name "$CONTAINER" --rm \
         --env NEO4J_dbms_security_procedures_unrestricted=apoc.\\\* \
         -t $NEO4J
 
-echo NEO4J_IP=localhost
+# Wait for docker container to start.
+tries=0
+while true ; do
+   echo "RETURN 'Cypher is Alive';" | docker exec -i "$CONTAINER" bin/cypher-shell -a localhost -u neo4j -p $PASSWORD
+
+   if [ $? -eq 0 ] ; then
+        echo "Docker instance is up ($tries tries)"
+        break
+   fi
+   
+   tries=$((tries+1))
+   echo "Docker container not live yet ($tries tries)"
+
+   if [ $tries -gt 30 ] ; then
+        # Do not output the variables below, this will fail the start on purpose.
+        echo "Docker is not coming up!  Something is wrong.  Check it out."
+        exit 1
+   fi
+
+   sleep 1
+done
+
+echo NEO4J_URI=bolt://localhost
 echo NEO4J_PASSWORD=$PASSWORD
 echo STACK_NAME=$CONTAINER
 echo RUN_ID=$RUN_ID

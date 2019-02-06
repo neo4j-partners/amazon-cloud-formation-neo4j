@@ -22,6 +22,10 @@ if (!$provider) {
     usage();
 }
 
+# Trim trailing slash if present.
+$provider =~ s/\/$//;
+$benchmark =~ s/\/$//;
+
 # Generate some random tag we can use for logging.
 my $tag = `head -c 3 /dev/urandom | md5 | head -c 5`;
 my $date = `date '+%Y-%m-%dT%H:%M:%S'`;
@@ -39,13 +43,13 @@ sub createStack {
     my $script = shift(@_);
     print "Creating stack...\n";
 
-    my $cmd = "cd \"$provider\" && /bin/bash create-cluster.sh " . '2>&1 | tee -a "' . $logfile . '"';
+    my $cmd = "cd \"$provider\" && /bin/bash create.sh " . '2>&1 | tee -a "' . $logfile . '"';
     print "Running create stack command $cmd";
     my $output = `$cmd`;
     print $output;
     
-    $output =~ m/^NEO4J_IP=([^\s]+)$/m;
-    my $ip = $1;
+    $output =~ m/^NEO4J_URI=([^\s]+)$/m;
+    my $uri = $1;
     $output =~ m/^STACK_NAME=([^\s]+)$/m;
     my $stack = $1;
     $output =~ m/^NEO4J_PASSWORD=([^\s]+)$/m;
@@ -53,13 +57,13 @@ sub createStack {
     $output =~ m/^RUN_ID=([^\s]+)$/m;
     my $runID = $1;
 
-    if (!$ip || !$stack || !$password) {
+    if (!$uri || !$stack || !$password) {
         print STDERR $output;
-        die "Create cluster script failed to return ip, name, or password: $ip, $stack, $password\n";
+        die "Create cluster script failed to return ip, name, or password: $uri, $stack, $password\n";
     }
 
     return (
-        "ip" => $ip,
+        "uri" => $uri,
         "stack" => $stack,
         "password" => $password,
         "run_id" => $runID
@@ -72,7 +76,7 @@ sub deleteStack {
 
     print "Deleting stack...\n";
 
-    my $cmd = "/bin/bash " . $script . " " . $hashref->{"stack"} . ' 2>&1 | tee -a "' . $logfile . '"';
+    my $cmd = "cd \"$provider\" && /bin/bash delete.sh " . $hashref->{"stack"} . ' 2>&1 | tee -a "' . $logfile . '"';
     print "Executing $cmd\n";
     print `$cmd`;
 }
@@ -82,15 +86,15 @@ sub runBenchmark {
     my $script = shift(@_);
     my $hashref = shift(@_);
 
-    my $ip = $hashref->{"ip"};
+    my $uri = $hashref->{"uri"};
     my $password = $hashref->{"password"};
 
-    if (!$ip || !$password) {
-        print STDERR "Skipping benchmark run: missing IP or password from stack reference\n";
+    if (!$uri || !$password) {
+        print STDERR "Skipping benchmark run: missing URI or password from stack reference\n";
         return undef;
     }
 
-    my $cmd = "cd \"$benchmark\" && /bin/bash ./benchmark.sh \"bolt+routing://$ip\" \"$password\" " . '2>&1 | tee -a "' . $logfile . '"';
+    my $cmd = "cd \"$benchmark\" && /bin/bash ./benchmark.sh \"$uri\" \"$password\" " . '2>&1 | tee -a "' . $logfile . '"';
     print "Running benchmark ... $cmd\n";
     my $output = `$cmd`;
 
@@ -130,8 +134,8 @@ sub extractResults {
 }
 
 sub main {
-    my $createCluster = "$provider/create-cluster.sh";
-    my $deleteCluster = "$provider/delete-cluster.sh";
+    my $createCluster = "$provider/create.sh";
+    my $deleteCluster = "$provider/delete.sh";
     my $benchmarkScript = "$benchmark/benchmark.sh";
 
     if (!(-f $createCluster)) {

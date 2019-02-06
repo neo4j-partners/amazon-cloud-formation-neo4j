@@ -18,6 +18,7 @@ fi
 export NEO4J_URI=$1
 export NEO4J_PASSWORD=$2
 export NEO4J_USERNAME=neo4j
+SEGMENT_FILE=segment-files-subset.txt
 
 TAG=$(head -c 3 /dev/urandom | md5 | head -c 5)
 
@@ -31,7 +32,7 @@ ELAPSED_INDEX=$(($END_INDEX - $START_INDEX))
 
 echo "Load phase" 
 START_LOAD=$(date +%s)
-./load-all.sh segment-files-subset.txt
+./load-all.sh $SEGMENT_FILE
 END_LOAD=$(date +%s)
 ELAPSED_LOAD=$(($END_LOAD - $START_LOAD))
 
@@ -49,9 +50,17 @@ cat 03b-link-venues-to-cities.cypher | cypher-shell -a $NEO4J_URI
 END_LINK=$(date +%s)
 ELAPSED_LINK=$(($END_LINK - $START_LINK))
 
-for q in `seq 1 5` ; do 
+queries=5
+runtimes=10
+echo BENCHMARK_SETTING_QUERIES=$queries
+echo BENCHMARK_SETTING_RUNTIMES=$runtimes
+echo BENCHMARK_SETTING_SEGMENTS=`wc -l $SEGMENT_FILE`
+echo BENCHMARK_SETTING_TAG=$TAG
+echo BENCHMARK_SETTING_NEO4J_URI=$NEO4J_URI
+
+for q in `seq 1 $queries` ; do 
     echo "Queryload $q phase"
-    for i in `seq 1 10` ; do 
+    for i in `seq 1 $runtimes` ; do 
         cat read-queries/q$q >> queryload-$TAG-$q.cypher
     done
 

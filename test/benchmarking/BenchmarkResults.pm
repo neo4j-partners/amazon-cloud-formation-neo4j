@@ -1,3 +1,43 @@
+# Takes a hashref of extracted results, and sorts them out.
+# Three sections: overview metadata, benchmark specific outputs,
+# and benchmark settings.
+sub organizeResults {
+    my $href = shift(@_);
+
+    # Fields that all benchmarks should output.
+    my %required = (
+        "BENCHMARK" => "missing",
+        "DATE" => "missing",
+        "TAG" => "missing",
+        "ELAPSED" => "missing",
+        "EXECUTION_TIME" => "missing",
+        "LOG_FILE" => "missing",
+        "PROVIDER" => "missing",
+        "EXIT_CODE" => "missing"
+    );
+    my %settings = ();
+    my %benchmarkSpecific = ();
+
+    foreach my $key (keys %{$href}) {
+        print "Key $key\n";
+        my $val = $href->{$key};
+
+        if (exists($required{$key})) {
+            $required{$key} = $val;
+        } elsif ($key =~ m/^SETTING_/i) {
+            $settings{$key} = $val;
+        } else {
+            $benchmarkSpecific{$key} = $val;
+        }
+    }
+
+    return (
+        "required" => \%required,
+        "settings" => \%settings,
+        "benchmark" => \%benchmarkSpecific
+    );
+}
+
 sub extractResults {
     my $log = shift(@_);
     local $/ = undef;

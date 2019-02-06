@@ -5,16 +5,20 @@ export NAME=neo4j-testdeploy-$(head -c 3 /dev/urandom | md5 | head -c 5)
 PROJECT=testbed-187316
 MACHINE=n1-standard-4
 DISK_TYPE=pd-standard
+ZONE=us-east1-b
 # DISK_TYPE=pd-ssd
+CORES=3
+READ_REPLICAS=0
 
 OUTPUT=$(gcloud deployment-manager deployments create $NAME \
     --project $PROJECT \
     --template ../../../../gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja \
-    --properties "clusterNodes:'3',readReplicas:'0',bootDiskType:'$DISK_TYPE',machineType:'$MACHINE'")
+    --properties "zone:'$ZONE',clusterNodes:'$CORES',readReplicas:'$READ_REPLICAS',bootDiskType:'$DISK_TYPE',machineType:'$MACHINE'")
 echo $OUTPUT
 
-echo STACK_SETTING_CORE_NODES=3
-echo STACK_SETTING_READ_REPLICAS=0
+echo STACK_SETTING_ZONE=$ZONE
+echo STACK_SETTING_CORE_NODES=$CORES
+echo STACK_SETTING_READ_REPLICAS=$READ_REPLICAS
 echo STACK_SETTING_MACHINE_TYPE=$MACHINE
 echo STACK_SETTING_GCP_PROJECT=$PROJECT
 echo STACK_SETTING_DISK_TYPE=$DISK_TYPE

@@ -25,3 +25,22 @@ perl run-benchmarkpl providers/aws benchmarks/meetups
 Consult the readmes in the subdirectories for more information on the benchmark and provider APIs.
 
 As of this writing, there's only one benchmark but there are multiple providers.
+
+# Getting a Dataset
+
+```
+for i in $(seq 1 100) ; 
+   do echo "Running time...... $i" && ./run-benchmark.pl providers/localdocker/ benchmarks/stress-test/ ; 
+done
+```
+
+This will produce a large number of `runlog-*.log` files, one for each run.
+
+To parse them out to CSV:
+
+```
+npm install
+node extract-results.js runlog-*.log
+```
+
+Happy hacking.

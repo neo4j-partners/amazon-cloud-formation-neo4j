@@ -11,8 +11,8 @@ Providers can be passed to the run-benchmark script, which uses them to create/d
 
 Simple - 
 
-* Must provide a create-cluster.sh script.
-* Must provide a delete-cluster.sh script.
+* Must provide a create.sh script.
+* Must provide a delete.sh script.
 
 ## Creating Clusters
 

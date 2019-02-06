@@ -19,7 +19,6 @@ sub organizeResults {
     my %benchmarkSpecific = ();
 
     foreach my $key (keys %{$href}) {
-        print "Key $key\n";
         my $val = $href->{$key};
 
         if (exists($required{$key})) {

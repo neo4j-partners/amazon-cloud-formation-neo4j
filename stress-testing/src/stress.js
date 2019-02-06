@@ -155,6 +155,8 @@ process.on('SIGINT', sigintHandler);
 
 let exitCode = 0;
 
+const startTime = new Date().getTime();
+
 Promise.all(setupPromises)
   .then(() => console.log(`Starting parallel strategies: concurrency ${concurrency.concurrency}`))
   .then(() => Promise.map(arr, item => {
@@ -174,12 +176,16 @@ Promise.all(setupPromises)
   })
   .finally(() => driver.close())
   .then(() => {
+    const endTime = new Date().getTime();
     console.log('Strategy report');
-    let totalElapsed = 0;
+
+    // Because strategies run in parallel, you can not time this
+    // by adding their times.  Rather we time the overall execution
+    // process.
+    let totalElapsed = (endTime - startTime);
 
     Object.keys(strategies).forEach(strategy => {
       const strat = strategies[strategy];
-      totalElapsed = totalElapsed + strat.totalTimeSpent();
       strat.summarize();
     });
 

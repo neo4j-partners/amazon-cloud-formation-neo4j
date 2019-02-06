@@ -19,7 +19,7 @@ Simple -
 The create-cluster.sh script must output the following (but can output anything else):
 
 RUN_ID=blahblah
-NEO4J_IP=x.y.z.a
+NEO4J_URI=bolt+routing://x.y.z.a
 NEO4J_PASSWORD=foobar
 STACK_NAME=sometoken
 
@@ -27,7 +27,10 @@ This script requires no arguments, but providers may require arguments specific 
 provider as necessary.
 
 A run ID is any unique ID token.  The script should not return until the stack is working,
-and accessible under $NEO4J_IP and $NEO4J_PASSWORD.
+and accessible under $NEO4J_URI and $NEO4J_PASSWORD.
+
+By outputting NEO4J_URI, the provider may select host, port, and driver (e.g. routing)
+that should be used for the benchmark.
 
 ## Deleting Clusters
 

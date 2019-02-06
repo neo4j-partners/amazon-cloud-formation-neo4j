@@ -7,6 +7,8 @@ export STACKNAME=neo4j-testdeploy-$(echo $VERSION | sed s/[^A-Za-z0-9]/-/g)-$(he
 export INSTANCE=r4.large
 export REGION=us-east-1
 export SSHKEY=david.allen.local
+export DISK_GB=37
+export DISK_TYPE=gp2
 export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 
 # Returns a StackID that can be used to delete.
@@ -20,9 +22,19 @@ STACK_ID=$(aws cloudformation create-stack \
                 ParameterKey=NetworkWhitelist,ParameterValue=0.0.0.0/0 \
                 ParameterKey=Password,ParameterValue=s00pers3cret \
                 ParameterKey=SSHKeyName,ParameterValue=$SSHKEY \
-                ParameterKey=VolumeSizeGB,ParameterValue=37 \
-                ParameterKey=VolumeType,ParameterValue=gp2 \
+                ParameterKey=VolumeSizeGB,ParameterValue=$DISK_GB \
+                ParameterKey=VolumeType,ParameterValue=$DISK_TYPE \
   --capabilities CAPABILITY_NAMED_IAM | jq -r '.StackId')
+
+# Stack settings
+echo STACK_SETTING_CORE_NODES=3
+echo STACK_SETTING_READ_REPLICAS=0
+echo STACK_SETTING_MACHINE_TYPE=$INSTANCE
+echo STACK_SETTING_REGION=$REGION
+echo STACK_SETTING_NEO4J=$VERSION
+echo STACK_SETTING_DISK_GB=$DISK_GB
+echo STACK_SETTING_DISK_TYPE=$DISK_TYPE
+echo STACK_SETTING_TEMPLATE=$TEMPLATE
 
 echo $STACK_ID 
 
@@ -36,12 +48,12 @@ echo $JSON
 
 echo "Assembling results"
 STACK_NAME=$(echo $JSON | jq -r .Stacks[0].StackName)
-NEO4J_URI=$(echo $JSON | jq -cr '.Stacks[0].Outputs[] | select(.OutputKey | contains("Node1Ip")) | .OutputValue')
+NEO4J_IP=$(echo $JSON | jq -cr '.Stacks[0].Outputs[] | select(.OutputKey | contains("Node1Ip")) | .OutputValue')
 NEO4J_PASSWORD=$(echo $JSON | jq -cr '.Stacks[0].Outputs[] | select(.OutputKey | contains("Password")) | .OutputValue')
 
 echo RUN_ID=$RUN_ID
 echo STACK_NAME=$STACK_NAME
 echo STACK_ID=$STACK_ID
 echo NEO4J_URI=$NEO4J_URI
-echo NEO4J_IP=$NEO4J_URI
+echo NEO4J_URI=bolt+routing://$NEO4J_IP
 echo NEO4J_PASSWORD=$NEO4J_PASSWORD

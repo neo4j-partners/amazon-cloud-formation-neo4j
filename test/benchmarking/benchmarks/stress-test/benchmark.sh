@@ -27,13 +27,16 @@ export CONCURRENCY=25
 export ROUNDS=10000
 
 cd $STRESS_TEST && node stress.js --concurrency $CONCURRENCY --n $ROUNDS
+RESULT_CODE=$?
+
 echo BENCHMARK_SETTING_TIME_RESOLUTION=milliseconds
 echo BENCHMARK_SETTING_NEO4J_URI=$NEO4J_URI
 echo BENCHMARK_SETTING_CONCURRENCY=$CONCURRENCY
 echo BENCHMARK_SETTING_ROUNDS=$ROUNDS
 
-echo "Stress Test Benchmark $TAG finshed, logging to $LOG"
+echo "Stress Test Benchmark $TAG finshed"
 echo "===================================================="
 echo "== STRESS TEST BENCHMARK $TAG $1"
-echo "== START: " $(date)
+echo "== END: " $(date)
 echo "===================================================="
+exit $RESULT_CODE

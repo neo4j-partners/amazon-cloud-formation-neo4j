@@ -7,7 +7,7 @@ export STACKNAME=neo4j-testdeploy-$(echo $VERSION | sed s/[^A-Za-z0-9]/-/g)-$(he
 export INSTANCE=r4.large
 export REGION=us-east-1
 export SSHKEY=david.allen.local
-export DISK_GB=37
+export DISK_GB=50
 export DISK_TYPE=gp2
 
 # Provisioned IOPS SSD

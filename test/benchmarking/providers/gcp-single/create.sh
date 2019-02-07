@@ -3,6 +3,7 @@ export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 export PROJECT=testbed-187316
 export MACHINE=n1-standard-4
 export DISK_TYPE=pd-standard
+export DISK_SIZE=50GB
 export ZONE=us-east1-b
 export NEO4J_VERSION=3.5.1
 export PASSWORD=$(head -n 20 /dev/urandom | md5)
@@ -27,6 +28,7 @@ OUTPUT=$(gcloud compute instances create $STACK_NAME \
     --image neo4j-enterprise-1-3-5-1-apoc \
     --tags neo4j \
     --machine-type $MACHINE \
+    --boot-disk-size $DISK_SIZE \
     --boot-disk-type $DISK_TYPE \
     --image-project launcher-public)
 EC=$?
@@ -64,6 +66,7 @@ echo BENCHMARK_SETTING_MACHINE_TYPE=$MACHINE
 echo BENCHMARK_SETTING_NEO4J_VERSION=$NEO4J_VERSION
 echo BENCHMARK_SETTING_PROJECT=$PROJECT
 echo BENCHMARK_SETTING_DIKS_TYPE=$DISK_TYPE
+echo BENCHMARK_SETTING_DISK_SIZE=$DISK_SIZE
 
 echo NEO4J_URI=bolt://$IP:7687
 echo NEO4J_PASSWORD=$PASSWORD

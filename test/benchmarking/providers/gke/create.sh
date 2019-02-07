@@ -13,7 +13,7 @@ export CPU_REQUEST=200m
 export MEMORY_REQUEST=1Gi
 export CPU_LIMIT=2
 export MEMORY_LIMIT=4Gi
-export VOLUME_SIZE=4Gi
+export VOLUME_SIZE=50Gi
 export STORAGE_CLASS_NAME=standard
 export NAMESPACE=default
 

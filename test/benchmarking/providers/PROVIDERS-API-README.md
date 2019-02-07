@@ -18,7 +18,7 @@ This lets you implement a provider in whatever tech you want, python, go, whatev
 
 ## Creating Clusters
 
-The create-cluster.sh script must output the following (but can output anything else):
+The create.sh script must output the following (but can output anything else):
 
 RUN_ID=blahblah
 NEO4J_URI=bolt+routing://x.y.z.a
@@ -36,6 +36,15 @@ that should be used for the benchmark.
 
 ## Deleting Clusters
 
-The delete-cluster.sh script always takes a STACK_NAME as an argument, and destroys the 
+The delete.sh script always takes a STACK_NAME as an argument, and destroys the 
 cluster.  The STACK_NAME is some token that the provider needs to destroy the cluster.
 What this token is varies by provider (AWS vs. GCP for example)
+
+## Instance Requirements
+
+- Must be accessible by bolt, with the username/password provided.
+- Must be a non-default password, so the benchmark is not required to change it before doing writes.
+- Must provide minimum 50GB of disk, so that write-heavy workloads have space to work with and the
+benchmark doesn't fail due to uninteresting reasons (no more disk)
+
+Anything not mentioned above is left up to the provider to decide/configure.

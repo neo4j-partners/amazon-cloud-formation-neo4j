@@ -8,11 +8,15 @@ fi
 echo "Deleting stack $1"
 
 echo "Killing port forwarding"
-kill $(ps -A | grep -m1 "kubectl port-forward" | awk '{print $1}')
+kill -9 $(ps -A | grep -m1 "kubectl port-forward" | awk '{print $1}')
 
 # Delete the stack by tearing down all of the resources in the YAML we created
 # as part of the create step.
 kubectl delete -f "$1.yaml"
+
+# Delete PVCs
+kubectl delete pvc -l release=$1 
+
 KUBECTL_EXIT=$?
 rm -f "$1.yaml"
 

@@ -68,8 +68,8 @@ sub createStack {
     }
 
     my %provisioningProperties = (
-        "PROV_TIME": ($endTime - $startTime),
-        "PROV_EXIT": $exitCode
+        "PROV_TIME" => ($endTime - $startTime),
+        "PROV_EXIT" => $exitCode
     );
     writeResults($logfile, \%provisioningProperties);
 
@@ -95,8 +95,8 @@ sub deleteStack {
     my $endTime = time();
 
     my %deprovProperties = (
-        "DEPROV_TIME": ($endTime - $startTime),
-        "DEPROV_EXIT": $exitCode
+        "DEPROV_TIME" => ($endTime - $startTime),
+        "DEPROV_EXIT" => $exitCode
     );
     writeResults($logfile, \%deprovProperties);
 }

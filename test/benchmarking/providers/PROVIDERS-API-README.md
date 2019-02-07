@@ -14,6 +14,8 @@ Simple -
 * Must provide a create.sh script.
 * Must provide a delete.sh script.
 
+This lets you implement a provider in whatever tech you want, python, go, whatever.
+
 ## Creating Clusters
 
 The create-cluster.sh script must output the following (but can output anything else):

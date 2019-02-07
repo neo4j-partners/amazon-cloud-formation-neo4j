@@ -61,6 +61,5 @@ NEO4J_PASSWORD=$(echo $JSON | jq -cr '.Stacks[0].Outputs[] | select(.OutputKey |
 echo RUN_ID=$RUN_ID
 echo STACK_NAME=$STACK_NAME
 echo STACK_ID=$STACK_ID
-echo NEO4J_URI=$NEO4J_URI
 echo NEO4J_URI=bolt+routing://$NEO4J_IP
 echo NEO4J_PASSWORD=$NEO4J_PASSWORD

@@ -34,11 +34,19 @@ perl run-benchmarkpl providers/aws benchmarks/meetups
 
 ## Which providers are available?
 
-`ls providers/`
+- AWS (VM based cluster)
+- GCP (VM based cluster)
+- GCP single (VM based single node)
+- GKE cluster (Kubernetes based)
+- Local docker (Docker based, single node)
 
 ## Which benchmarks are available?
 
-`ls benchmarks/`
+- `meetups`. (real data from Meetup.com).  Does a lot of heavy data loading from
+JSON and then runs a series of semi-random access read queries.
+- `stress-test`.  See the stress-test in this repo, this workload is all over the place.
+- `writefast`.  An adaptation of stress-test, for a pure write-only workload.
+No data loading.
 
 # Getting a Dataset
 

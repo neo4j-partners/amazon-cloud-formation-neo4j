@@ -10,3 +10,5 @@ queryload-*.cypher
 # GKE provider temp YAML
 *deploy*.yaml
 
+# GKE provider logs for kubectl forwarding
+kubectl*.log

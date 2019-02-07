@@ -5,7 +5,7 @@ export PROJECT=neo4j-k8s-marketplace-public
 export DEPLOY_ID=$(head -c 10 /dev/urandom | md5 | head -c 5)
 export SOLUTION_VERSION=3.5
 export IMAGE=gcr.io/neo4j-k8s-marketplace-public/causal-cluster:$SOLUTION_VERSION
-export APP_INSTANCE_NAME=deploy-$DEPLOY_ID
+export APP_INSTANCE_NAME=benchmark-deploy-$DEPLOY_ID
 export CLUSTER_PASSWORD=mySecretPassword
 export CORES=3
 export READ_REPLICAS=0
@@ -50,7 +50,8 @@ fi
 
 echo BENCHMARK_SETTING_CHART=$APP_INSTANCE_NAME.yaml
 
-sleep 10
+echo "Cluster initializing"
+sleep 20
 
 CLUSTER_PASSWORD=$(kubectl get secrets $APP_INSTANCE_NAME-neo4j-secrets -o yaml | grep neo4j-password: | sed 's/.*neo4j-password: *//' | base64 --decode)
 
@@ -78,25 +79,25 @@ while true ; do
     SHELL_EXIT=$?
 
     echo "Cypher shell reports:"
-    echo "========== CYPHER SHELL ============="
+    echo "========== CYPHER SHELL ($SHELL_EXIT) ============="
     echo $OUTPUT
     echo "========== /CYPHER SHELL ============"
 
     if [ $SHELL_EXIT -eq 0 ] ; then
-        echo "Pods are ready ($tries tries)"
+        echo "Pods are ready ... $tries tries"
 
         LEADER=$(echo $OUTPUT | grep $APP_INSTANCE_NAME)
-        break
+        break;
     fi
 
     if [ $tries -gt 40 ] ; then
         echo "Pods are not coming up....giving up"
-        exit 1
+        exit 1;
     fi
 
     tries=$(($tries+1))
-    echo "Pods not ready yet ($tries tries)"
-    sleep 3
+    echo "Pods not ready yet ... $tries tries";
+    sleep 3;
 done
 
 # LEADER contains the bolt address, like this:

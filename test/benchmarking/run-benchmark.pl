@@ -47,7 +47,10 @@ sub createStack {
 
     my $cmd = "cd \"$provider\" && /bin/bash create.sh " . '2>&1 | tee -a "' . $logfile . '"';
     print "Running create stack command $cmd";
+    my $startTime = time();
     my $output = `$cmd`;
+    my $exitCode = $?;
+    my $endTime = time();
     print $output;
     
     $output =~ m/^NEO4J_URI=([^\s]+)$/m;
@@ -63,6 +66,12 @@ sub createStack {
         print STDERR $output;
         die "Create cluster script failed to return ip, name, or password: $uri, $stack, $password\n";
     }
+
+    my %provisioningProperties = (
+        "PROV_TIME": ($endTime - $startTime),
+        "PROV_EXIT": $exitCode
+    );
+    writeResults($logfile, \%provisioningProperties);
 
     return (
         "uri" => $uri,
@@ -80,7 +89,16 @@ sub deleteStack {
 
     my $cmd = "cd \"$provider\" && /bin/bash delete.sh " . $hashref->{"stack"} . ' 2>&1 | tee -a "' . $logfile . '"';
     print "Executing $cmd\n";
+    my $startTime = time();
     print `$cmd`;
+    my $exitCode = $?;
+    my $endTime = time();
+
+    my %deprovProperties = (
+        "DEPROV_TIME": ($endTime - $startTime),
+        "DEPROV_EXIT": $exitCode
+    );
+    writeResults($logfile, \%deprovProperties);
 }
 
 sub runBenchmark {
@@ -106,11 +124,14 @@ sub runBenchmark {
     print "OVERALL BENCHMARK OUTPUT:\n";
     print $output;
 
+    my $logShort = $logfile;
+    $logShort =~ s/$cwd//; # Don't save complete path.
+
     return (
         "EXECUTION_TIME" => ($endTime - $startTime),
         "EXIT_CODE" => $exitCode,
         "TAG" => $tag,
-        "LOG_FILE" => $logfile,
+        "LOG_FILE" => $logShort,
         "PROVIDER" => $providerShort,
         "BENCHMARK" => $benchmarkShort,
         "DATE" => $date

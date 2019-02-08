@@ -15,6 +15,8 @@
 const neo4j = require('neo4j-driver').v1;
 const Promise = require('bluebird');
 const yargs = require('yargs');
+const genericPool = require('generic-pool');
+
 const args = yargs.argv;
 
 const TOTAL_HITS = args.n || 100000;
@@ -69,7 +71,27 @@ const driver = neo4j.driver(process.env.NEO4J_URI,
   neo4j.auth.basic(process.env.NEO4J_USER,
     process.env.NEO4J_PASSWORD) );
 
-const session = driver.session();
+// How to create/destroy sessions.
+const factory = {
+  create: () => {
+    const s = driver.session();
+    return s;
+  },
+  destroy: session => {
+    return session.close();
+  },
+  validate: session =>
+    session.run('RETURN 1;', {})
+      .then(results => true)
+      .catch(err => false),
+};
+const sessionPoolOpts = { min: 1, max: (concurrency.concurrency + 5) };
+console.log('Creating session pool with ', sessionPoolOpts);
+const sessionPool = genericPool.createPool(factory, sessionPoolOpts);
+
+sessionPool.on('factoryCreateError', err => console.log('SESSION POOL ERROR', err));
+sessionPool.on('factoryDestroyError', err => console.error('SESSION POOL DESTROY ERROR', err));
+sessionPool.start();
 
 const stats = { completed: 0, running: 0 };
 
@@ -109,19 +131,19 @@ const RandomAccessReadStrategy = require('./read-strategy/RandomAccessReadStrate
 
 const strategies = {
   // WRITE STRATEGIES
-  naryWrite: new NAryTreeStrategy({ n: 2 }),
-  fatnodeWrite: new FatNodeAppendStrategy({}),
-  mergeWrite: new MergeWriteStrategy({ n: 1000000 }),
-  rawWrite: new RawWriteStrategy({ n: 10 }),
-  randomLinkage: new RandomLinkageStrategy({ n: 1000000 }),
-  starWrite: new StarWriteStrategy({}),
-  indexHeavy: new IndexHeavyStrategy({}),
+  naryWrite: new NAryTreeStrategy({ n: 2, sessionPool }),
+  fatnodeWrite: new FatNodeAppendStrategy({ sessionPool }),
+  mergeWrite: new MergeWriteStrategy({ n: 1000000, sessionPool }),
+  rawWrite: new RawWriteStrategy({ n: 10, sessionPool }),
+  randomLinkage: new RandomLinkageStrategy({ n: 1000000, sessionPool }),
+  starWrite: new StarWriteStrategy({ sessionPool }),
+  indexHeavy: new IndexHeavyStrategy({ sessionPool }),
 
   // READ STRATEGIES
-  aggregateRead: new AggregateReadStrategy({}),
-  metadataRead: new MetadataReadStrategy({}),
-  longPathRead: new LongPathReadStrategy({}),
-  randomAccess: new RandomAccessReadStrategy({}),
+  aggregateRead: new AggregateReadStrategy({ sessionPool }),
+  metadataRead: new MetadataReadStrategy({ sessionPool }),
+  longPathRead: new LongPathReadStrategy({ sessionPool }),
+  randomAccess: new RandomAccessReadStrategy({ sessionPool }),
 };
 
 const runStrategy = (driver) => {
@@ -174,7 +196,15 @@ Promise.all(setupPromises)
     });
     exitCode = 1;
   })
-  .finally(() => driver.close())
+  .finally(() => {
+    console.log('Draining pool and closing connections');
+    return sessionPool.drain()
+      .then(() => sessionPool.clear())
+      .catch(err => {
+        console.error('Some error draining/clearing pool', err);
+      })
+      .then(() => driver.close());
+  })
   .then(() => {
     const endTime = new Date().getTime();
     console.log('Strategy report');
@@ -186,10 +216,10 @@ Promise.all(setupPromises)
 
     Object.keys(strategies).forEach(strategy => {
       const strat = strategies[strategy];
-      strat.summarize();
+      // strat.summarize();
     });
 
     console.log(`BENCHMARK_ELAPSED=${totalElapsed}\n`);
 
     process.exit(exitCode);
-  })
+  });

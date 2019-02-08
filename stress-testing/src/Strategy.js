@@ -66,15 +66,24 @@ class Strategy {
     time(somePromiseFunc, data={}) {
         const start = new Date().getTime();
 
-        const session = this.driver.session();
+        const closure = () => {
+            let s;
 
-        return somePromiseFunc(session)
-            .then(result => {
-                const end = new Date().getTime();
-                const elapsed = end - start;
-                this.timings.push(_.merge({ elapsed }, data));
-            })
-            .finally(() => session.close());
+            // console.log('Acuquiring from ', this.props.sessionPool);
+            return this.props.sessionPool.acquire()
+                .then(session => {
+                    s = session;
+                    return somePromiseFunc(session);
+                })
+                .then(result => {
+                    const end = new Date().getTime();
+                    const elapsed = end - start;
+                    this.timings.push(_.merge({ elapsed }, data));
+                })
+                .finally(() => this.props.sessionPool.release(s));
+        };
+
+        return closure();
     }
 
     randString(len) {

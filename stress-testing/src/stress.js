@@ -216,7 +216,7 @@ Promise.all(setupPromises)
 
     Object.keys(strategies).forEach(strategy => {
       const strat = strategies[strategy];
-      // strat.summarize();
+      strat.summarize();
     });
 
     console.log(`BENCHMARK_ELAPSED=${totalElapsed}\n`);

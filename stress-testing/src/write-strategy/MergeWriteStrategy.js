@@ -40,7 +40,7 @@ class MergeWriteStrategy extends Strategy {
           r2: this.randInt(100000),
         };
 
-        const f = (s = driver.session()) => s.writeTransaction(tx => tx.run(this.lastQuery, this.lastParams)).finally(() => s.close());
+        const f = (s) => s.writeTransaction(tx => tx.run(this.lastQuery, this.lastParams));
         return this.time(f);
     }
 }

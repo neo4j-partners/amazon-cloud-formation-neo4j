@@ -25,8 +25,7 @@ class StarWriteStrategy extends Strategy {
             id, starSize: this.n,
         };
 
-        const f = (s = driver.session()) => 
-            s.writeTransaction(tx => tx.run(q, params)).finally(() => s.close());
+        const f = (s) => s.writeTransaction(tx => tx.run(q, params));
         return this.time(f);
     }
 }

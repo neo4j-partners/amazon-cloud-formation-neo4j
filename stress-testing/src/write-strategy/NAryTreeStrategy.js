@@ -44,7 +44,7 @@ class NAryTreeStrategy extends Strategy {
             RETURN p.val;
         `;
 
-        const f = (s = driver.session()) => s.writeTransaction(tx => tx.run(this.lastQuery, this.lastParams)).finally(() => s.close());
+        const f = (s) => s.writeTransaction(tx => tx.run(this.lastQuery, this.lastParams));
         return this.time(f);
     }
 }

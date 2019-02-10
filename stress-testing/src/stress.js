@@ -46,9 +46,7 @@ let probabilityTable = [
 ];
 
 // probabilityTable = [
-//   [ 0.3, 'starWrite' ],
-//   [ 0.6, 'indexHeavy' ],
-//   [ 1, 'randomAccess' ],
+//   [ 1, 'lockTorture' ],
 // ];
 
 if (args.workload) {
@@ -123,6 +121,7 @@ const MergeWriteStrategy = require('./write-strategy/MergeWriteStrategy');
 const RawWriteStrategy = require('./write-strategy/RawWriteStrategy');
 const StarWriteStrategy = require('./write-strategy/StarWriteStrategy');
 const IndexHeavyStrategy = require('./write-strategy/IndexHeavyStrategy');
+const LockTortureStrategy = require('./write-strategy/LockTortureStrategy');
 const RandomLinkageStrategy = require('./write-strategy/RandomLinkageStrategy');
 const AggregateReadStrategy = require('./read-strategy/AggregateReadStrategy');
 const MetadataReadStrategy = require('./read-strategy/MetadataReadStrategy');
@@ -138,6 +137,7 @@ const strategies = {
   randomLinkage: new RandomLinkageStrategy({ n: 1000000, sessionPool }),
   starWrite: new StarWriteStrategy({ sessionPool }),
   indexHeavy: new IndexHeavyStrategy({ sessionPool }),
+  lockTorture: new LockTortureStrategy({ sessionPool }),
 
   // READ STRATEGIES
   aggregateRead: new AggregateReadStrategy({ sessionPool }),

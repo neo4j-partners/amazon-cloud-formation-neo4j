@@ -3,10 +3,11 @@
 export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 export NAME=neo4j-testdeploy-$(head -c 3 /dev/urandom | md5 | head -c 5)
 PROJECT=testbed-187316
-MACHINE=n1-standard-4
-DISK_TYPE=pd-standard
-# DISK_TYPE=pd-ssd
-DISK_SIZE=50
+# 2 CPUs, 7.5gb RAM
+MACHINE=n1-standard-2
+# DISK_TYPE=pd-standard
+DISK_TYPE=pd-ssd
+DISK_SIZE=64
 ZONE=us-east1-b
 CORES=3
 READ_REPLICAS=0

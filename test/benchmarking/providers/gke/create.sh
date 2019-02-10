@@ -9,11 +9,11 @@ export APP_INSTANCE_NAME=benchmark-deploy-$DEPLOY_ID
 export CLUSTER_PASSWORD=mySecretPassword
 export CORES=3
 export READ_REPLICAS=0
-export CPU_REQUEST=200m
-export MEMORY_REQUEST=1Gi
+export CPU_REQUEST=2
+export MEMORY_REQUEST=8Gi
 export CPU_LIMIT=2
-export MEMORY_LIMIT=4Gi
-export VOLUME_SIZE=50Gi
+export MEMORY_LIMIT=8Gi
+export VOLUME_SIZE=64Gi
 export STORAGE_CLASS_NAME=standard
 export NAMESPACE=default
 

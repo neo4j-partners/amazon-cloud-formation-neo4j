@@ -1,9 +1,10 @@
 #!/bin/bash
 export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 export PROJECT=testbed-187316
-export MACHINE=n1-standard-4
-export DISK_TYPE=pd-standard
-export DISK_SIZE=200GB
+export MACHINE=n1-standard-2
+# export DISK_TYPE=pd-standard
+export DISK_TYPE=pd-ssd
+export DISK_SIZE=64GB
 export ZONE=us-east1-b
 export NEO4J_VERSION=3.5.1
 export PASSWORD=$(head -n 20 /dev/urandom | md5)

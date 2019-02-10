@@ -27,6 +27,8 @@ class Strategy {
         return this.timings;
     }
 
+    countRuns() { return this.getTimings().length; }
+
     csv() {
         const runs = this.timings.length;
         const elapsedArr = this.timings.map(t => t.elapsed);

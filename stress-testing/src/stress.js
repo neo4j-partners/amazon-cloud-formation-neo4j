@@ -15,7 +15,7 @@
 const neo4j = require('neo4j-driver').v1;
 const Promise = require('bluebird');
 const yargs = require('yargs');
-const genericPool = require('generic-pool');
+const pool = require('./sessionPool');
 
 const args = yargs.argv;
 
@@ -69,27 +69,7 @@ const driver = neo4j.driver(process.env.NEO4J_URI,
   neo4j.auth.basic(process.env.NEO4J_USER,
     process.env.NEO4J_PASSWORD) );
 
-// How to create/destroy sessions.
-const factory = {
-  create: () => {
-    const s = driver.session();
-    return s;
-  },
-  destroy: session => {
-    return session.close();
-  },
-  validate: session =>
-    session.run('RETURN 1;', {})
-      .then(results => true)
-      .catch(err => false),
-};
-const sessionPoolOpts = { min: 1, max: (concurrency.concurrency + 5) };
-console.log('Creating session pool with ', sessionPoolOpts);
-const sessionPool = genericPool.createPool(factory, sessionPoolOpts);
-
-sessionPool.on('factoryCreateError', err => console.log('SESSION POOL ERROR', err));
-sessionPool.on('factoryDestroyError', err => console.error('SESSION POOL DESTROY ERROR', err));
-sessionPool.start();
+const sessionPool = pool.getPool(driver, concurrency.concurrency + 5);
 
 const stats = { completed: 0, running: 0 };
 
@@ -216,7 +196,10 @@ Promise.all(setupPromises)
 
     Object.keys(strategies).forEach(strategy => {
       const strat = strategies[strategy];
-      strat.summarize();
+
+      if (strat.countRuns() > 0) {
+        strat.summarize();
+      }
     });
 
     console.log(`BENCHMARK_ELAPSED=${totalElapsed}\n`);

@@ -75,6 +75,12 @@ while true ; do
     # }
 
    echo $RESPONSE
+   echo $RESPONSE | grep "token is invalid" >/dev/null 2>&1
+
+   if [ $? -eq 0 ] ; then
+      echo "Token is invalid - retry"
+      exit 1
+   fi 
 
    NEO4J_URI=$(echo $RESPONSE | jq -r ".BoltUrl")
    DB_STATUS=$(echo $RESPONSE | jq -r ".DatabaseStatus")  

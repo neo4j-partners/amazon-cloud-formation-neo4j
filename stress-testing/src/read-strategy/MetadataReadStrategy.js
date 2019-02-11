@@ -5,7 +5,7 @@ const uuid = require('uuid');
 class MetadataReadStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'MetadataReadStrategy';
+        this.name = 'MetadataRead';
     }
 
     run(driver) {

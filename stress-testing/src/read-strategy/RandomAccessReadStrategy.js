@@ -3,7 +3,7 @@ const Strategy = require('../Strategy');
 class RandomAccessReadStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'RandomAccessReadStrategy';
+        this.name = 'RandomAccessRead';
         this.prime = props.prime || 1093;
         this.limit = props.limit || 50;
     }

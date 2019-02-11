@@ -8,7 +8,7 @@ const MAX_STAR_SIZE = 100;
 class IndexHeavyStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'IndexHeavyStrategy';
+        this.name = 'IndexHeavy';
         this.n = props.n || MAX_STAR_SIZE;
     }
 

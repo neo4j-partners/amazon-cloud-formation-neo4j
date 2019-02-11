@@ -4,7 +4,7 @@ const Promise = require('bluebird');
 class WritePropertyDataStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'WritePropertyDataStrategy';
+        this.name = 'WritePropertyData';
         this.label = props.label;
     }
 

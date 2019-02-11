@@ -5,7 +5,7 @@ const uuid = require('uuid');
 class FatNodeAppendStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'FatNodeAppendStrategy';
+        this.name = 'FatNodeAppend';
         this.label = props.label;
     }
 

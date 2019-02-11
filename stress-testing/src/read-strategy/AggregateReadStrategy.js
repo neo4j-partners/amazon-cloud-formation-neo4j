@@ -5,7 +5,7 @@ const uuid = require('uuid');
 class AggregateReadStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'AggregateReadStrategy';
+        this.name = 'AggregateRead';
     }
 
     run(driver) {

@@ -8,7 +8,7 @@ const MAX_STAR_SIZE = 100;
 class StarWriteStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'StarWriteStrategy';
+        this.name = 'StarWrite';
         this.n = props.n || MAX_STAR_SIZE;
     }
 

@@ -5,7 +5,7 @@ const uuid = require('uuid');
 class RawWriteStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'MergeWriteStrategy';
+        this.name = 'MergeWrite';
         this.n = props.n || 10;
     }
 

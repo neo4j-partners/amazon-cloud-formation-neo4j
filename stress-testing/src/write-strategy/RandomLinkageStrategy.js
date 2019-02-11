@@ -5,7 +5,7 @@ const uuid = require('uuid');
 class RandomLinkageStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'RandomLinkageStrategy';
+        this.name = 'RandomLinkage';
         this.n = props.n || 1000000;
     }
 

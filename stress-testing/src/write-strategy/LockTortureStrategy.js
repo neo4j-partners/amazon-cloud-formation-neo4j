@@ -13,7 +13,7 @@ const MAX_STAR_SIZE = 100;
 class LockTortureStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'LockTortureStrategy';
+        this.name = 'LockTorture';
         this.n = props.n || 5;
     }
 

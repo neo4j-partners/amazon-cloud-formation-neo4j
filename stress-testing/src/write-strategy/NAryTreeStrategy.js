@@ -5,7 +5,7 @@ class NAryTreeStrategy extends Strategy {
     constructor(props) {
         super(props);
         this.n = props.n;
-        this.name = 'NAryTreeStrategy';
+        this.name = 'NAryTree';
     }
 
     setup(driver) {

@@ -101,6 +101,27 @@ sub deleteStack {
     writeResults($logfile, \%deprovProperties);
 }
 
+sub checkLatency {
+    my $log = shift(@_);
+    my $hashref = shift(@_);
+
+    my $uri = $hashref->{"uri"};
+    my $password = $hashref->{"password"};
+
+    my $cmd = "node latency.js -a '". $uri . "' -p '" . $password . "' " . '2>&1 | tee -a "' . $logfile . '"';
+    my $output = `$cmd`;
+    my $exitCode = $?;
+
+    print "Latency output:\n";
+    print $output;
+
+    if ($exitCode == 0) {
+        return "Good!";
+    }
+
+    return undef;
+}
+
 sub runBenchmark {
     my $dir = shift(@_);
     my $script = shift(@_);
@@ -154,6 +175,15 @@ sub main {
 
     my %hash = createStack($createCluster);
     print Dumper(\%hash);
+
+    print "Checking deploy latencies to make sure stack is working\n";
+    my $allOK = checkLatency($logfile, \%hash);
+
+    if (!defined($allOK)) {
+        print "Latency probe failed, destroying deploy\n";
+        deleteStack($deleteCluster, \%hash);
+        return undef;
+    }
 
     my %properties = runBenchmark($benchmark, $benchmarkScript, \%hash);
     writeResults($logfile, \%properties);

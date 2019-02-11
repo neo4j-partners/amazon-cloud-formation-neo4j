@@ -55,7 +55,7 @@ class Strategy {
         const minV = elapsedArr.reduce((min, p) => p < min ? p : min, elapsedArr[0] || 0);
         const maxV = elapsedArr.reduce((max, p) => p > max ? p : max, elapsedArr[0] || 0);
         
-        const key = `BENCHMARK_${this.name}`;
+        const key = `BENCHMARK_${this.name}`.replace(/strategy/gi, '');
 
         console.log(`${key}_ELAPSED=${total}\n`);
         console.log(`${key}_AVG=${avgV}\n`);

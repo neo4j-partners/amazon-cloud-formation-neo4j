@@ -20,7 +20,7 @@ const pool = require('./sessionPool');
 const args = yargs.argv;
 
 const TOTAL_HITS = args.n || 100000;
-const checkpointFrequency = args.checkpoint || process.env.CHECKPOINT_FREQUENCY || 50;
+const checkpointFrequency = args.checkpoint || process.env.CHECKPOINT_FREQUENCY || 200;
 
 // Allow user to set concurrency through either the flag --concurrency or by env var.
 const p = Number(args.concurrency) || Number(process.env.CONCURRENCY);
@@ -32,17 +32,17 @@ const concurrency = { concurrency: (!Number.isNaN(p) && p > 0) ? p : 10 };
 // By tweaking the distribution of these numbers you can control how frequently
 // each strategy is executed.
 let probabilityTable = [
-  [ 0.1, 'fatnodeWrite' ],
-  [ 0.2, 'naryWrite' ],
-  [ 0.3, 'mergeWrite' ],
-  [ 0.4, 'randomLinkage' ],
-  [ 0.45, 'starWrite' ],
-  [ 0.55, 'indexHeavy' ],
-  [ 0.60, 'aggregateRead' ],
-  [ 0.695, 'randomAccess' ],
+  [0.1, 'fatnodeWrite'],
+  [0.2, 'naryWrite'],
+  [0.3, 'mergeWrite'],
+  [0.4, 'randomLinkage'],
+  [0.45, 'starWrite'],
+  [0.55, 'indexHeavy'],
+  [0.60, 'aggregateRead'],
+  [0.695, 'randomAccess'],
   // [ 0.60, 'metadataRead' ],
-  [ 0.70, 'longPathRead' ],
-  [ 1, 'rawWrite' ],
+  [0.70, 'longPathRead'],
+  [1, 'rawWrite'],
 ];
 
 // probabilityTable = [
@@ -67,22 +67,22 @@ console.log('Connecting to ', process.env.NEO4J_URI);
 
 const driver = neo4j.driver(process.env.NEO4J_URI,
   neo4j.auth.basic(process.env.NEO4J_USER,
-    process.env.NEO4J_PASSWORD) );
+    process.env.NEO4J_PASSWORD));
 
 const sessionPool = pool.getPool(driver, concurrency.concurrency + 5);
 
 const stats = { completed: 0, running: 0 };
 
 const checkpoint = data => {
-   if (interrupted) { return data; }
+  if (interrupted) { return data; }
 
-   stats.completed++;
-   stats.running = stats.running - 1;
+  stats.completed++;
+  stats.running = stats.running - 1;
 
-   if(stats.completed % checkpointFrequency === 0) {
-     console.log(stats);
-   }
-   return data;
+  if (stats.completed % checkpointFrequency === 0) {
+    console.log(stats);
+  }
+  return data;
 };
 
 let interrupted = false;
@@ -133,7 +133,7 @@ const runStrategy = (driver) => {
   let strat;
   let key;
 
-  for (let i=0; i<probabilityTable.length; i++) {
+  for (let i = 0; i < probabilityTable.length; i++) {
     const entry = probabilityTable[i];
     if (roll <= entry[0]) {
       key = entry[1];
@@ -148,8 +148,23 @@ const runStrategy = (driver) => {
 
 const setupPromises = Object.keys(strategies).map(key => strategies[key].setup(driver));
 
-// Pre-run this prior to script: FOREACH (id IN range(0,1000) | MERGE (:Node {id:id}));
-const arr = Array.apply(null, { length: TOTAL_HITS }).map(Number.call, Number);
+// JS iterable lets us do Promise.map n times.
+// https://javascript.info/iterable
+let range = { from: 0, to: TOTAL_HITS };
+range[Symbol.iterator] = function () { // function and not () => for "this" binding.
+  return {
+    current: this.from,
+    last: this.to,
+
+    next() {
+      if (this.current <= this.last) {
+        return { done: false, value: this.current++ };
+      } else {
+        return { done: true };
+      }
+    }
+  };
+};
 
 console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ');
 console.log(JSON.stringify(probabilityTable, null, 2));
@@ -161,7 +176,7 @@ const startTime = new Date().getTime();
 
 Promise.all(setupPromises)
   .then(() => console.log(`Starting parallel strategies: concurrency ${concurrency.concurrency}`))
-  .then(() => Promise.map(arr, item => {
+  .then(() => Promise.map(range, () => {
     stats.running++;
     return runStrategy(driver).then(checkpoint);
   }, concurrency))

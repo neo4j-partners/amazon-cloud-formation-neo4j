@@ -7,6 +7,7 @@ const MergeWriteStrategy = require('./write-strategy/MergeWriteStrategy');
 const RawWriteStrategy = require('./write-strategy/RawWriteStrategy');
 const StarWriteStrategy = require('./write-strategy/StarWriteStrategy');
 const IndexHeavyStrategy = require('./write-strategy/IndexHeavyStrategy');
+const LuceneWriteStrategy = require('./write-strategy/LuceneWriteStrategy');
 const LockTortureStrategy = require('./write-strategy/LockTortureStrategy');
 const RandomLinkageStrategy = require('./write-strategy/RandomLinkageStrategy');
 const AggregateReadStrategy = require('./read-strategy/AggregateReadStrategy');
@@ -24,6 +25,7 @@ const builder = sessionPool => ({
     starWrite: new StarWriteStrategy({ sessionPool }),
     indexHeavy: new IndexHeavyStrategy({ sessionPool }),
     lockTorture: new LockTortureStrategy({ sessionPool }),
+    luceneWrite: new LuceneWriteStrategy({ sessionPool }),
 
     // READ STRATEGIES
     aggregateRead: new AggregateReadStrategy({ sessionPool }),

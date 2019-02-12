@@ -17,72 +17,44 @@ const Promise = require('bluebird');
 const yargs = require('yargs');
 const pool = require('./sessionPool');
 const strategies = require('./strategies');
+const runConfiguration = require('./run-configuration');
+const PromisePool = require('es6-promise-pool');
+const _ = require('lodash');
 
-const args = yargs.argv;
+const runConfig = runConfiguration(yargs.argv);
 
-const TOTAL_HITS = args.n || 100000;
-const checkpointFrequency = args.checkpoint || process.env.CHECKPOINT_FREQUENCY || 200;
+console.log('Connecting to ', runConfig.address);
+const driver = neo4j.driver(runConfig.address,
+  neo4j.auth.basic(runConfig.username, runConfig.password));
 
-// Allow user to set concurrency through either the flag --concurrency or by env var.
-const p = Number(args.concurrency) || Number(process.env.CONCURRENCY);
-const concurrency = { concurrency: (!Number.isNaN(p) && p > 0) ? p : 10 };
+const sessionPool = pool.getPool(driver, runConfig.concurrency);
 
-// Each time, a random number is chosen, and this table is scanned through.
-// If the random number is less than the strategy number, it executes.
-// So for example if the random number is 0.30, then aggregateRead is executed.
-// By tweaking the distribution of these numbers you can control how frequently
-// each strategy is executed.
-let probabilityTable = [
-  [0.1, 'fatnodeWrite'],
-  [0.2, 'naryWrite'],
-  [0.3, 'mergeWrite'],
-  [0.4, 'randomLinkage'],
-  [0.45, 'starWrite'],
-  [0.55, 'indexHeavy'],
-  [0.60, 'aggregateRead'],
-  [0.695, 'randomAccess'],
-  // [ 0.60, 'metadataRead' ],
-  [0.70, 'longPathRead'],
-  [1, 'rawWrite'],
-];
+const shutdownConnections = () => {
+  return sessionPool.drain()
+    .then(() => sessionPool.clear())
+    .catch(err => {
+      console.error('Some error draining/clearing pool', err);
+    })
+    .then(() => driver.close());
+};
 
-// probabilityTable = [
-//   [ 1, 'lockTorture' ],
-// ];
+const strategyTable = strategies.builder(sessionPool);
+const stats = { completed: 0, running: 0, error: 0 };
 
-if (args.workload) {
-  console.log('Loading workload ', args.workload);
-  probabilityTable = require(args.workload);
-}
+const printStatus = () => {
+  const pctDone = parseFloat(Math.round(runConfig.iterateUntil.progress() * 100)).toFixed(2);
+  console.log(`Progress: ${pctDone}% ${stats.completed} completed; ${stats.running} running ${stats.error} error`);
 
-if (!process.env.NEO4J_URI) {
-  console.error('Set env vars NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD');
-  process.exit(1);
-}
-
-if (!process.env.NEO4J_URI || !process.env.NEO4J_USER || !process.env.NEO4J_PASSWORD) {
-  throw new Error('One or more of necessary NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD env vars missing');
-}
-
-console.log('Connecting to ', process.env.NEO4J_URI);
-
-const driver = neo4j.driver(process.env.NEO4J_URI,
-  neo4j.auth.basic(process.env.NEO4J_USER,
-    process.env.NEO4J_PASSWORD));
-
-const sessionPool = pool.getPool(driver, concurrency.concurrency + 5);
-
-const stats = { completed: 0, running: 0 };
+  if (!interrupted) {
+    // Schedule myself again.
+    setTimeout(printStatus, runConfig.checkpointFreq);
+  }
+};
 
 const checkpoint = data => {
   if (interrupted) { return data; }
-
   stats.completed++;
   stats.running = stats.running - 1;
-
-  if (stats.completed % checkpointFrequency === 0) {
-    console.log(stats);
-  }
   return data;
 };
 
@@ -103,91 +75,72 @@ const runStrategy = (driver) => {
   let strat;
   let key;
 
-  for (let i = 0; i < probabilityTable.length; i++) {
-    const entry = probabilityTable[i];
+  for (let i = 0; i < runConfig.probabilityTable.length; i++) {
+    const entry = runConfig.probabilityTable[i];
     if (roll <= entry[0]) {
       key = entry[1];
       break;
     }
   }
 
-  strat = strategies[key];
+  strat = strategyTable[key];
   didStrategy(key);
   return strat.run(driver);
 };
 
-const setupPromises = Object.keys(strategies).map(key => strategies[key].setup(driver));
-
-// JS iterable lets us do Promise.map n times.
-// https://javascript.info/iterable
-let range = { from: 0, to: TOTAL_HITS };
-range[Symbol.iterator] = function () { // function and not () => for "this" binding.
-  return {
-    current: this.from,
-    last: this.to,
-
-    next() {
-      if (this.current <= this.last) {
-        return { done: false, value: this.current++ };
-      } else {
-        return { done: true };
-      }
-    }
-  };
-};
-
-console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ');
-console.log(JSON.stringify(probabilityTable, null, 2));
+console.log(_.pick(runConfig, [
+  'address', 'username', 'concurrency', 'n', 'ms', 'checkpointFreq',
+]));
 process.on('SIGINT', sigintHandler);
 
 let exitCode = 0;
 
-const startTime = new Date().getTime();
+const promiseProducer = () => {
+  if (interrupted) { return null; }
 
-Promise.all(setupPromises)
-  .then(() => console.log(`Starting parallel strategies: concurrency ${concurrency.concurrency}`))
-  .then(() => Promise.map(range, () => {
-    stats.running++;
-    return runStrategy(driver).then(checkpoint);
-  }, concurrency))
-  .catch(err => {
-    console.error(err);
-    Object.keys(strategies).forEach(strat => {
-      if (strategies[strat].lastQuery) {
-        console.log(strat, 'last query');
-        console.log(strategies[strat].lastQuery);
-        console.log(strategies[strat].lastParams);
-      }
-    });
-    exitCode = 1;
-  })
-  .finally(() => {
-    console.log('Draining pool and closing connections');
-    return sessionPool.drain()
-      .then(() => sessionPool.clear())
-      .catch(err => {
-        console.error('Some error draining/clearing pool', err);
-      })
-      .then(() => driver.close());
-  })
-  .then(() => {
-    const endTime = new Date().getTime();
-    console.log('Strategy report');
+  const v = runConfig.iterateUntil.next();
+  if (v.done) {
+    // Signal to the pool that we're done.
+    return null;
+  }
 
-    // Because strategies run in parallel, you can not time this
-    // by adding their times.  Rather we time the overall execution
-    // process.
-    let totalElapsed = (endTime - startTime);
+  stats.running++;
+  return runStrategy(driver).then(checkpoint);
+};
 
-    Object.keys(strategies).forEach(strategy => {
-      const strat = strategies[strategy];
+const promisePool = new PromisePool(promiseProducer, runConfig.concurrency);
+promisePool.addEventListener('rejected', event => { stats.error++; });
 
-      if (strat.countRuns() > 0) {
-        strat.summarize();
-      }
-    });
+const phase = (phase, fn) => {
+  console.log('Beginning phase', phase);
+  return fn();
+};
 
-    console.log(`BENCHMARK_ELAPSED=${totalElapsed}\n`);
+const setupPromisesFn = () =>
+  Object.keys(strategyTable).map(key => strategyTable[key].setup(driver));
 
-    process.exit(exitCode);
-  });
+const main = () => {
+  const startTime = new Date().getTime();
+
+  return Promise.all(phase('SETUP', setupPromisesFn))
+    .then(printStatus)
+    .then(() => phase('STRATEGIES', () => promisePool.start()))
+    .catch(err => {
+      console.error(err);
+      strategies.showLastQuery(strategyTable);
+      exitCode = 1;
+    })
+    .finally(() => phase('SHUTDOWN', shutdownConnections))
+    .then(() => {
+      const endTime = new Date().getTime();
+      // Because strategies run in parallel, you can not time this
+      // by adding their times.  Rather we time the overall execution
+      // process.
+      let totalElapsed = (endTime - startTime);
+      console.log(`BENCHMARK_ELAPSED=${totalElapsed}\n`);
+    })
+    .then(() => phase('REPORT', () => strategies.report(strategyTable)))
+    .then(() => process.exit(exitCode));
+};
+
+main();

@@ -14,7 +14,7 @@ const MetadataReadStrategy = require('./read-strategy/MetadataReadStrategy');
 const LongPathReadStrategy = require('./read-strategy/LongPathReadStrategy');
 const RandomAccessReadStrategy = require('./read-strategy/RandomAccessReadStrategy');
 
-const strategies = {
+const builder = sessionPool => ({
     // WRITE STRATEGIES
     naryWrite: new NAryTreeStrategy({ n: 2, sessionPool }),
     fatnodeWrite: new FatNodeAppendStrategy({ sessionPool }),
@@ -30,6 +30,30 @@ const strategies = {
     metadataRead: new MetadataReadStrategy({ sessionPool }),
     longPathRead: new LongPathReadStrategy({ sessionPool }),
     randomAccess: new RandomAccessReadStrategy({ sessionPool }),
+});
+
+const report = strategyTable => {
+    console.log('Strategy report');
+
+    Object.keys(strategyTable).forEach(strategy => {
+        const strat = strategyTable[strategy];
+
+        if (strat.countRuns() > 0) {
+            strat.summarize();
+        }
+    });
 };
 
-module.exports = strategies;
+const showLastQuery = strategyTable => {
+    Object.keys(strategyTable).forEach(strat => {
+        if (strategyTable[strat].lastQuery) {
+            console.log(strat, 'last query');
+            console.log(strategyTable[strat].lastQuery);
+            console.log(strategyTable[strat].lastParams);
+        }
+    });
+};
+
+module.exports = {
+    builder, report, showLastQuery,
+};

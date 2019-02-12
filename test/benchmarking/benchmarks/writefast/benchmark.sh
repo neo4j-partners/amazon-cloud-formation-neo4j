@@ -23,9 +23,10 @@ export NEO4J_URI=$1
 export NEO4J_PASSWORD=$2
 export NEO4J_USERNAME=neo4j
 
-# 100k writes, 25 at a time.
+# 10 minutes of 25 writes at a time.
 export CONCURRENCY=25
-export ROUNDS=100000
+export MS=600000
+# export MS=5000
 
 # Configuration for how to do the writes, with
 # which frequency.
@@ -33,7 +34,7 @@ workload=`pwd`/workload.json
 
 cd $STRESS_TEST && node stress.js \
     --concurrency $CONCURRENCY \
-    --n $ROUNDS \
+    --ms $MS \
     --checkpoint 1000 \
     --workload "$workload"
 RESULT_CODE=$?
@@ -41,7 +42,7 @@ RESULT_CODE=$?
 echo BENCHMARK_SETTING_TIME_RESOLUTION=milliseconds
 echo BENCHMARK_SETTING_NEO4J_URI=$NEO4J_URI
 echo BENCHMARK_SETTING_CONCURRENCY=$CONCURRENCY
-echo BENCHMARK_SETTING_ROUNDS=$ROUNDS
+echo BENCHMARK_SETTING_TEST_TIME=$MS
 
 echo "Stress Test Benchmark $TAG finshed"
 echo "===================================================="

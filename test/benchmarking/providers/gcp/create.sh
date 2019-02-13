@@ -15,7 +15,7 @@ READ_REPLICAS=0
 OUTPUT=$(gcloud deployment-manager deployments create $NAME \
     --project $PROJECT \
     --template ../../../../gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja \
-    --properties "zone:'$ZONE',clusterNodes:'$CORES',readReplicas:'$READ_REPLICAS',bootDiskSizeGb:'$DISK_SIZE',bootDiskType:'$DISK_TYPE',machineType:'$MACHINE'")
+    --properties "zone:'$ZONE',clusterNodes:'$CORES',readReplicas:'$READ_REPLICAS',bootDiskSizeGb:$DISK_SIZE,bootDiskType:'$DISK_TYPE',machineType:'$MACHINE'")
 echo $OUTPUT
 
 echo BENCHMARK_SETTING_ZONE=$ZONE

@@ -6,7 +6,9 @@
     "Description": "Neo4j on AWS - creates a variable number of EC2 Ubuntu machines, a VPC, elastic IP addresses, and deploys the Neo4j Graph Database cluster on it.  **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
     "AWSTemplateFormatVersion": "2010-09-09",
     "Mappings": {        
-        "AWSRegionArch2AMI": {% include 'template-parts/region2AMIMappings.jinja' %}
+        "AWSRegionArch2AMI": {% with regionMappings="template-parts/region2AMIMappings-"+edition+".jinja" %}
+           {% include regionMappings %}
+        {% endwith %}
     },
     "Parameters": {
         "InstanceType": {

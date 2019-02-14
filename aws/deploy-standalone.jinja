@@ -371,6 +371,21 @@
                 ]
             }
         },
+        "IMPORTANT": {
+            "Value": {
+                "Fn::Join": [
+                    "\n",
+                    [
+                    "PLEASE TAKE NOTE!  Your instance begins with an unsigned ",
+                    "SSL certificate.  This means that in order to access your ",
+                    "new system, you should configure your browser to trust this ",
+                    "IP address on **both** port 7473 **and** port 7687, otherwise ",
+                    "you may have issues connecting. ",
+                    "For more information see https://community.neo4j.com/t/troubleshooting-connection-issues-to-neo4j/129"
+                    ]
+                ]
+            }
+        },
         "Neo4jWebadmin": {
             "Value": {
                 "Fn::Join": [

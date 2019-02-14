@@ -16,8 +16,7 @@ export INTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$
 export EXTERNAL_IP_ADDR=$(curl -f --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/public-ipv4s)
 
 if [ $? -ne 0 || "$EXTERNAL_IP_ADDR" = "" ] ; then
-   # VMs in private subnets have no public IP, and must advertise their internal IPs.
-   # When this occur
+   echo "pre-neo4j.sh: Advertising internal IP since instance lacks external public IP"
    export EXTERNAL_IP_ADDR=$INTERNAL_IP_ADDR
 fi
 

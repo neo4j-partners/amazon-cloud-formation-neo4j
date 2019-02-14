@@ -27,19 +27,31 @@ Generate from Jinja template, upload to S3, and validate.
 export VERSION=3.5.1
 S3BUCKET=neo4j-cloudformation
 GEN_STACK=neo4j-enterprise-stack-$VERSION.json
-pipenv run python3 generate.py --template deploy.jinja > $GEN_STACK && \
+pipenv run python3 generate.py --edition enterprise --template deploy.jinja > $GEN_STACK && \
 s3cmd -P put $GEN_STACK s3://$S3BUCKET/
 aws cloudformation validate-template \
   --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK > /dev/null
 ```
 
-Standalone:
+Neo4j Enterprise Standalone:
 
 ```
 export VERSION=3.5.1
 S3BUCKET=neo4j-cloudformation
 GEN_STACK=neo4j-enterprise-standalone-stack-$VERSION.json
-pipenv run python3 generate.py --template deploy-standalone.jinja > $GEN_STACK && \
+pipenv run python3 generate.py --edition enterprise --template deploy-standalone.jinja > $GEN_STACK && \
+s3cmd -P put $GEN_STACK s3://$S3BUCKET/
+aws cloudformation validate-template \
+  --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK > /dev/null
+```
+
+Neo4j Community Standalone:
+
+```
+export VERSION=3.5.1
+S3BUCKET=neo4j-cloudformation
+GEN_STACK=neo4j-community-standalone-stack-$VERSION.json
+pipenv run python3 generate.py --edition community --template deploy-standalone.jinja > $GEN_STACK && \
 s3cmd -P put $GEN_STACK s3://$S3BUCKET/
 aws cloudformation validate-template \
   --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK > /dev/null

@@ -13,7 +13,14 @@ echo "pre-neo4j.sh: Fetching AWS instance metadata"
 export API=http://169.254.169.254/latest/
 export MAC_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/)
 export INTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/local-ipv4s)
-export EXTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/public-ipv4s)
+export EXTERNAL_IP_ADDR=$(curl -f --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/public-ipv4s)
+
+if [ $? -ne 0 || "$EXTERNAL_IP_ADDR" = "" ] ; then
+   # VMs in private subnets have no public IP, and must advertise their internal IPs.
+   # When this occur
+   export EXTERNAL_IP_ADDR=$INTERNAL_IP_ADDR
+fi
+
 export INSTANCE_ID=$(curl --silent $API/meta-data/instance-id)
 export AVAILABILITY_ZONE=$(curl --silent $API/meta-data/placement/availability-zone)
 export REGION=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document|grep region|awk -F\" '{print $4}'`

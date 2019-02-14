@@ -6,7 +6,8 @@ const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 const REQUIRED = [
     'BENCHMARK', 'DATE', 'TAG', 'ELAPSED', 'EXECUTION_TIME',
-    'LOG_FILE', 'PROVIDER', 'EXIT_CODE'
+    'LOG_FILE', 'PROVIDER', 'EXIT_CODE', 'LATENCY', 'LATENCIES', 
+    'LATENCY_ERRORS',
 ];
 
 const isRequired = key => REQUIRED.indexOf(key) > -1;

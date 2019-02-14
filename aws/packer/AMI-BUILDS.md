@@ -3,6 +3,34 @@
 This file tracks when AMIs were built by edition & version, storing the original mapping
 from AMI ID to region.
 
+## Neo4j Enterprise 3.5.2 with APOC & Graph Algos
+
+```
+ap-northeast-1: ami-0722cea6684f7ce05
+ap-southeast-1: ami-003224ad9f04c307b
+eu-central-1: ami-07785c0e839552840
+eu-west-1: ami-0874fbb76111a08a0
+sa-east-1: ami-01e1d059c940d64d2
+us-east-1: ami-0eaab9e45caeaf595
+us-east-2: ami-0e947345f9202dbc8
+us-west-1: ami-0b3b0da8b25d6c59f
+us-west-2: ami-0a9032b98c914afee
+```
+
+## Neo4j Community 3.5.2 with APOC & Graph Algos
+
+```
+ap-northeast-1: ami-0aec1ec6a989489a4
+ap-southeast-1: ami-0323a8cfd64850cd2
+eu-central-1: ami-008e71ffffd997a86
+eu-west-1: ami-07e4cb623326aa7f1
+sa-east-1: ami-066389d23b69525da
+us-east-1: ami-0da7d04fb205f2baa
+us-east-2: ami-00301990ac9f6c040
+us-west-1: ami-09da6c16ee426e631
+us-west-2: ami-031f9912b3c625c06
+```
+
 ## Neo4j Enterprise 3.5.1 with APOC & Graph Algos
 
 ```

@@ -5,8 +5,10 @@ if [ -z $VERSION ] ; then
    exit 1
 fi
 
-export STANDALONE_TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-enterprise-standalone-stack-$VERSION.json
-export TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-enterprise-stack-$VERSION.json
+export SINGLE_TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-enterprise-standalone-stack-$VERSION.json
+export CLUSTER_TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-enterprise-stack-$VERSION.json
+export COMMUNITY_TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-enterprise-standalone-stack-$VERSION.json
+
 export STACKNAME=neo4j-cloudlauncher-testdeploy-$(echo $VERSION | sed s/[^A-Za-z0-9]/-/g)
 export INSTANCE=r4.large
 export REGION=us-east-1
@@ -15,7 +17,7 @@ export SSHKEY=david.allen.local
 aws cloudformation create-stack \
    --stack-name $STACKNAME \
    --region $REGION \
-   --template-url $TEMPLATE \
+   --template-url $CLUSTER_TEMPLATE \
    --parameters ParameterKey=ClusterNodes,ParameterValue=3 \
                 ParameterKey=InstanceType,ParameterValue=$INSTANCE \
                 ParameterKey=NetworkWhitelist,ParameterValue=0.0.0.0/0 \

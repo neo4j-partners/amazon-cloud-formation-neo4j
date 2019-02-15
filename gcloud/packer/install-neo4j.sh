@@ -20,7 +20,7 @@ else
     sudo apt-get --yes install neo4j-enterprise=$neo4j_version
 fi
 
-if [ $? -eq 0 ] ; then
+if [ $? -ne 0 ] ; then
     echo '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
     echo '########## NEO4J INSTALL FAILED #########'
     echo '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'

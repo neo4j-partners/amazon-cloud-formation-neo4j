@@ -1,6 +1,6 @@
 {
   "variables": {
-    "neo4j_version": "1:3.5.1",
+    "neo4j_version": "1:3.5.2",
     "neo4j_edition": "enterprise",
     "zone": "us-central1-a",
     "gcp_service_account_credentials_file": "./packer-sa.json",

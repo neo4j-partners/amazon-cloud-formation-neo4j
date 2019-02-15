@@ -70,7 +70,7 @@ echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:
 # BOLT
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
 echo "dbms_connector_bolt_listen_address" "${dbms_connector_bolt_listen_address:=0.0.0.0:7687}"
-echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=REQUIRED}"
+echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
 
 # Backup
 echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"

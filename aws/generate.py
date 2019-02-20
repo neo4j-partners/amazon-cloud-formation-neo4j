@@ -15,7 +15,7 @@ def appendStack(input):
             ]
       }""" % input
 
-def roundRobinAZ(someIndex, totalAZs=3):
+def roundRobinAZ(someIndex, totalAZs=2):
       """Evenly distribute resources across 3 AZs for avaialability"""
       azIdx = someIndex % totalAZs
       return """{

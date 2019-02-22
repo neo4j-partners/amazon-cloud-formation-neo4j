@@ -11,10 +11,12 @@ DISK_SIZE=64
 ZONE=us-east1-b
 CORES=3
 READ_REPLICAS=0
+NEO4J_VERSION=3.5.3
+TEMPLATE_URL=https://storage.googleapis.com/neo4j-deploy/$NEO4J_VERSION/causal-cluster/neo4j-causal-cluster.jinja
 
 OUTPUT=$(gcloud deployment-manager deployments create $NAME \
     --project $PROJECT \
-    --template ../../../../gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja \
+    --template "$TEMPLATE_URL" \
     --properties "zone:'$ZONE',clusterNodes:'$CORES',readReplicas:'$READ_REPLICAS',bootDiskSizeGb:$DISK_SIZE,bootDiskType:'$DISK_TYPE',machineType:'$MACHINE'")
 echo $OUTPUT
 
@@ -25,6 +27,7 @@ echo BENCHMARK_SETTING_MACHINE_TYPE=$MACHINE
 echo BENCHMARK_SETTING_GCP_PROJECT=$PROJECT
 echo BENCHMARK_SETTING_DISK_TYPE=$DISK_TYPE
 echo BENCHMARK_SETTING_DISK_SIZE=$DISK_SIZE
+echo BENCHMARK_SETTING_NEO4J_VERSION=$NEO4J_VERSION
 
 PASSWORD=$(echo $OUTPUT | perl -ne 'm/password\s+([^\s]+)/; print $1;')
 IP=$(echo $OUTPUT | perl -ne 'm/vm1URL\s+https:\/\/([^\s]+):/; print $1; ')

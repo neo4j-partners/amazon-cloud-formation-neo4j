@@ -89,6 +89,20 @@ requires a fully-qualified public URL in order to resolve other files that belon
 
 Two directories test and arm correspond to local dev testing and finished deployed version.
 
+## Deploying Public Templates
+
+To publish ARM templates, we want to copy them into a directory structure on the S3 bucket once
+they're prepped.  This public S3 bucket allows customers to deploy as needed, and get access to
+the code to customize deployments for their setups.
+
+Verify first that the templates are working with the bin/create script (which does jinja expansion)
+and then copy them like so:
+
+```
+export VERSION=3.5.3
+s3cmd put --recursive -P arm/* s3://neo4j-arm/$VERSION/causal-cluster/
+```
+
 ## Jinja Templating
 
 Because the ARM templating language is flat JSON, the code in flat JSON is very much not DRY.
@@ -122,7 +136,7 @@ have to accept legal terms.  Here's how to do that.
 Find the URN of the image:
 
 ```
-az vm image list --all --publisher neo4j --offer neo4j-enterprise-3_5 --query '[0].urn'
+az vm image list --all --publisher neo4j --offer neo4j-enterprise-3_5 --query '[].urn'
 ```
 
 Then grab that URN and accept terms of it:
@@ -145,6 +159,27 @@ $ az vm image accept-terms --urn neo4j:neo4j-enterprise-3_5:neo4j_3_5_1_apoc:3.5
 ```
 
 ARM deployments can now work against that published VM.
+
+The relevant bits of the ARM:
+
+```
+			"imageReference": {
+                "publisher": "neo4j",
+                "offer": "neo4j-enterprise-3_5",
+                "sku": "neo4j_3_5_3_apoc",
+                "version": "latest"
+			},
+```
+
+and
+
+```
+    "plan": {
+        "name": "neo4j_3_5_3_apoc",
+        "publisher": "neo4j",
+        "product": "neo4j-enterprise-3_5"
+    },
+```
 
 ## Relevant Documentation
 

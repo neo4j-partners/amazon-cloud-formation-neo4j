@@ -1,5 +1,5 @@
 #!/bin/bash
-
+export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 export LOCATION=eastus
 export SUBSCRIPTION=Private-PAYG
 export RG=neo4j-standalone-RG-$(head -c 3 /dev/urandom | base64 | sed 's|[^A-Za-z0-9]|x|g')
@@ -57,6 +57,11 @@ az vm create --name $NAME \
     --admin-password "$ADMIN_PASSWORD" \
     --public-ip-address-allocation $ADDRESS_ALLOCATION \
     --size $VM_SIZE
+
+if [ $? -ne 0 ] ; then
+    echo "VM creation failed"
+    exit 1
+fi 
 
 echo "Updating NIC to have our NSG"
 # Uses default assigned NIC name

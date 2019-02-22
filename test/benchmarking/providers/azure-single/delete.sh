@@ -6,3 +6,4 @@ if [ -z $1 ] ; then
 fi
 
 az group delete -n "$1" --no-wait --yes
+exit $?

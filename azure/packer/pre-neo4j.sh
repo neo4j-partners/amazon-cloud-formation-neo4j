@@ -17,7 +17,7 @@ export HEADERS="-H Metadata:true"
 export INTERNAL_IP_ADDR=$(curl $HEADERS --silent $API/instance/network/interface/0/ipv4/ipAddress/0/privateIpAddress?$VERSION\&format=text)
 export EXTERNAL_IP_ADDR=$(curl -f $HEADERS --silent $API/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress?$VERSION\&format=text)
 
-if [ $? -ne 0 || "$EXTERNAL_IP_ADDR" = "" ] ; then
+if [ $? -ne 0 ] || [ "$EXTERNAL_IP_ADDR" = "" ] ; then
    echo "pre-neo4j.sh: Advertising internal IP since instance lacks external public IP"
    export EXTERNAL_IP_ADDR=$INTERNAL_IP_ADDR
 fi

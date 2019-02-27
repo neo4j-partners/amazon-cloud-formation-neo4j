@@ -6,31 +6,31 @@ from AMI ID to region.
 ## Neo4j Enterprise 3.5.3 with APOC & Graph Algos
 
 ```
-ap-northeast-1: ami-0ecd5ec782977d1bc
-ap-south-1: ami-0b59b5162d4fa9d7a
-ap-southeast-1: ami-0e0bed075e48cf929
-eu-central-1: ami-00aecced4dbadbdfd
-eu-west-1: ami-0cd501e345ee48ca8
-sa-east-1: ami-0f9506975f8d4c50c
-us-east-1: ami-01a11b2e62a098916
-us-east-2: ami-0bca42e185426ff8d
-us-west-1: ami-051875e37891d2950
-us-west-2: ami-091f8baea6253314f
+ap-northeast-1: ami-0e4929e7322b378dd
+ap-south-1: ami-0c9855c2d5f1c6527
+ap-southeast-1: ami-0cf36d7ad51a09a42
+eu-central-1: ami-05f30083fe95f0fd4
+eu-west-1: ami-0572a469fb0d71326
+sa-east-1: ami-019a244d7af21895c
+us-east-1: ami-0f6db720c2e3c7b68
+us-east-2: ami-0a366ea274e2488ee
+us-west-1: ami-00d82e0b875e505dc
+us-west-2: ami-084b94e5c357b909e
 ```
 
 ## Neo4j Community 3.5.3 with APOC & Graph Algos
 
 ```
-ap-northeast-1: ami-02b429fa93d5d3629
-ap-south-1: ami-035b0715708177ffd
-ap-southeast-1: ami-019511e587f4c5714
-eu-central-1: ami-036e9a5ab4f93b384
-eu-west-1: ami-002cbe5e81dcaf537
-sa-east-1: ami-0bcf065866ebd1066
-us-east-1: ami-0aeebc5d17c06beff
-us-east-2: ami-04dae5ec66939c49c
-us-west-1: ami-0c22a5c031b45ac0f
-us-west-2: ami-072b65728e9f5f65c
+ap-northeast-1: ami-08c2fa77e8db00a45
+ap-south-1: ami-0c3d24d9d72862477
+ap-southeast-1: ami-00f0fb0b6d50360ba
+eu-central-1: ami-02f067699f2d3763d
+eu-west-1: ami-060ca745e75f560da
+sa-east-1: ami-03798cb7bc4f17d57
+us-east-1: ami-0e183183b4282d06e
+us-east-2: ami-013b2bd153c04192a
+us-west-1: ami-09b9d3e6ee77b72da
+us-west-2: ami-096f9b7f629e365ad
 ```
 
 ## Neo4j Enterprise 3.5.2 with APOC & Graph Algos

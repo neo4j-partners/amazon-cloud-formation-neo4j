@@ -79,6 +79,7 @@ env.globals['roundRobinAZ'] = roundRobinAZ
 parser = argparse.ArgumentParser(description='Generate CloudFormation JSON from template')
 parser.add_argument('--template', type=str, help='template file')
 parser.add_argument('--edition', type=str, help='community or enterprise')
+parser.add_argument('--profile', type=str, help='profile (govcloud or marketplace)')
 args = parser.parse_args()
 
 if args.edition is None:
@@ -89,8 +90,12 @@ if args.template is None:
       print("Template argument is required!")
       sys.exit(1)
 
+if args.profile is None:
+      print("Profile argument is required!")
+      sys.exit(1)
+
 template = env.get_template(args.template)
-tmpl_content = template.render(edition=args.edition)
+tmpl_content = template.render(edition=args.edition, profile=args.profile)
 
 with open('generated.json', 'w') as f:
       f.write(tmpl_content)

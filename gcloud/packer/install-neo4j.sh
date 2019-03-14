@@ -13,10 +13,18 @@ wget -O - https://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add -
 echo 'deb http://debian.neo4j.org/repo stable/' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
 sudo apt-get update && sudo apt-get --yes upgrade 
 
+echo "Installing Neo4j"
 if [ $neo4j_edition = "community" ]; then
     sudo apt-get --yes install neo4j=$neo4j_version
 else
     sudo apt-get --yes install neo4j-enterprise=$neo4j_version
+fi
+
+if [ $? -ne 0 ] ; then
+    echo '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+    echo '########## NEO4J INSTALL FAILED #########'
+    echo '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+    exit 1
 fi
 
 echo "Enabling neo4j system service"

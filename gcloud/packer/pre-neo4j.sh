@@ -25,7 +25,7 @@ NEO4J_SETTINGS[dbms_connector_http_listen_address]=0.0.0.0:7474
 # BOLT
 NEO4J_SETTINGS[dbms_connector_bolt_enabled]=true
 NEO4J_SETTINGS[dbms_connector_bolt_listen_address]=0.0.0.0:7687
-NEO4J_SETTINGS[dbms_connector_bolt_tls_level]=REQUIRED
+NEO4J_SETTINGS[dbms_connector_bolt_tls_level]=OPTIONAL
 
 # Backup
 NEO4J_SETTINGS[dbms_backup_enabled]=true

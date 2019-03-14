@@ -167,7 +167,7 @@
         },
         "VNetName": "[concat(parameters('ClusterName'),'-vnet')]",
         "resourceIDs": {
-            "virtualNetwork": "[resourceId(resourceGroup().name, 'Microsoft.Network/virtualNetworks', variables('VNetName'))]"
+            "virtualNetwork": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]"
         }
     },
     "resources": [
@@ -352,7 +352,7 @@
                 "parameters": {
                     "NodePrefix": { "value": "core" },
                     "DBMS_MODE": { "value": "CORE" },
-                    "SubnetID": { "value": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/NeoVnetSubnet1')]" },
+                    "SubnetID": { "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('VNetName'), 'NeoVnetSubnet1')]" },
                     "NetworkSecurityGroupId": { "value": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]" },
 
                     "N": { "value": "[parameters('CoreNodes')]" },
@@ -397,7 +397,7 @@
                 "parameters": {
                     "NodePrefix": { "value": "readreplica" },
                     "DBMS_MODE": { "value": "READ_REPLICA" },
-                    "SubnetID": { "value": "[concat(variables('resourceIDs').virtualNetwork, '/subnets/NeoVnetSubnet1')]" },
+                    "SubnetID": { "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('VNetName'), 'NeoVnetSubnet1')]" },
                     "NetworkSecurityGroupId": { "value": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('namePrefixes').nsg)]" },
 
                     "N": { "value": "[parameters('ReadReplicas')]" },

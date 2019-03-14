@@ -13,7 +13,13 @@ echo "pre-neo4j.sh: Fetching AWS instance metadata"
 export API=http://169.254.169.254/latest/
 export MAC_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/)
 export INTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/local-ipv4s)
-export EXTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/public-ipv4s)
+export EXTERNAL_IP_ADDR=$(curl -f --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/public-ipv4s)
+
+if [ $? -ne 0 ] || [ "$EXTERNAL_IP_ADDR" = "" ] ; then
+   echo "pre-neo4j.sh: Advertising internal IP since instance lacks external public IP"
+   export EXTERNAL_IP_ADDR=$INTERNAL_IP_ADDR
+fi
+
 export INSTANCE_ID=$(curl --silent $API/meta-data/instance-id)
 export AVAILABILITY_ZONE=$(curl --silent $API/meta-data/placement/availability-zone)
 export REGION=`curl -s http://169.254.169.254/latest/dynamic/instance-identity/document|grep region|awk -F\" '{print $4}'`
@@ -64,7 +70,7 @@ echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:
 # BOLT
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
 echo "dbms_connector_bolt_listen_address" "${dbms_connector_bolt_listen_address:=0.0.0.0:7687}"
-echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=REQUIRED}"
+echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
 
 # Backup
 echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"

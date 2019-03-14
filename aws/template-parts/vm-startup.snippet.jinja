@@ -8,6 +8,7 @@
 "#!/bin/bash\n",
 "#\n",
 "# This script starts at the launch of a VM, and handles final cluster coordination.\n",
+"sudo /bin/rm -f /etc/neo4j/password-reset.log\n",
 "LOGFILE=/home/ubuntu/setup.log\n",
 "echo `date` 'Preparing Causal Cluster' | tee -a $LOGFILE\n",
 "\n",

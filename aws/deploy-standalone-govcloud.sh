@@ -5,23 +5,26 @@ if [ -z $VERSION ] ; then
    exit 1
 fi
 
-export STANDALONE_TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-enterprise-standalone-stack-$VERSION.json
-export TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-enterprise-stack-$VERSION.json
-export STACKNAME=neo4j-cloudlauncher-testdeploy-$(echo $VERSION | sed s/[^A-Za-z0-9]/-/g)
-export INSTANCE=r4.large
-export REGION=us-east-1
+export PROFILE=govcloud
+export S3HOST=s3-us-gov-east-1.amazonaws.com
+export BUCKET=neo4j-cloudformation
+export SINGLE_TEMPLATE=http://$S3HOST/$BUCKET/neo4j-enterprise-standalone-stack-$VERSION.json
+
+export STACKNAME=neo4j-single-testdeploy-$(echo $VERSION | sed s/[^A-Za-z0-9]/-/g)
+export INSTANCE=t2.large
+export REGION=us-gov-east-1
 export SSHKEY=david.allen.local
 
 aws cloudformation create-stack \
    --stack-name $STACKNAME \
    --region $REGION \
-   --template-url $TEMPLATE \
-   --parameters ParameterKey=ClusterNodes,ParameterValue=3 \
-                ParameterKey=InstanceType,ParameterValue=$INSTANCE \
+   --template-url $SINGLE_TEMPLATE \
+   --parameters ParameterKey=InstanceType,ParameterValue=$INSTANCE \
                 ParameterKey=NetworkWhitelist,ParameterValue=0.0.0.0/0 \
                 ParameterKey=Password,ParameterValue=s00pers3cret \
                 ParameterKey=SSHKeyName,ParameterValue=$SSHKEY \
                 ParameterKey=VolumeSizeGB,ParameterValue=37 \
                 ParameterKey=VolumeType,ParameterValue=gp2 \
-  --capabilities CAPABILITY_NAMED_IAM
+  --capabilities CAPABILITY_NAMED_IAM \
+  --profile govcloud
 

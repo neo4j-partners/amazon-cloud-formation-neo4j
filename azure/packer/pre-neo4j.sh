@@ -15,7 +15,13 @@ export API=http://169.254.169.254/metadata
 export VERSION=api-version=2017-08-01
 export HEADERS="-H Metadata:true"
 export INTERNAL_IP_ADDR=$(curl $HEADERS --silent $API/instance/network/interface/0/ipv4/ipAddress/0/privateIpAddress?$VERSION\&format=text)
-export EXTERNAL_IP_ADDR=$(curl $HEADERS --silent $API/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress?$VERSION\&format=text)
+export EXTERNAL_IP_ADDR=$(curl -f $HEADERS --silent $API/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress?$VERSION\&format=text)
+
+if [ $? -ne 0 ] || [ "$EXTERNAL_IP_ADDR" = "" ] ; then
+   echo "pre-neo4j.sh: Advertising internal IP since instance lacks external public IP"
+   export EXTERNAL_IP_ADDR=$INTERNAL_IP_ADDR
+fi
+
 export INSTANCE_ID=$(curl $HEADERS --silent $API/instance?$VERSION | jq -r '.compute.vmId')
 
 get_instance_tags () {
@@ -72,7 +78,7 @@ echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:
 # BOLT
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
 echo "dbms_connector_bolt_listen_address" "${dbms_connector_bolt_listen_address:=0.0.0.0:7687}"
-echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=REQUIRED}"
+echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
 
 # Backup
 echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"

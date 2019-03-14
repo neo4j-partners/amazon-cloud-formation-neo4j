@@ -19,6 +19,13 @@ else
     sudo apt-get --yes install neo4j-enterprise=$neo4j_version
 fi
 
+if [ $? -ne 0 ] ; then
+    echo '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+    echo '########## NEO4J INSTALL FAILED #########'
+    echo '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+    exit 1
+fi
+
 echo "Enabling neo4j system service"
 
 # Intending to use systemd scripts, not vanilla ubuntu /etc/init.d startups.

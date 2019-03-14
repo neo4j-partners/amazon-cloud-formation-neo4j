@@ -90,7 +90,7 @@ properties:
       zoneProperty: zone
   bootDiskSizeGb:
     type: integer
-    default: 10
+    default: 200
     minimum: 10
     maximum: 10000
     x-googleProperty:

@@ -82,6 +82,48 @@ quota, so launching VMs into it will fail every time.  It's only there to house 
 See the packer directory; this prepares new images, follow directions there to copy
 an image to the appropriate project and associate the right license with it.
 
+# Adjusting the Deployment Manager Files
+
+These directions only apply after the image has been prepared according to the points
+above and the packer directory.
+
+In the `solutions/causal-cluster` directory, there are jinja template files that describe
+the Deployment Manager templates used to control the causal cluster offering on GCP Marketplace.
+
+At a minimum, these files need to be updated for legacy reasons, referencing the new image
+that has been copied over to the launcher-public project
+* c2d_deployment_configuration.json
+* neo4j-causal-cluster.jinja
+* neo4j-causal-cluster.jinja.display
+
+Those files contain references to the image.
+
+# Packaging for the Marketplace
+
+* Go into the solutions/causal-cluster directory and zip the package contents: `zip -9r pkg.zip *`
+* In GCP, you need access to the `launcher-public` project.  Switch to that project.
+* On the left toolbar, select marketplace.
+* Select the "Partner Portal" link which will only appear under the `launcher-public` project.
+* Select the solution we're editing (neo4j causal cluster, VM based)
+* Find the link within that page to upload the package (the ZIP we prepared)
+* **DO NOT EDIT ANY OTHER FIELD IN THE UI**.  All of those changes will be overridden
+by metadata in the zip package.  If you find a field in the UI you want to change, instead
+change it in the jinja template files in this repo and change it by zipping/uploading the
+package.
+* Test and submit.
+
+# Making Public the Deployment Manager Files
+
+There is a google storage bucket called `neo4j-deploy` which resides here:
+https://console.cloud.google.com/storage/browser/neo4j-deploy?project=launcher-public&organizationId=1061230109173
+
+There should be a subdirectory for every deployed version (i.e. 3.5.3) and the jinja templates are copied to this location like so:
+
+```
+export VERSION=3.5.3
+gsutil -m cp -r solutions/causal-cluster/* gs://neo4j-deploy/$VERSION/causal-cluster/
+```
+
 # Removing a Deployment
 
 Removing the deployment autokills/deletes the underlying VMs.

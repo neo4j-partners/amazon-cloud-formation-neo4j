@@ -6,7 +6,7 @@ export MACHINE=n1-standard-2
 export DISK_TYPE=pd-ssd
 export DISK_SIZE=64GB
 export ZONE=us-east1-b
-export NEO4J_VERSION=3.5.1
+export NEO4J_VERSION=3.5.3
 export PASSWORD=$(head -n 20 /dev/urandom | md5)
 export STACK_NAME=neo4j-testdeploy-$(head -c 3 /dev/urandom | md5 | head -c 5)
 
@@ -26,7 +26,7 @@ fi
 echo "Creating instance"
 OUTPUT=$(gcloud compute instances create $STACK_NAME \
     --project $PROJECT \
-    --image neo4j-enterprise-1-3-5-1-apoc \
+    --image neo4j-enterprise-1-3-5-3-apoc \
     --tags neo4j \
     --machine-type $MACHINE \
     --boot-disk-size $DISK_SIZE \
@@ -66,7 +66,7 @@ echo BENCHMARK_SETTING_ZONE=$ZONE
 echo BENCHMARK_SETTING_MACHINE_TYPE=$MACHINE
 echo BENCHMARK_SETTING_NEO4J_VERSION=$NEO4J_VERSION
 echo BENCHMARK_SETTING_PROJECT=$PROJECT
-echo BENCHMARK_SETTING_DIKS_TYPE=$DISK_TYPE
+echo BENCHMARK_SETTING_DISK_TYPE=$DISK_TYPE
 echo BENCHMARK_SETTING_DISK_SIZE=$DISK_SIZE
 
 echo NEO4J_URI=bolt://$IP:7687

@@ -29,12 +29,16 @@
       {% set default_machine = "r4.large" %}
     {% endif %}
 
+    {% if profile is not defined %}
+      {% set profile = "marketplace" %}
+    {% endif %}
+
     {% set INTERNAL_DNS_TLD = "neo4j" %}
 
     "Description": "Neo4j on AWS - creates a variable number of EC2 Ubuntu machines, a VPC, elastic IP addresses, and deploys the Neo4j Graph Database cluster on it.  **WARNING** This template creates an Amazon EC2 instance. You will be billed for the AWS resources used if you create a stack from this template.",
     "AWSTemplateFormatVersion": "2010-09-09",
     "Mappings": {        
-        "AWSRegionArch2AMI": {% include 'template-parts/region2AMIMappings.jinja' %}
+        "AWSRegionArch2AMI": {% include 'template-parts/region2AMIMappings-enterprise-' + profile + '.jinja' %}
     },
     "Parameters": {
         "InstanceType": {
@@ -503,7 +507,7 @@
             "DependsOn": "Neo4jServer0",
             "Properties": {
                 "Handle"  : { "Ref" : "StackTokenWaitHandle" },
-                "Timeout" : "900",
+                "Timeout" : "2000",
                 "Count": "1"
             }
         }
@@ -517,6 +521,21 @@
                         "Your cluster is deployed, and currently forming.",
                         "Now is a good time to get a cup of coffee, the ",
                         "URL below should be available within a few minutes"
+                    ]
+                ]
+            }
+        },
+        "IMPORTANT": {
+            "Value": {
+                "Fn::Join": [
+                    "\n",
+                    [
+                    "PLEASE TAKE NOTE!  Your instance begins with an unsigned ",
+                    "SSL certificate.  This means that in order to access your ",
+                    "new system, you should configure your browser to trust this ",
+                    "IP address on **both** port 7473 **and** port 7687, otherwise ",
+                    "you may have issues connecting. ",
+                    "For more information see https://community.neo4j.com/t/troubleshooting-connection-issues-to-neo4j/129"
                     ]
                 ]
             }

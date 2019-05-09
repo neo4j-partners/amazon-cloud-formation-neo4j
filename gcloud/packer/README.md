@@ -15,15 +15,15 @@ contact <david.allen@neo4j.com> for access.
 
 You should specify edition (community/enterprise) and version.  Because this is
 ubuntu based,versions should match what is in the debian package repo.  Watch 
-out because of recent package naming, if you want v3.3.5, you need to install
-`1:3.3.5`.
+out because of recent package naming, if you want v3.5.5, you need to install
+`1:3.5.5`.
 
 You may omit the AWS key variables and set them in your environment.
 
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:3.5.3" \
+    -var "neo4j_version=1:3.5.5" \
     packer-template.json
 ```
 
@@ -43,7 +43,7 @@ basically API resources that get tagged to images for tracking purposes.
 Marketplace updates that are submitted, referencing non-licensed images will be rejected.
 
 ```
-PACKER_IMAGE=neo4j-enterprise-1-3-4-3-apoc
+PACKER_IMAGE=neo4j-enterprise-1-3-5-5-apoc
 PROJECT=launcher-development-191917
 ZONE=us-east1-b
 TARGET=license-me

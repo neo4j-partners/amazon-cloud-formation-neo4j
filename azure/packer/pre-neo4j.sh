@@ -141,4 +141,4 @@ envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
 echo "pre-neo4j.sh: Starting neo4j console..."
 
 # This is the same command sysctl's service would have executed.
-/usr/share/neo4j/bin/neo4j console
+exec /usr/share/neo4j/bin/neo4j console

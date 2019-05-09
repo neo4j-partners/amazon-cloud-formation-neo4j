@@ -85,7 +85,7 @@ export EXTERNAL_IP_ADDR=$(curl -s -H "Metadata-Flavor: Google" \
 echo "pre-neo4j.sh: External IP $EXTERNAL_IP_ADDR"
 
 export INTERNAL_HOSTNAME=$(curl -s -H "Metadata-Flavor: Google" \
-   $INSTANCE_API/hostname) 
+   $INSTANCE_API/hostname)
 
 echo "pre-neo4j.sh Internal hostname $INTERNAL_HOSTNAME"
 
@@ -96,7 +96,7 @@ echo "pre-neo4j.sh Internal hostname $INTERNAL_HOSTNAME"
 #   link/ether 42:01:0a:8a:00:04 brd ff:ff:ff:ff:ff:ff
 #   inet 10.138.0.4/32 brd 10.138.0.4 scope global eth0
 #      valid_lft forever preferred_lft forever
-#   inet6 fe80::4001:aff:fe8a:4/64 scope link 
+#   inet6 fe80::4001:aff:fe8a:4/64 scope link
 #      valid_lft forever preferred_lft forever
 # So we're pulling just the 10.138.0.4 part.
 export INTERNAL_IP_ADDR=$(curl -s -H "Metadata-Flavor: Google" $INSTANCE_API/network-interfaces/0/ip)
@@ -113,4 +113,4 @@ envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
 echo "pre-neo4j.sh: Starting neo4j console..."
 
 # This is the same command sysctl's service would have executed.
-/usr/share/neo4j/bin/neo4j console
+exec /usr/share/neo4j/bin/neo4j console

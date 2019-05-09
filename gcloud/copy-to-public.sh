@@ -63,6 +63,7 @@ just_copy() {
     echo "Copying image without license; $PROJECT -> $PUBLIC_PROJECT"
     gcloud compute --project="$PUBLIC_PROJECT" images create \
         "$PACKER_IMAGE" \
+        --family neo4j \
         --source-image="$PACKER_IMAGE" \
         --source-image-project="$PROJECT"
 }

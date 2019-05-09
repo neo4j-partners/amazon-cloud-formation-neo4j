@@ -43,60 +43,69 @@ Generate from Jinja template, upload to S3, and validate.
 
 ```
 # Profile should be either (marketplace|govcloud)
-export PROFILE=govcloud
-export VERSION=3.5.5
-S3BUCKET=neo4j-cloudformation
-if [ "$PROFILE" = "govcloud" ] ; then
-	export S3HOST=s3-us-gov-east-1.amazonaws.com
-else 
-  export S3HOST=s3.amazonaws.com
-fi
-GEN_STACK=neo4j-enterprise-stack-$VERSION.json
-pipenv run python3 generate.py \
-     --edition enterprise \
-     --profile $PROFILE \
-     --template deploy.jinja > $GEN_STACK && \
-s3cmd -c $HOME/.s3cfg-$PROFILE -P put $GEN_STACK s3://$S3BUCKET/
-aws cloudformation validate-template \
-  --template-url https://$S3HOST/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
+for value in marketplace govcloud
+do
+  export PROFILE=$value
+  export VERSION=3.5.5
+  S3BUCKET=neo4j-cloudformation
+  if [ "$PROFILE" = "govcloud" ] ; then
+    export S3HOST=s3-us-gov-east-1.amazonaws.com
+  else 
+    export S3HOST=s3.amazonaws.com
+  fi
+  GEN_STACK=neo4j-enterprise-stack-$VERSION.json
+  pipenv run python3 generate.py \
+      --edition enterprise \
+      --profile $PROFILE \
+      --template deploy.jinja > $GEN_STACK && \
+  s3cmd -c $HOME/.s3cfg-$PROFILE -P put $GEN_STACK s3://$S3BUCKET/
+  aws cloudformation validate-template \
+    --template-url https://$S3HOST/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
+done
 ```
 
 ### Neo4j Enterprise Standalone:
 
 ```
-export PROFILE=govcloud
-export VERSION=3.5.5
-S3BUCKET=neo4j-cloudformation
-if [ "$PROFILE" = "govcloud" ] ; then
-	export S3HOST=s3-us-gov-east-1.amazonaws.com
-else 
-  export S3HOST=s3.amazonaws.com
-fi
-GEN_STACK=neo4j-enterprise-standalone-stack-$VERSION.json
-pipenv run python3 generate.py \
-     --edition enterprise \
-     --profile $PROFILE \
-     --template deploy-standalone.jinja > $GEN_STACK && \
-s3cmd -c $HOME/.s3cfg-$PROFILE -P put $GEN_STACK s3://$S3BUCKET/
-aws cloudformation validate-template \
-  --template-url https://$S3HOST/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
+for value in marketplace govcloud
+do
+  export PROFILE=$value
+  export VERSION=3.5.5
+  S3BUCKET=neo4j-cloudformation
+  if [ "$PROFILE" = "govcloud" ] ; then
+    export S3HOST=s3-us-gov-east-1.amazonaws.com
+  else 
+    export S3HOST=s3.amazonaws.com
+  fi
+  GEN_STACK=neo4j-enterprise-standalone-stack-$VERSION.json
+  pipenv run python3 generate.py \
+      --edition enterprise \
+      --profile $PROFILE \
+      --template deploy-standalone.jinja > $GEN_STACK && \
+  s3cmd -c $HOME/.s3cfg-$PROFILE -P put $GEN_STACK s3://$S3BUCKET/
+  aws cloudformation validate-template \
+    --template-url https://$S3HOST/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
+done
 ```
 
 ### Neo4j Community Standalone:
 
 ```
 export VERSION=3.5.5
+export PROFILE=marketplace
 S3BUCKET=neo4j-cloudformation
 GEN_STACK=neo4j-community-standalone-stack-$VERSION.json
-pipenv run python3 generate.py --edition community --template deploy-standalone.jinja > $GEN_STACK && \
-s3cmd -c $HOME/.s3cfg -P put $GEN_STACK s3://$S3BUCKET/
+pipenv run python3 generate.py \
+    --edition community \
+    --profile $PROFILE \
+    --template deploy-standalone.jinja > $GEN_STACK && \
+s3cmd -c $HOME/.s3cfg-marketplace -P put $GEN_STACK s3://$S3BUCKET/
+echo $GEN_STACK
 aws cloudformation validate-template \
-  --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK --profile default > /dev/null
+  --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
 ```
 
-CloudFormation can then be given these S3 URLs 
-* `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-stack.json`
-* `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-standalone-stack.json`
+CloudFormation can then be given the S3 URLs above
 
 ## Testing Deployed Stacks
 
@@ -127,7 +136,7 @@ Deregister example: `aws ec2 deregister-image --image-id ami-650be718 --region u
 
 ## Create CloudFormation Stack
 
-See the `deploy-stack.sh` shell script.
+See the `deploy-*.sh` shell scripts.
 
 To get the status of a stack being deployed:
 

@@ -99,7 +99,7 @@ Verify first that the templates are working with the bin/create script (which do
 and then copy them like so:
 
 ```
-export VERSION=3.5.3
+export VERSION=3.5.5
 s3cmd put --recursive -P arm/* s3://neo4j-arm/$VERSION/causal-cluster/
 ```
 

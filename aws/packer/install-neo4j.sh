@@ -12,8 +12,12 @@ echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
 wget -O - https://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add -
 echo 'deb http://debian.neo4j.org/repo stable/' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
 sudo apt-get update
+
 echo "Upgrading Packages..."
-sudo apt-get --yes upgrade
+
+# For an explanation of the magic flags on what should be a mundane command, context:
+# https://github.com/chef/bento/issues/661#issuecomment-354806596
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
 echo 'Held packages'
 sudo dpkg --get-selections | grep hold
 

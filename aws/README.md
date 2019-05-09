@@ -44,7 +44,7 @@ Generate from Jinja template, upload to S3, and validate.
 ```
 # Profile should be either (marketplace|govcloud)
 export PROFILE=govcloud
-export VERSION=3.5.3
+export VERSION=3.5.5
 S3BUCKET=neo4j-cloudformation
 if [ "$PROFILE" = "govcloud" ] ; then
 	export S3HOST=s3-us-gov-east-1.amazonaws.com
@@ -65,7 +65,7 @@ aws cloudformation validate-template \
 
 ```
 export PROFILE=govcloud
-export VERSION=3.5.3
+export VERSION=3.5.5
 S3BUCKET=neo4j-cloudformation
 if [ "$PROFILE" = "govcloud" ] ; then
 	export S3HOST=s3-us-gov-east-1.amazonaws.com
@@ -85,7 +85,7 @@ aws cloudformation validate-template \
 ### Neo4j Community Standalone:
 
 ```
-export VERSION=3.5.3
+export VERSION=3.5.5
 S3BUCKET=neo4j-cloudformation
 GEN_STACK=neo4j-community-standalone-stack-$VERSION.json
 pipenv run python3 generate.py --edition community --template deploy-standalone.jinja > $GEN_STACK && \

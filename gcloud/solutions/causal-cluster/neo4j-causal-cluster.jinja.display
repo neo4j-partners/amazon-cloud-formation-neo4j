@@ -8,7 +8,7 @@ description:
   tagline: 'Neo4j Enterprise: Causal Clustering'
   title: Neo4j Enterprise
   url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
-  version: 3.5.3
+  version: 3.5.5
   documentations:
   - title: Register Neo4j Instance/Get a License
     url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
@@ -129,6 +129,6 @@ runtime:
 
 annotations:
   autogenSpecType: 'MULTI_VM'
-  vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-3-5-3-apoc
+  vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-3-5-5-apoc
 
 metadata_version: v1

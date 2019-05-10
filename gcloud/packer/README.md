@@ -15,15 +15,15 @@ contact <david.allen@neo4j.com> for access.
 
 You should specify edition (community/enterprise) and version.  Because this is
 ubuntu based,versions should match what is in the debian package repo.  Watch 
-out because of recent package naming, if you want v3.3.5, you need to install
-`1:3.3.5`.
+out because of recent package naming, if you want v3.5.5, you need to install
+`1:3.5.5`.
 
 You may omit the AWS key variables and set them in your environment.
 
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:3.5.3" \
+    -var "neo4j_version=1:3.5.5" \
     packer-template.json
 ```
 
@@ -42,43 +42,8 @@ basically API resources that get tagged to images for tracking purposes.
 
 Marketplace updates that are submitted, referencing non-licensed images will be rejected.
 
-```
-PACKER_IMAGE=neo4j-enterprise-1-3-4-3-apoc
-PROJECT=launcher-development-191917
-ZONE=us-east1-b
-TARGET=license-me
-PUBLIC_PROJECT=launcher-public
-
-# Setup
-gcloud config set project $PROJECT
-gcloud config set compute/zone $ZONE
-
-# Create image from packer instance
-gcloud compute instances create $TARGET \
-   --scopes https://www.googleapis.com/auth/cloud-platform \
-   --image-project $PROJECT \
-   --tags neo4j \
-   --image=$PACKER_IMAGE
-
-# Immediately delete, but keep the disk, because the next
-# step builds the licensed image from the disk.  Script doesn't
-# support licensing an image (the one we already created) directly.
-gcloud compute instances delete $TARGET --keep-disks=all
-
-# This step creates a new image from the disk, licenses it,
-# and copies it to the destination public project.
-# Path relative to packer directory.
-# The disk by default gets the same name as the VM we created.
-python2.7 ../partner-utils/image_creator.py --project $PROJECT --disk $TARGET \
-   --name $PACKER_IMAGE --description "Neo4j Enterprise" \
-   --family neo4j-enterprise \
-   --destination-project $PUBLIC_PROJECT \
-   --license $PUBLIC_PROJECT/neo4j-enterprise-causal-cluster
-
-# If all of the steps above succeeded, the remaining disk leftover from
-# the VM isn't needed.
-gcloud compute disks delete $TARGET
-```
+To perform these steps, use the `copy-to-public.sh` shell script, and follow
+its required parameters.
 
 [GCP documentation on creating licensed images](https://cloud.google.com/launcher/docs/partners/technical-components#create_the_base_solution_vm) for reference.  The scripts above encapsulate that advice though, and automate it.
 

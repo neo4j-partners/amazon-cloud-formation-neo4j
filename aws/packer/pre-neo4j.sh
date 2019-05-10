@@ -147,4 +147,4 @@ if [ "$?" -ne 0 ] && [ -f /etc/neo4j/password-reset.log ]; then
 fi
 
 # This is the same command sysctl's service would have executed.
-/usr/share/neo4j/bin/neo4j console
+exec /usr/share/neo4j/bin/neo4j console

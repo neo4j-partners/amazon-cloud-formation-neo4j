@@ -8,7 +8,7 @@
     "instance_type": "t2.micro",
     "destination_regions": "us-east-1,us-east-2,us-west-1,us-west-2,eu-west-1,eu-central-1,ap-northeast-1,ap-south-1,sa-east-1,ap-southeast-1,ap-southeast-2",
     "base_owner": "099720109477",
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/3.5.0.3/apoc-3.5.0.3-all.jar",
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/3.5.0.4/apoc-3.5.0.4-all.jar",
     "graphalgos_jar": "https://github.com/neo4j-contrib/neo4j-graph-algorithms/releases/download/3.5.4.0/graph-algorithms-algo-3.5.4.0.jar"
   },
   "builders": [

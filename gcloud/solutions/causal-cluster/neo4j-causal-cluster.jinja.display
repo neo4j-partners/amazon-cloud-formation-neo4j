@@ -8,7 +8,7 @@ description:
   tagline: 'Neo4j Enterprise: Causal Clustering'
   title: Neo4j Enterprise
   url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
-  version: 3.5.5
+  version: 3.5.7
   documentations:
   - title: Register Neo4j Instance/Get a License
     url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"

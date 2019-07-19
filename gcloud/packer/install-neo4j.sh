@@ -11,6 +11,7 @@ echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
 
 wget -O - https://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add -
 echo 'deb http://debian.neo4j.org/repo stable/' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
+sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update && sudo apt-get --yes upgrade 
 
 echo "Installing Neo4j"

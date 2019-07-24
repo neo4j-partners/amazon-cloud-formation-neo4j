@@ -33,6 +33,11 @@ description:
       Participate in Neo4j community discussions
     url: https://community.neo4j.com/
   icon: '@media/solution-name_small.png'
+  softwareGroups:
+    - type: SOFTWARE_GROUP_OS
+      software:
+        - title: Ubuntu
+          version: 16.0.4
 
 input:
   properties:

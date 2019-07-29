@@ -67,13 +67,25 @@
             "Type": "AWS::EC2::KeyPair::KeyName",
             "AllowedPattern": ".+"
         },
+        {#
+         # Default used to be "0.0.0.0/0" allowing the entire internet
+         # access, and is changed to blank per AWS security requirements.
+         # This is a tradeoff; making this 0.0.0.0/0 would mean that the
+         # template will "just work" at the expense of some security.  
+         # Making this blank means that the user has to understand what they're
+         # doing to make the template functional.  Either way, knowledgable
+         # users can configure this to be the network of their choosing.
+         #
+         # In order for this to be valid blank, unfortunately we have to loosen
+         # the allowedPattern
+         #}
         "NetworkWhitelist": {
             "Description": " The IP address range that can be used to connect to Neo4j",
             "Type": "String",
-            "MinLength": "9",
+            "MinLength": "0",
             "MaxLength": "18",
-            "Default": "0.0.0.0/0",
-            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "",
+            "AllowedPattern": "[\\d\\./]*",
             "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x.  For example, 0.0.0.0/0 for open internet access."
         },
         "Password": {

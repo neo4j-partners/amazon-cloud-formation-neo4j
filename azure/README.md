@@ -181,6 +181,12 @@ and
     },
 ```
 
+## Packaging the ARM Templates for the Marketplace
+
+They just need to be zipped into a ZIP file and submitted to the marketplace
+UI.  See the `package.sh` script in the arm directory to package the right
+files in the right format, and upload the ZIP that results from that script.
+
 ## Relevant Documentation
 
 - [Azure Resource Manager Documentation](https://docs.microsoft.com/en-us/azure/azure-resource-manager/)

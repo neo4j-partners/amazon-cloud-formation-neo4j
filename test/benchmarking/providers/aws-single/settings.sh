@@ -9,8 +9,6 @@ export SSHKEY=david.allen.local
 export DISK_GB=64
 # General purpose disk
 export DISK_TYPE=gp2
-# Provisioned IOPS SSD
-# export DISK_TYPE=io1
 # Throughput optimized HDD
 # export DISK_TYPE=st1
 

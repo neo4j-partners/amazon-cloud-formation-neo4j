@@ -44,6 +44,7 @@ NEO4J_SETTINGS[causal_clustering_discovery_listen_address]=0.0.0.0:5000
 NEO4J_SETTINGS[dbms_logs_http_enabled]=false
 NEO4J_SETTINGS[dbms_logs_gc_enabled]=false
 NEO4J_SETTINGS[dbms_logs_security_level]=INFO
+NEO4J_SETTINGS[dbms_tx_log_rotation_retention_policy]="9 files"
 
 # Misc
 NEO4J_SETTINGS[dbms_security_allow_csv_import_from_file_urls]=true
@@ -70,13 +71,13 @@ getMetadata() {
 # metadata value or default value.  This sets us up for envsubst
 for setting in "${!NEO4J_SETTINGS[@]}" ; do
    # echo "SETTING " $setting " DEFAULT " ${NEO4J_SETTINGS[$setting]};
-   getMetadata $setting ${NEO4J_SETTINGS[$setting]}
+   getMetadata $setting "${NEO4J_SETTINGS[$setting]}"
    echo "Setting $setting to $METADATA_REQUEST"
    echo ""
 
    # Set the variable named setting to the result.
    # See: https://stackoverflow.com/questions/9714902/how-to-use-a-variables-value-as-another-variables-name-in-bash
-   eval export $setting=$METADATA_REQUEST
+   export $setting="$METADATA_REQUEST"
 done
 
 export EXTERNAL_IP_ADDR=$(curl -s -H "Metadata-Flavor: Google" \

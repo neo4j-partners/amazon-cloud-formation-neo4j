@@ -93,30 +93,6 @@
             "type": "int"
         },
         
-        "Neo4jClusterPort": {
-            "type": "int",
-            "defaultValue": 5000,
-            "metadata": {
-                "description": "The port used for communication between instances in the cluster"
-            }
-        },
-
-        "Neo4jTransactionPort": {
-            "type": "int",
-            "defaultValue": 6000,
-            "metadata": {
-                "description": "The port used to read transaction data from the master"
-            }
-        },
-
-        "Neo4jRaftPort": {
-            "type": "int",
-            "defaultValue": 7000,
-            "metadata": {
-                "description": "The port used to read transaction data from the master"
-            }
-        },
-
         "Neo4JTags": {
             "type": "object",
             "metadata": {
@@ -300,7 +276,7 @@
 #}
             "osDisk": {
                 "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex(), '-OS')]",
-                "createOption": "fromImage",
+                "createOption": "FromImage",
                 "managedDisk": {
                     "storageAccountType": "Standard_LRS"
                 }

@@ -165,10 +165,7 @@
             "nic": "[concat(parameters('ClusterName'),'-nic')]",
             "nsg": "[concat(parameters('ClusterName'),'-sg')]"
         },
-        "VNetName": "[concat(parameters('ClusterName'),'-vnet')]",
-        "resourceIDs": {
-            "virtualNetwork": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]"
-        }
+        "VNetName": "[concat(parameters('ClusterName'),'-vnet')]"
     },
     "resources": [
         {#
@@ -370,9 +367,6 @@
                     "Neo4jHttpPort": { "value": "[parameters('Neo4jHttpPort')]" },
                     "Neo4jBoltPort": { "value": "[parameters('Neo4jBoltPort')]" },
 
-                    "Neo4jClusterPort": { "value": "[parameters('Neo4jClusterPort')]" },
-                    "Neo4jTransactionPort": { "value": "[parameters('Neo4jTransactionPort')]" },
-                    "Neo4jRaftPort": { "value": "[parameters('Neo4jRaftPort')]" },
                     "Neo4jTags": { "value": "[parameters('Neo4jTags')]" },
 
                     "ClusterName": { "value": "[parameters('ClusterName')]" },
@@ -415,9 +409,6 @@
                     "Neo4jHttpPort": { "value": "[parameters('Neo4jHttpPort')]" },
                     "Neo4jBoltPort": { "value": "[parameters('Neo4jBoltPort')]" },
 
-                    "Neo4jClusterPort": { "value": "[parameters('Neo4jClusterPort')]" },
-                    "Neo4jTransactionPort": { "value": "[parameters('Neo4jTransactionPort')]" },
-                    "Neo4jRaftPort": { "value": "[parameters('Neo4jRaftPort')]" },
                     "Neo4jTags": { "value": "[parameters('Neo4jTags')]" },
 
                     "ClusterName": { "value": "[parameters('ClusterName')]" },

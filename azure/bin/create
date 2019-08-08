@@ -131,6 +131,8 @@ if ! az group deployment validate \
      --parameters @.parameters.json \
      --resource-group "${RESOURCE_GROUP}" >/dev/null ; then
     echo "Failed validation of templates, cannot continue"
+    echo "Deleting RG"
+    az group delete -n "${RESOURCE_GROUP}" --no-wait --yes
     exit 1
 fi
 

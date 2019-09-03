@@ -191,7 +191,7 @@
 {
     "type": "Microsoft.Network/publicIPAddresses",
     "name": "[concat(variables('namePrefixes').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
-    "apiVersion": "2017-08-01",
+    "apiVersion": "2019-04-01",
     "location": "[parameters('Location')]",
     "properties": {
         "publicIPAllocationMethod": "[parameters('PublicIPAllocationMethod')]",
@@ -207,7 +207,7 @@
 {
     "type": "Microsoft.Network/networkInterfaces",
     "name": "[concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex())]",
-    "apiVersion": "2017-10-01",
+    "apiVersion": "2019-04-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
     "properties": {
@@ -344,7 +344,7 @@
 {
     "type": "Microsoft.Resources/deployments",
     "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
-    "apiVersion": "2017-05-10",
+    "apiVersion": "2019-05-01",
     "dependsOn": [
         "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]"
     ],

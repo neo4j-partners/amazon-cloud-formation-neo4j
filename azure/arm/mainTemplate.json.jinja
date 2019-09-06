@@ -165,10 +165,7 @@
             "nic": "[concat(parameters('ClusterName'),'-nic')]",
             "nsg": "[concat(parameters('ClusterName'),'-sg')]"
         },
-        "VNetName": "[concat(parameters('ClusterName'),'-vnet')]",
-        "resourceIDs": {
-            "virtualNetwork": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]"
-        }
+        "VNetName": "[concat(parameters('ClusterName'),'-vnet')]"
     },
     "resources": [
         {#
@@ -391,7 +388,7 @@
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "uri": "[uri(parameters('_artifactsLocation'), 'nestedtemplates/neo4jNodeSet.json')]",
+                    "uri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/neo4jNodeSet.json', parameters('_artifactsLocationSasToken')))]",
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {

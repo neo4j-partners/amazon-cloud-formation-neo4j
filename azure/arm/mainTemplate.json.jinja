@@ -172,7 +172,7 @@
          # Customer usage attribution: https://docs.microsoft.com/en-us/azure/marketplace/azure-partner-customer-usage-attribution#create-guids
          #}
         {
-            "apiVersion": "2018-02-01",
+            "apiVersion": "2019-05-01",
             "name": "pid-4369ca20-8490-56cc-a96d-1076a554627b",
             "type": "Microsoft.Resources/deployments",
             "properties": {
@@ -311,7 +311,7 @@
         {
             "type": "Microsoft.Resources/deployments",
             "name": "VirtualNetwork",
-            "apiVersion": "2017-05-10",
+            "apiVersion": "2019-05-01",
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
@@ -339,7 +339,7 @@
             "condition": "[greater(parameters('CoreNodes'), 0)]",
             "type": "Microsoft.Resources/deployments",
             "name": "Neo4jCoreNodeSet",
-            "apiVersion": "2017-05-10",
+            "apiVersion": "2019-05-01",
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
@@ -381,11 +381,11 @@
             "condition": "[greater(parameters('ReadReplicas'), 0)]",
             "type": "Microsoft.Resources/deployments",
             "name": "Neo4jReadReplicaNodeSet",
-            "apiVersion": "2017-05-10",
+            "apiVersion": "2019-05-01",
             "properties": {
                 "mode": "Incremental",
                 "templateLink": {
-                    "uri": "[uri(parameters('_artifactsLocation'), 'nestedtemplates/neo4jNodeSet.json')]",
+                    "uri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/neo4jNodeSet.json', parameters('_artifactsLocationSasToken')))]",
                     "contentVersion": "1.0.0.0"
                 },
                 "parameters": {

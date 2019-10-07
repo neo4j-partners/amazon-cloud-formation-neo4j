@@ -6,6 +6,13 @@ from AMI ID to region.
 ## Neo4j Enterprise 3.5.7 with APOC & Graph Algos
 
 ```
+us-gov-east-1: ami-01adc75ce699e5f35
+us-gov-west-1: ami-d4a7f2b5
+```
+
+## Neo4j Enterprise 3.5.7 with APOC & Graph Algos
+
+```
 us-gov-east-1: ami-4de7a52c
 us-gov-west-1: ami-0ced559fa579f9dfd
 ```

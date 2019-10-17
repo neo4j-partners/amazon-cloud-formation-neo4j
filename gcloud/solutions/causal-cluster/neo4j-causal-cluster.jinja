@@ -161,25 +161,43 @@ resources:
   {#
    # Firewalling rules   
    #}
-  - name: {{ deployment[0:20] }}-bolt-7687
-    type: compute.v1.firewall
-    properties:
-      network: $(ref.{{ instanceName }}-1.networkInterfaces[0].network)
-      sourceRanges: ["0.0.0.0/0"]
-      targetTags: ["neo4j-{{ deployment }}"]
-      allowed:
-        - IPProtocol: TCP
-          ports: ["7687"]
-   
-  - name: {{ deployment[0:20] }}-browser-https-7473
-    type: compute.v1.firewall
-    properties:
-      network: $(ref.{{ instanceName }}-1.networkInterfaces[0].network)
-      sourceRanges: ["0.0.0.0/0"]
-      targetTags: ["neo4j-{{ deployment }}"]
-      allowed:
-        - IPProtocol: TCP
-          ports: ["7473"]
+   {% if properties["enableTcp7687"] %}
+     - name: {{ deployment[0:20] }}-bolt-7687
+       type: compute.v1.firewall
+       properties:
+         network: $(ref.{{ instanceName }}-1.networkInterfaces[0].network)
+         {% if properties.get("tcp7687SourceRanges") %}
+         sourceRanges:
+           {% for source in properties["tcp7687SourceRanges"].split(',') %}
+           - '{{ source | trim }}'
+           {% endfor %}
+         {% else %}
+         sourceRanges: ["0.0.0.0/0"]
+         {% endif %}
+         targetTags: ["neo4j-{{ deployment }}"]
+         allowed:
+           - IPProtocol: TCP
+             ports: ["7687"]
+     {% endif %}
+
+   {% if properties["enableTcp7473"] %}
+     - name: {{ deployment[0:20] }}-https-7473
+       type: compute.v1.firewall
+       properties:
+         network: $(ref.{{ instanceName }}-1.networkInterfaces[0].network)
+         {% if properties.get("tcp7473SourceRanges") %}
+         sourceRanges:
+           {% for source in properties["tcp7687SourceRanges"].split(',') %}
+           - '{{ source | trim }}'
+           {% endfor %}
+         {% else %}
+         sourceRanges: ["0.0.0.0/0"]
+         {% endif %}
+         targetTags: ["neo4j-{{ deployment }}"]
+         allowed:
+           - IPProtocol: TCP
+             ports: ["7473"]
+     {% endif %}
 
   - name: {{ deployment[0:20] }}-internal-comms
     type: compute.v1.firewall

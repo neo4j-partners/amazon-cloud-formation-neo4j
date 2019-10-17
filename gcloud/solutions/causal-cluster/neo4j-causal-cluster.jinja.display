@@ -81,6 +81,22 @@ input:
       tooltip: 'An external IP address associated with this instance. Selecting "None" will result in the instance having no external internet access. <a href="https://cloud.google.com/compute/docs/configure-instance-ip-addresses">Learn more</a>'
       section: NETWORKING
       level: 1
+    - name: enableTcp7473
+      title: Allow HTTPS traffic from the Internet
+      section: NETWORKING
+    - name: tcp7473SourceRanges
+      title: Source IP ranges for HTTPS traffic
+      tooltip: 'Traffic is only allowed from sources within these IP address ranges. Use CIDR notation when entering ranges. <a href="https://cloud.google.com/compute/docs/networking#firewalls">Learn more</a>'
+      placeholder: '0.0.0.0/0, 192.169.0.2/24'
+      section: NETWORKING
+    - name: enableTcp7687
+      title: Allow BOLTT traffic from the Internet
+      section: NETWORKING
+    - name: tcp7687SourceRanges
+      title: Source IP ranges for BOLT traffic
+      tooltip: 'Traffic is only allowed from sources within these IP address ranges. Use CIDR notation when entering ranges. <a href="https://cloud.google.com/compute/docs/networking#firewalls">Learn more</a>'
+      placeholder: '0.0.0.0/0, 192.169.0.2/24'
+      section: NETWORKING
   sections:
     - name: CLUSTER_CONFIGURATION
       title: Cluster Configuration

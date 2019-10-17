@@ -84,7 +84,7 @@ properties:
     default: Ephemeral
   enableTcp7473:
     type: boolean
-    default: False
+    default: True
     x-googleProperty:
       type: GCE_FIREWALL
       gceFirewall:
@@ -97,7 +97,7 @@ properties:
         firewallProperty: enableTcp7473
   enableTcp7687:
     type: boolean
-    default: False
+    default: True
     x-googleProperty:
       type: GCE_FIREWALL
       gceFirewall:

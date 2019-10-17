@@ -187,7 +187,7 @@ resources:
          network: $(ref.{{ instanceName }}-1.networkInterfaces[0].network)
          {% if properties.get("tcp7473SourceRanges") %}
          sourceRanges:
-           {% for source in properties["tcp7687SourceRanges"].split(',') %}
+           {% for source in properties["tcp7473SourceRanges"].split(',') %}
            - '{{ source | trim }}'
            {% endfor %}
          {% else %}

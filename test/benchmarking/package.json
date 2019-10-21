@@ -9,7 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "bluebird": "^3.5.3",
+    "bluebird": "^3.5.11",
     "csv-writer": "^1.2.0",
     "lodash": "^4.17.11",
     "moment": "^2.24.0",

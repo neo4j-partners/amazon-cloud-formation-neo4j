@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ -z $VERSION ] ; then
-   echo "You must set the VERSION env var, e.g. 3.4.11"
+   echo "You must set the VERSION env var, e.g. 3.5.11"
    exit 1
 fi
 
@@ -12,7 +12,7 @@ export COMMUNITY_TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-com
 export STACKNAME=neo4j-cloudlauncher-testdeploy-$(echo $VERSION | sed s/[^A-Za-z0-9]/-/g)
 export INSTANCE=r4.large
 export REGION=us-east-1
-export SSHKEY=david.allen.local
+export SSHKEY=bfeshti
 
 aws cloudformation create-stack \
    --stack-name $STACKNAME \

@@ -17,7 +17,7 @@
   },
   "homepage": "https://github.com/neo-technology/gcloud-launcher#readme",
   "dependencies": {
-    "bluebird": "^3.5.11",
+    "bluebird": "^3.5.3",
     "dimsum": "^0.2.2",
     "es6-promise-pool": "^2.5.0",
     "faker": "^4.1.0",

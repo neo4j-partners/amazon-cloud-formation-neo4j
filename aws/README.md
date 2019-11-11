@@ -46,7 +46,7 @@ Generate from Jinja template, upload to S3, and validate.
 for value in marketplace govcloud
 do
   export PROFILE=$value
-  export VERSION=3.5.11
+  export VERSION=3.5.12
   S3BUCKET=neo4j-cloudformation
   if [ "$PROFILE" = "govcloud" ] ; then
     export S3HOST=s3-us-gov-east-1.amazonaws.com
@@ -70,7 +70,7 @@ done
 for value in marketplace govcloud
 do
   export PROFILE=$value
-  export VERSION=3.5.11
+  export VERSION=3.5.12
   S3BUCKET=neo4j-cloudformation
   if [ "$PROFILE" = "govcloud" ] ; then
     export S3HOST=s3-us-gov-east-1.amazonaws.com
@@ -91,7 +91,7 @@ done
 ### Neo4j Community Standalone:
 
 ```
-export VERSION=3.5.11
+export VERSION=3.5.12
 export PROFILE=marketplace
 S3BUCKET=neo4j-cloudformation
 GEN_STACK=neo4j-community-standalone-stack-$VERSION.json

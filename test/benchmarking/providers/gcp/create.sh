@@ -11,7 +11,7 @@ DISK_SIZE=64
 ZONE=us-east1-b
 CORES=3
 READ_REPLICAS=0
-NEO4J_VERSION=3.5.11
+NEO4J_VERSION=3.5.12
 TEMPLATE_URL=https://storage.googleapis.com/neo4j-deploy/$NEO4J_VERSION/causal-cluster/neo4j-causal-cluster.jinja
 
 OUTPUT=$(gcloud deployment-manager deployments create $NAME \

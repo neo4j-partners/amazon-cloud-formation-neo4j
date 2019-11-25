@@ -100,7 +100,7 @@
             }
         },
 
-        "ArtifactsBase": {
+        "_artifactsLocation": {
             "type": "string",
             "metadata": {
                 "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
@@ -161,23 +161,22 @@
     },
     "sku": {
         "name": "Aligned"
-    },
-    "dependsOn": []
+    }
 },
 {
     "type": "Microsoft.Network/publicIPAddresses",
     "name": "[concat(variables('namePrefixes').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
     "apiVersion": "2019-04-01",
     "location": "[parameters('Location')]",
+    "copy": {
+        "name": "[concat('ip', parameters('NodePrefix'), 'CI')]",
+        "count": "[parameters('N')]"
+    },
     "properties": {
         "publicIPAllocationMethod": "[parameters('PublicIPAllocationMethod')]",
         "dnsSettings": {
             "domainNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex(), '-', variables('uniqueTag')))]"
         }                
-    },
-    "copy": {
-        "name": "[concat('ip', parameters('NodePrefix'), 'CI')]",
-        "count": "[parameters('N')]"
     }
 },
 {
@@ -186,6 +185,13 @@
     "apiVersion": "2019-04-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
+    "dependsOn": [
+        "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
+    ],
+    "copy": {
+        "name": "nicCI",
+        "count": "[parameters('N')]"
+    },
     "properties": {
         "ipConfigurations": [
             {
@@ -194,7 +200,7 @@
                     "subnet": { "id": "[parameters('SubnetID')]" },
                     "privateIPAllocationMethod": "Dynamic",
                     "publicIPAddress": {
-                        "id": "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
+                        "id": "[resourceId('Microsoft.Network/networkInterfaces' concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix')))]"
                     }
                 }
             }
@@ -210,15 +216,8 @@
         "networkSecurityGroup": {
             "id": "[parameters('NetworkSecurityGroupId')]"
         }
-    },
-    "copy": {
-        "name": "nicCI",
-        "count": "[parameters('N')]"
-    },
-    "dependsOn": [
-        "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
-    ]
-}, 
+    }
+},
 {
     "type": "Microsoft.Compute/virtualMachines",
     "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
@@ -257,9 +256,17 @@
         "publisher": "neo4j",
         "product": "neo4j-enterprise-3_5"
     },
+    "dependsOn": [
+        "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex()))]"
+    ],
+    "copy": {
+        "name": "[concat('vm', parameters('DBMS_MODE'), 'CI')]",
+        "count": "[parameters('N')]"
+    },
     "properties": {
         "availabilitySet": {
-            "id": "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]"
+            "id": "[resourceId('Microsoft.Compute/availabilitySets', concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix')))]"
         },
         "hardwareProfile": {
             "vmSize": "[parameters('VmSize')]"
@@ -307,15 +314,7 @@
                 }
             ]
         }
-    },
-    "copy": {
-        "name": "[concat('vm', parameters('DBMS_MODE'), 'CI')]",
-        "count": "[parameters('N')]"
-    },
-    "dependsOn": [
-        "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
-        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex()))]"
-    ]
+    }
 },
 {
     "type": "Microsoft.Resources/deployments",
@@ -331,7 +330,7 @@
     "properties": {
         "mode": "Incremental",
         "templateLink": {
-            "uri": "[uri(parameters('ArtifactsBase'), concat('nestedtemplates/scriptTemplate.json', parameters('_artifactsLocationSasToken')))]",
+            "uri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/scriptTemplate.json', parameters('_artifactsLocationSasToken')))]",
             "contentVersion": "1.0.0.0"
         },
         "parameters": {
@@ -344,8 +343,8 @@
             "Password": {
                 "value": "[parameters('Neo4jPassword')]"
             },
-            "ArtifactsBase": {
-                "value": "[parameters('ArtifactsBase')]"
+            "_artifactsLocation": {
+                "value": "[parameters('_artifactsLocation')]"
             },
             "_artifactsLocationSasToken": {
                 "value": "[parameters('_artifactsLocationSasToken')]"

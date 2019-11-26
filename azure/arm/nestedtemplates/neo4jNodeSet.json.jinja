@@ -200,7 +200,7 @@
                     "subnet": { "id": "[parameters('SubnetID')]" },
                     "privateIPAllocationMethod": "Dynamic",
                     "publicIPAddress": {
-                        "id": "[resourceId('Microsoft.Network/networkInterfaces' concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix')))]"
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('ClusterName'), '-public-ip', '-', parameters('NodePrefix'), '-', copyIndex()))]"
                     }
                 }
             }
@@ -265,8 +265,8 @@
         "count": "[parameters('N')]"
     },
     "properties": {
-        "availabilitySet": {
-            "id": "[resourceId('Microsoft.Compute/availabilitySets', concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix')))]"
+        "availabilitySet": {            
+            "id": "[resourceId('Microsoft.Compute/availabilitySets', concat(variables('namePrefixes').availabilitySet, '-', parameters('NodePrefix')))]"
         },
         "hardwareProfile": {
             "vmSize": "[parameters('VmSize')]"

@@ -68,7 +68,8 @@
         "DataDiskSizeGB": {
             "type": "int",
             "minValue": 5,
-            "defaultValue": 1024
+            "defaultValue": 1024,
+            "maxValue": 32768
         },
 
         "AdminUserName": {
@@ -372,7 +373,7 @@
                     "ClusterName": { "value": "[parameters('ClusterName')]" },
                     "VmSize": { "value": "[parameters('VmSize')]" },
 
-                    "ArtifactsBase": { "value": "[parameters('_artifactsLocation')]" },
+                    "_artifactsLocation": { "value": "[parameters('_artifactsLocation')]" },
                     "_artifactsLocationSasToken": { "value": "[parameters('_artifactsLocationSasToken')]" }
                 }
             }
@@ -414,7 +415,7 @@
                     "ClusterName": { "value": "[parameters('ClusterName')]" },
                     "VmSize": { "value": "[parameters('VmSize')]" },
 
-                    "ArtifactsBase": { "value": "[parameters('_artifactsLocation')]" },
+                    "_artifactsLocation": { "value": "[parameters('_artifactsLocation')]" },
                     "_artifactsLocationSasToken": { "value": "[parameters('_artifactsLocationSasToken')]" }
                 }
             }

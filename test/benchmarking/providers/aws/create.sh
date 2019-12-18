@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export VERSION=3.5.12
+export VERSION=3.5.13
 export STANDALONE_TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-enterprise-standalone-stack-$VERSION.json
 export TEMPLATE=http://neo4j-cloudformation.s3.amazonaws.com/neo4j-enterprise-stack-$VERSION.json
 export STACKNAME=neo4j-testdeploy-$(echo $VERSION | sed s/[^A-Za-z0-9]/-/g)-$(head -c 3 /dev/urandom | md5 | head -c 5)

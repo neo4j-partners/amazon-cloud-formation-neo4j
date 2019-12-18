@@ -56,6 +56,7 @@
         "DataDiskSizeGB": {
             "type": "int",
             "minValue": 5,
+            "maxvalue": 4095,
             "defaultValue": 1024
         },
 
@@ -209,7 +210,6 @@
          # is referenced in initial_cluster_members by the nodes
          #}
         "dnsSettings": {
-            "dnsServers": [],
             "internalDnsNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex()))]"
         },        
         "enableIPForwarding": false,
@@ -252,7 +252,7 @@
      # For local testing, comment out the "plan" object, and swap the "imageReference" below.
      #}
     "plan": {
-        "name": "neo4j_3_5_12_apoc",
+        "name": "neo4j_3_5_13_apoc",
         "publisher": "neo4j",
         "product": "neo4j-enterprise-3_5"
     },
@@ -275,7 +275,7 @@
 			"imageReference": {
                 "publisher": "neo4j",
                 "offer": "neo4j-enterprise-3_5",
-                "sku": "neo4j_3_5_12_apoc",
+                "sku": "neo4j_3_5_13_apoc",
                 "version": "latest"
 			},
 {#            

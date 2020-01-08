@@ -18,7 +18,7 @@ and GovCloud, which requires a different keyset.  Region also differs for GovClo
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:3.5.13" \
+    -var "neo4j_version=1:3.5.14" \
     packer-template.json
 ```
 
@@ -39,7 +39,7 @@ public AWS, but they have a different account ID on GovCloud.
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:3.5.13" \
+    -var "neo4j_version=1:3.5.14" \
     -var "region=us-gov-east-1" \
     -var "destination_regions=us-gov-west-1" \
     -var "instance_type=t3.micro" \

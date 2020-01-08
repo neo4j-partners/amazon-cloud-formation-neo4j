@@ -23,7 +23,7 @@ You may omit the AWS key variables and set them in your environment.
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:3.5.13" \
+    -var "neo4j_version=1:3.5.14" \
     packer-template.json
 ```
 

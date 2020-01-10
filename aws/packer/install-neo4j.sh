@@ -1,4 +1,5 @@
 #!/bin/bash
+ulimit -n 40000
 # Instructions stolen from standard docs.
 # https://neo4j.com/docs/operations-manual/current/installation/linux/debian/
 

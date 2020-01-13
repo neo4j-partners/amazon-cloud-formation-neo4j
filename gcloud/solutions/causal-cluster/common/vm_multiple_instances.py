@@ -50,7 +50,7 @@ def GenerateMultipleComputeVMs(context):
       NameTheDisks(idx_prop[default.DISKS], disk_prefix)
     if use_endpoint:
       idx_prop[ENDPOINT_NAME] += AddIdx(idx)
-    print("Adding resource %s" % str(ctx))
+    print(("Adding resource %s" % str(ctx)))
     resources += vm_instance.GenerateComputeVM(ctx)
     resources += vm_instance.AddServiceEndpointIfNeeded(ctx)
     new_disks += common.AddDiskResourcesIfNeeded(ctx)

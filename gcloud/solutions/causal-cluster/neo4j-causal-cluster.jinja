@@ -18,13 +18,13 @@
  # Param will come as a string, take care to use goofy jinja int filter,
  # since jinja wants us to feel pain and doesn't expose python int(). :)
  #}
-{% if properties.has_key("clusterNodes") %}
+{% if "clusterNodes" in properties %}
    {% set clusterNodes = properties["clusterNodes"] | int %}
 {% else %}
    {% set clusterNodes = 3 | int %} {# Value must be >= 3 #}
 {% endif %}
 
-{% if properties.has_key("readReplicas") %}
+{% if "readReplicas" in properties %}
    {% set readReplicas = properties["readReplicas"] | int %}
 {% else %}
    {% set readReplicas = 0 | int %}

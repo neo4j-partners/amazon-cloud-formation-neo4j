@@ -15,39 +15,40 @@ export INSTANCE_API=http://metadata.google.internal/computeMetadata/v1/instance
 declare -A NEO4J_SETTINGS
 
 # HTTPS
-NEO4J_SETTINGS[dbms_connector_https_enabled]=true
-NEO4J_SETTINGS[dbms_connector_https_listen_address]=0.0.0.0:7473
+echo "dbms_connector_https_enabled" "${dbms_connector_https_enabled:=false}"
+echo "dbms_connector_https_advertised_address" "${dbms_connector_https_advertised_address:=0.0.0.0:7473}"
 
 # HTTP
-NEO4J_SETTINGS[dbms_connector_http_enabled]=true
-NEO4J_SETTINGS[dbms_connector_http_listen_address]=0.0.0.0:7474
+echo "dbms_connector_http_enabled" "${dbms_connector_http_enabled:=true}"
+echo "dbms_connector_http_advertised_address" "${dbms_connector_http_advertised_address:=0.0.0.0:7474}"
 
 # BOLT
-NEO4J_SETTINGS[dbms_connector_bolt_enabled]=true
-NEO4J_SETTINGS[dbms_connector_bolt_listen_address]=0.0.0.0:7687
-NEO4J_SETTINGS[dbms_connector_bolt_tls_level]=OPTIONAL
+echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
+echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=0.0.0.0:7687}"
+echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=DISABLED}"
+echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=0.0.0.0}"
 
 # Backup
-NEO4J_SETTINGS[dbms_backup_enabled]=true
-NEO4J_SETTINGS[dbms_backup_address]=localhost:6362
+#echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
+#echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
 
 # Causal Clustering
-NEO4J_SETTINGS[causal_clustering_discovery_type]=LIST
-NEO4J_SETTINGS[causal_clustering_initial_discovery_members]=node1:5000
-NEO4J_SETTINGS[causal_clustering_minimum_core_cluster_size_at_runtime]=3
-NEO4J_SETTINGS[causal_clustering_minimum_core_cluster_size_at_formation]=3
-NEO4J_SETTINGS[dbms_connectors_default_listen_address]=0.0.0.0
-NEO4J_SETTINGS[dbms_mode]=SINGLE
-NEO4J_SETTINGS[causal_clustering_discovery_listen_address]=0.0.0.0:5000
+echo "causal_clustering_discovery_type""${causal_clustering_discovery_type:=LIST}"
+echo "causal_clustering_initial_discovery_members" "${causal_clustering_initial_discovery_members:=localhost:5000}"
+echo "causal_clustering_minimum_core_cluster_size_at_formation" "${causal_clustering_minimum_core_cluster_size_at_formation:=3}"
+echo "causal_clustering_minimum_core_cluster_size_at_runtime" "${causal_clustering_minimum_core_cluster_size_at_runtime:=3}"
+
+echo "dbms_default_listen_address" "${dbms_default_listen_address:=0.0.0.0}"
+echo "dbms_mode" "${dbms_mode:=SINGLE}"
+echo "causal_clustering_discovery_listen_address" "${causal_clustering_discovery_listen_address:=0.0.0.0:5000}"
 
 # Logging
-NEO4J_SETTINGS[dbms_logs_http_enabled]=false
-NEO4J_SETTINGS[dbms_logs_gc_enabled]=false
-NEO4J_SETTINGS[dbms_logs_security_level]=INFO
-NEO4J_SETTINGS[dbms_tx_log_rotation_retention_policy]="9 files"
+echo "dbms_logs_http_enabled" "${dbms_logs_http_enabled:=true}"
+echo "dbms_logs_gc_enabled" "${dbms_logs_gc_enabled:=true}"
+echo "dbms_logs_debug_level" "${dbms_logs_debug_level:=INFO}"
 
 # Misc
-NEO4J_SETTINGS[dbms_security_allow_csv_import_from_file_urls]=true
+echo "dbms_security_allow_csv_import_from_file_urls" "${dbms_security_allow_csv_import_from_file_urls:=true}"
 
 # Get a google metadata key, returning a default value
 # if it is not defined

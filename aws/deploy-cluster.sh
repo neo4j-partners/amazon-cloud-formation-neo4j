@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ -z $VERSION ] ; then
-   echo "You must set the VERSION env var, e.g. 3.5.14"
+   echo "You must set the VERSION env var, e.g. 4.0.0"
    exit 1
 fi
 

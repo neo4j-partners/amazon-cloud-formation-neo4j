@@ -15,15 +15,15 @@ contact <david.allen@neo4j.com> for access.
 
 You should specify edition (community/enterprise) and version.  Because this is
 ubuntu based,versions should match what is in the debian package repo.  Watch 
-out because of recent package naming, if you want v3.5.5, you need to install
-`1:3.5.5`.
+out because of recent package naming, if you want v4.0.5, you need to install
+`1:4.0.5`.
 
 You may omit the AWS key variables and set them in your environment.
 
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:3.5.14" \
+    -var "neo4j_version=1:4.0.0" \
     packer-template.json
 ```
 

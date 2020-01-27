@@ -9,15 +9,15 @@ echo '#########################################'
 echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-selections
 echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
 
-wget -O - https://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add -
-echo 'deb http://debian.neo4j.org/repo stable/' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
+wget -O - https://debian.neo4j.com/neotechnology.gpg.key | sudo apt-key add -
+echo 'deb http://debian.neo4j.com stable/' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
 sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update
 
 if [ $neo4j_edition = "community" ]; then
-    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=1.1.12
+    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.0.0
 else
-    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=1.1.12
+    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.0.0
 fi
 
 if [ $? -ne 0 ] ; then

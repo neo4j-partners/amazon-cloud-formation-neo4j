@@ -51,7 +51,7 @@ tags_to_env () {
 ami_tags=$(get_ami_tags)
 instance_tags=$(get_instance_tags)
 
-tags_to_env "$ami_tags"
+tags_to_env "$ami_tags  "
 tags_to_env "$instance_tags"
 
 # At this point all env vars are in place, we only need to fill out those missing
@@ -60,36 +60,37 @@ tags_to_env "$instance_tags"
 # deploy.
 
 # HTTPS
-echo "dbms_connector_https_enabled" "${dbms_connector_https_enabled:=true}"
-echo "dbms_connector_https_listen_address" "${dbms_connector_https_listen_address:=0.0.0.0:7473}"
+echo "dbms_connector_https_enabled" "${dbms_connector_https_enabled:=false}"
+echo "dbms_connector_https_advertised_address" "${dbms_connector_https_advertised_address:=0.0.0.0:7473}"
 
 # HTTP
 echo "dbms_connector_http_enabled" "${dbms_connector_http_enabled:=true}"
-echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:=0.0.0.0:7474}"
+echo "dbms_connector_http_advertised_address" "${dbms_connector_http_advertised_address:=0.0.0.0:7474}"
 
 # BOLT
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
-echo "dbms_connector_bolt_listen_address" "${dbms_connector_bolt_listen_address:=0.0.0.0:7687}"
-echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
+echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=0.0.0.0:7687}"
+echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=DISABLED}"
+echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=0.0.0.0}"
 
 # Backup
-echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
-echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
+#echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
+#echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
 
 # Causal Clustering
-echo "causal_clustering_discovery_type" "${causal_clustering_discovery_type:=LIST}"
+echo "causal_clustering_discovery_type""${causal_clustering_discovery_type:=LIST}"
 echo "causal_clustering_initial_discovery_members" "${causal_clustering_initial_discovery_members:=localhost:5000}"
 echo "causal_clustering_minimum_core_cluster_size_at_formation" "${causal_clustering_minimum_core_cluster_size_at_formation:=3}"
 echo "causal_clustering_minimum_core_cluster_size_at_runtime" "${causal_clustering_minimum_core_cluster_size_at_runtime:=3}"
 
-echo "dbms_connectors_default_listen_address" "${dbms_connectors_default_listen_address:=0.0.0.0}"
+echo "dbms_default_listen_address" "${dbms_default_listen_address:=0.0.0.0}"
 echo "dbms_mode" "${dbms_mode:=SINGLE}"
 echo "causal_clustering_discovery_listen_address" "${causal_clustering_discovery_listen_address:=0.0.0.0:5000}"
 
 # Logging
-echo "dbms_logs_http_enabled" "${dbms_logs_http_enabled:=false}"
-echo "dbms_logs_gc_enabled" "${dbms_logs_gc_enabled:=false}"
-echo "dbms_logs_security_level" "${dbms_logs_security_level:=INFO}"
+echo "dbms_logs_http_enabled" "${dbms_logs_http_enabled:=true}"
+echo "dbms_logs_gc_enabled" "${dbms_logs_gc_enabled:=true}"
+echo "dbms_logs_debug_level" "${dbms_logs_debug_level:=INFO}"
 
 # Misc
 echo "dbms_security_allow_csv_import_from_file_urls" "${dbms_security_allow_csv_import_from_file_urls:=true}"
@@ -101,11 +102,11 @@ echo "dbms_security_allow_csv_import_from_file_urls" "${dbms_security_allow_csv_
 echo "neo4j_mode" "${neo4j_mode:=SINGLE}"
 
 export dbms_connector_https_enabled \
-    dbms_connector_https_listen_address \
+    dbms_connector_https_advertised_address \
     dbms_connector_http_enabled \
-    dbms_connector_http_listen_address \
+    dbms_connector_http_advertised_address \
     dbms_connector_bolt_enabled \
-    dbms_connector_bolt_listen_address \
+    dbms_connector_bolt_advertised_address \
     dbms_connector_bolt_tls_level \
     dbms_backup_enabled \
     dbms_backup_address \
@@ -114,7 +115,8 @@ export dbms_connector_https_enabled \
     causal_clustering_minimum_core_cluster_size_at_formation \
     causal_clustering_minimum_core_cluster_size_at_runtime \
     causal_clustering_expected_core_cluster_size \
-    dbms_connectors_default_listen_address \
+    dbms_default_advertised_address \
+    dbms_default_listen_address \
     dbms_mode \
     causal_clustering_discovery_listen_address \
     dbms_logs_http_enabled \

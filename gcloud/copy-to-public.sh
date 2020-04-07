@@ -46,7 +46,7 @@ license_and_copy() {
     # Path relative to packer directory.
     # The disk by default gets the same name as the VM we created.
     echo "Licensing disk and creating target public image"
-    python2.7 partner-utils/image_creator.py --project $PROJECT --disk $TARGET \
+    python3 partner-utils/image_creator.py --project $PROJECT --disk $TARGET \
     --name $PACKER_IMAGE --description "Neo4j Enterprise" \
     --family neo4j-enterprise \
     --destination-project $PUBLIC_PROJECT \

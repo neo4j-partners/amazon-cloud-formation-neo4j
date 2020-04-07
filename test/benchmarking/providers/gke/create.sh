@@ -3,7 +3,7 @@
 export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 export PROJECT=neo4j-k8s-marketplace-public
 export DEPLOY_ID=$(head -c 10 /dev/urandom | md5 | head -c 5)
-export SOLUTION_VERSION=3.5
+export SOLUTION_VERSION=4.0
 export IMAGE=gcr.io/neo4j-k8s-marketplace-public/causal-cluster:$SOLUTION_VERSION
 export APP_INSTANCE_NAME=benchmark-deploy-$DEPLOY_ID
 export CLUSTER_PASSWORD=mySecretPassword

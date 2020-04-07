@@ -102,6 +102,7 @@ generate_self_signed_certificates
 declare -A NEO4J_SETTINGS
 
 # HTTPS
+
 NEO4J_SETTINGS[dbms_connector_https_enabled]=true
 NEO4J_SETTINGS[dbms_connector_https_advertised_address]=0.0.0.0:7473
 NEO4J_SETTINGS[dbms_connector_https_listen_address]=0.0.0.0:7473
@@ -122,10 +123,11 @@ NEO4J_SETTINGS[dbms_ssl_policy_bolt_enabled]=true
 NEO4J_SETTINGS[dbms_ssl_policy_bolt_base_directory]=/var/lib/neo4j/certificates/bolt
 
 # Backup
-NEO4J_SETTINGS[dbms_backup_enabled]=true
-NEO4J_SETTINGS[dbms_backup_address]=localhost:6362
+#echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
+#echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
 
 # Causal Clustering
+
 NEO4J_SETTINGS[causal_clustering_discovery_type]=LIST
 NEO4J_SETTINGS[causal_clustering_initial_discovery_members]=my-cluster-core-vm1:5000,my-cluster-core-vm2:5000,my-cluster-core-vm3:5000
 NEO4J_SETTINGS[causal_clustering_minimum_core_cluster_size_at_formation]=3
@@ -137,13 +139,12 @@ NEO4J_SETTINGS[dbms_ssl_policy_cluster_base_directory]=/var/lib/neo4j/certificat
 NEO4J_SETTINGS[dbms_mode]=SINGLE
 
 # Logging
-NEO4J_SETTINGS[dbms_logs_http_enabled]=false
-NEO4J_SETTINGS[dbms_logs_gc_enabled]=false
-NEO4J_SETTINGS[dbms_logs_security_level]=INFO
-NEO4J_SETTINGS[dbms_tx_log_rotation_retention_policy]="9 files"
+echo "dbms_logs_http_enabled" "${dbms_logs_http_enabled:=true}"
+echo "dbms_logs_gc_enabled" "${dbms_logs_gc_enabled:=true}"
+echo "dbms_logs_debug_level" "${dbms_logs_debug_level:=INFO}"
 
 # Misc
-NEO4J_SETTINGS[dbms_security_allow_csv_import_from_file_urls]=true
+echo "dbms_security_allow_csv_import_from_file_urls" "${dbms_security_allow_csv_import_from_file_urls:=true}"
 
 # Get a google metadata key, returning a default value
 # if it is not defined

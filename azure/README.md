@@ -99,7 +99,7 @@ Verify first that the templates are working with the bin/create script (which do
 and then copy them like so:
 
 ```
-export VERSION=3.5.14
+export VERSION=4.0.2
 s3cmd put --recursive -P arm/* s3://neo4j-arm/$VERSION/causal-cluster/
 ```
 
@@ -136,21 +136,21 @@ have to accept legal terms.  Here's how to do that.
 Find the URN of the image:
 
 ```
-az vm image list --all --publisher neo4j --offer neo4j-enterprise-3_5 --query '[].urn'
+az vm image list --all --publisher neo4j --offer neo4j-enterprise-4_0 --query '[].urn'
 ```
 
 Then grab that URN and accept terms of it:
 
 ```
-$ az vm image accept-terms --urn neo4j:neo4j-enterprise-3_5:neo4j_3_5_14_apoc:3.5.14
+$ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_0:neo4j_4_0_2_apoc:4.0.2
 {
   "accepted": true,
-  "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-3_5/plans/neo4j_3_5_14_apoc/agreements/current",
+  "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-4_0/plans/neo4j_4_0_2_apoc/agreements/current",
   "licenseTextLink": "https://storelegalterms.blob.core.windows.net/legalterms/3E5ED_legalterms_NEO4J%253a24NEO4J%253a2DENTERPRISE%253a2D3%253a5F5%253a24NEO4J%253a5F3%253a5F5%253a5F1%253a5FAPOC%253a246B7QTJUDYN6IZQG4Y3VB33CWFLLCG3UGG7D2MIVE4PWNDHNYELSYU66EVZTSTHSFNRIATQXPV75ARRST64F6GK35S73HJKZL5H42P2Y.txt",
-  "name": "neo4j_3_5_14_apoc",
-  "plan": "neo4j_3_5_14_apoc",
+  "name": "neo4j_4_0_0_apoc",
+  "plan": "neo4j_4_0_0_apoc",
   "privacyPolicyLink": "https://neo4j.com/privacy-policy/",
-  "product": "neo4j-enterprise-3_5",
+  "product": "neo4j-enterprise-4_0",
   "publisher": "neo4j",
   "retrieveDatetime": "2019-01-04T13:07:09.8321069Z",
   "signature": "UG4V7654Q2BDFQUDHLJR73Y2QFAUG2UGCBLEPYPZ5HS3LWJ4WMOXTD2NQME2QNM3T7J3YIYFJ2F75FEWKFHLR2ATXAJUWYXDK3IDJEA",
@@ -165,8 +165,8 @@ The relevant bits of the ARM:
 ```
 			"imageReference": {
                 "publisher": "neo4j",
-                "offer": "neo4j-enterprise-3_5",
-                "sku": "neo4j_3_5_14_apoc",
+                "offer": "neo4j-enterprise-4_0",
+                "sku": "neo4j_4_0_0_apoc",
                 "version": "latest"
 			},
 ```
@@ -175,9 +175,9 @@ and
 
 ```
     "plan": {
-        "name": "neo4j_3_5_14_apoc",
+        "name": "neo4j_4_0_0_apoc",
         "publisher": "neo4j",
-        "product": "neo4j-enterprise-3_5"
+        "product": "neo4j-enterprise-4_0"
     },
 ```
 

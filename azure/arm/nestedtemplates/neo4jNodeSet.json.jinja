@@ -252,9 +252,9 @@
      # For local testing, comment out the "plan" object, and swap the "imageReference" below.
      #}
     "plan": {
-        "name": "neo4j_3_5_14_apoc",
+        "name": "neo4j_4_0_2_apoc",
         "publisher": "neo4j",
-        "product": "neo4j-enterprise-3_5"
+        "product": "neo4j-enterprise-4_0"
     },
     "dependsOn": [
         "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
@@ -274,8 +274,8 @@
         "storageProfile": {
 			"imageReference": {
                 "publisher": "neo4j",
-                "offer": "neo4j-enterprise-3_5",
-                "sku": "neo4j_3_5_14_apoc",
+                "offer": "neo4j-enterprise-4_0",
+                "sku": "neo4j_4_0_2_apoc",
                 "version": "latest"
 			},
 {#            

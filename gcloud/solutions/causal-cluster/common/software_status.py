@@ -128,7 +128,7 @@ def _WaiterDependsOn(context):
     raise PropertyError('waiterDependsOn must be a list: {}'.format(depends_on))
 
   for item in depends_on:
-    if not isinstance(item, (str,)):
+    if not isinstance(item, types.StringTypes):
       raise PropertyError(
           'waiterDependsOn must be a list of strings: {}'.format(depends_on))
 

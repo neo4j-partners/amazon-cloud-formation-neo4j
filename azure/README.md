@@ -99,7 +99,7 @@ Verify first that the templates are working with the bin/create script (which do
 and then copy them like so:
 
 ```
-export VERSION=4.0.0
+export VERSION=4.0.2
 s3cmd put --recursive -P arm/* s3://neo4j-arm/$VERSION/causal-cluster/
 ```
 
@@ -142,10 +142,10 @@ az vm image list --all --publisher neo4j --offer neo4j-enterprise-4_0 --query '[
 Then grab that URN and accept terms of it:
 
 ```
-$ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_0:neo4j_4_0_0_apoc:4.0.0
+$ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_0:neo4j_4_0_2_apoc:4.0.2
 {
   "accepted": true,
-  "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-4_0/plans/neo4j_4_0_0_apoc/agreements/current",
+  "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-4_0/plans/neo4j_4_0_2_apoc/agreements/current",
   "licenseTextLink": "https://storelegalterms.blob.core.windows.net/legalterms/3E5ED_legalterms_NEO4J%253a24NEO4J%253a2DENTERPRISE%253a2D3%253a5F5%253a24NEO4J%253a5F3%253a5F5%253a5F1%253a5FAPOC%253a246B7QTJUDYN6IZQG4Y3VB33CWFLLCG3UGG7D2MIVE4PWNDHNYELSYU66EVZTSTHSFNRIATQXPV75ARRST64F6GK35S73HJKZL5H42P2Y.txt",
   "name": "neo4j_4_0_0_apoc",
   "plan": "neo4j_4_0_0_apoc",

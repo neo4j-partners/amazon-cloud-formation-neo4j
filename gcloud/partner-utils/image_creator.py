@@ -14,6 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# TODO(jcking): move from print to logging
+from __future__ import print_function
+
 import argparse
 import collections
 import logging
@@ -156,7 +159,7 @@ def DeleteInstance(compute, instance_uri):
 
   if instance_detail['status'] == 'RUNNING':
     while True:
-      choice = input('Stop instance? [y/n]: ').lower()
+      choice = raw_input('Stop instance? [y/n]: ').lower()
       if choice in YES_INPUT:
         print('Stopping', instance_uri, '...')
         stop = compute.instances().stop(
@@ -211,13 +214,13 @@ def ResolveDiskURL(compute, project, disk_name):
       project=project, filter=filter_param).execute()
 
   # Search for the disk in all the zone
-  for disk in list(find_disk['items'].values()):
-    if 'disks' in disk:
+  for disk in find_disk['items'].values():
+    if disk.has_key('disks'):
       # There will be only one unique disk.
       disk_zone = (disk['disks'][0]['zone']).split('zones/')[1]
       self_link = (disk['disks'][0]['zone']).split('v1')[1]
 
-      if 'users' in disk['disks'][0]:
+      if disk['disks'][0].has_key('users'):
         # Convert list to string
         users = (', '.join(disk['disks'][0]['users']).split('v1')[1])
       print('Found', MakeDiskURI(project, disk_zone, disk_name))
@@ -256,7 +259,7 @@ def WaitForOperation(compute, project, operation):
         print('Resource already exists.')
       else:
         print('Unexpected error:', err, sys.exc_info()[0])
-    sys.stdout.write(next(spinner))
+    sys.stdout.write(spinner.next())
     sys.stdout.flush()
     time.sleep(0.1)
     sys.stdout.write('\b')

@@ -7,6 +7,7 @@ echo '#########################################'
 echo '#######        SYSTEM UPDATE    #########'
 echo '#########################################'
 
+sudo sed -i '/preserve_hostname: false/c\preserve_hostname: true' /etc/cloud/cloud.cfg
 echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-selections
 echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
 
@@ -30,10 +31,10 @@ echo '#########################################'
 
 if [ $neo4j_edition = "community" ]; then
     echo "neo4j=$neo4j_version"
-    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.0.0
+    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.0.2
 else
     echo "neo4j-enterprise=$neo4j_version"
-    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.0.0
+    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.0.2
 fi
 
 if [ $? -ne 0 ] ; then

@@ -17,10 +17,6 @@ There should not be any logic in this module. Its purpose is to simplify
 analysis of commonly used GCP and properties names and identify the names
 that were custom created for these modules.
 """
-import sys
-if sys.version_info[0] < 3:
-    raise Exception
-
 # Generic constants
 C2D_IMAGES = 'click-to-deploy-images'
 

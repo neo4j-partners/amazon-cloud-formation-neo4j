@@ -102,6 +102,7 @@ generate_self_signed_certificates
 declare -A NEO4J_SETTINGS
 
 # HTTPS
+
 NEO4J_SETTINGS[dbms_connector_https_enabled]=true
 NEO4J_SETTINGS[dbms_connector_https_advertised_address]=:7473
 NEO4J_SETTINGS[dbms_connector_https_listen_address]=0.0.0.0:7473
@@ -138,9 +139,11 @@ NEO4J_SETTINGS[dbms_ssl_policy_cluster_base_directory]=/var/lib/neo4j/certificat
 NEO4J_SETTINGS[dbms_mode]=SINGLE
 
 # Logging
+
 NEO4J_SETTINGS[dbms_logs_http_enabled]=false
 NEO4J_SETTINGS[dbms_logs_gc_enabled]=false
 NEO4J_SETTINGS[dbms_logs_security_level]=INFO
+
 
 # Misc
 echo "dbms_security_allow_csv_import_from_file_urls" "${dbms_security_allow_csv_import_from_file_urls:=true}"

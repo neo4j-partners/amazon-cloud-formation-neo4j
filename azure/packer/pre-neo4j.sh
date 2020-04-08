@@ -143,27 +143,27 @@ generate_self_signed_certificates
 
 # HTTPS
 echo "dbms_connector_https_enabled" "${dbms_connector_https_enabled:=true}"
-echo "dbms_connector_https_advertised_address" "${dbms_connector_https_advertised_address:=0.0.0.0:7473}"
+echo "dbms_connector_https_advertised_address" "${dbms_connector_https_advertised_address:=:7473}"
 echo "dbms_connector_https_listen_address" "${dbms_connector_https_listen_address:=0.0.0.0:7473}"
 echo "dbms_ssl_policy_https_enabled" "${dbms_ssl_policy_https_enabled:=true}"
 echo "dbms_ssl_policy_https_base_directory" "${dbms_ssl_policy_https_base_directory:=/var/lib/neo4j/certificates/https}"
 
 # HTTP
 echo "dbms_connector_http_enabled" "${dbms_connector_http_enabled:=true}"
-echo "dbms_connector_http_advertised_address" "${dbms_connector_http_advertised_address:=0.0.0.0:7474}"
+echo "dbms_connector_http_advertised_address" "${dbms_connector_http_advertised_address:=:7474}"
 echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:=0.0.0.0:7474}"
 
 # BOLT
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
-echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=0.0.0.0:7687}"
+echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=:7687}"
 echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
-echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=0.0.0.0}"
+echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$EXTERNAL_IP_ADDR }"
 echo "dbms_ssl_policy_bolt_enabled" "${dbms_ssl_policy_bolt_enabled:=true}"
 echo "dbms_ssl_policy_bolt_base_directory" "${dbms_ssl_policy_bolt_base_directory:=/var/lib/neo4j/certificates/bolt}"
 
 # Backup
-#echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
-#echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
+echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
+echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
 
 # Causal Clustering
 echo "causal_clustering_discovery_type""${causal_clustering_discovery_type:=LIST}"
@@ -177,10 +177,9 @@ echo "dbms_ssl_policy_cluster_base_directory" "${dbms_ssl_policy_cluster_base_di
 echo "dbms_mode" "${dbms_mode:=SINGLE}"
 
 # Logging
-echo "dbms_logs_http_enabled" "${dbms_logs_http_enabled:=true}"
-echo "dbms_logs_gc_enabled" "${dbms_logs_gc_enabled:=true}"
-echo "dbms_logs_debug_level" "${dbms_logs_debug_level:=INFO}"
-echo "dbms_logs_security_level" "${dbms_logs_security_level:=ERROR}"
+echo "dbms_logs_http_enabled" "${dbms_logs_http_enabled:=false}"
+echo "dbms_logs_gc_enabled" "${dbms_logs_gc_enabled:=false}"
+echo "dbms_logs_security_level" "${dbms_logs_security_level:=INFO}"
 
 # Misc
 echo "dbms_security_allow_csv_import_from_file_urls" "${dbms_security_allow_csv_import_from_file_urls:=true}"
@@ -204,6 +203,8 @@ export dbms_connector_https_enabled \
     dbms_ssl_policy_bolt_enabled \
     dbms_connector_bolt_tls_level \
     dbms_ssl_policy_bolt_base_directory \
+    dbms_backup_enabled \
+    dbms_backup_address \
     causal_clustering_discovery_type \
     causal_clustering_initial_discovery_members \
     causal_clustering_minimum_core_cluster_size_at_formation \

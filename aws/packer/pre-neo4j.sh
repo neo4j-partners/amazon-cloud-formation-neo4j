@@ -8,8 +8,6 @@
 # can be controlled by tags put on the instance.
 ######################################################################################
 echo "pre-neo4j.sh: Fetching AWS instance metadata"
-sudo mkdir -p /usr/share/neo4j/logs
-sudo chown neo4j:adm /usr/share/neo4j/logs
 # Documentation: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html
 export API=http://169.254.169.254/latest/
 export MAC_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/)
@@ -68,6 +66,8 @@ create_dir_if_necessary () {
         fi
     done
 }
+
+create_dir_if_necessary
 
 generate_self_signed_certificates () {
     local ip_address="$EXTERNAL_IP_ADDR"
@@ -134,21 +134,21 @@ generate_self_signed_certificates
 
 # HTTPS
 echo "dbms_connector_https_enabled" "${dbms_connector_https_enabled:=true}"
-echo "dbms_connector_https_advertised_address" "${dbms_connector_https_advertised_address:=0.0.0.0:7473}"
+echo "dbms_connector_https_advertised_address" "${dbms_connector_https_advertised_address:=:7473}"
 echo "dbms_connector_https_listen_address" "${dbms_connector_https_listen_address:=0.0.0.0:7473}"
 echo "dbms_ssl_policy_https_enabled" "${dbms_ssl_policy_https_enabled:=true}"
 echo "dbms_ssl_policy_https_base_directory" "${dbms_ssl_policy_https_base_directory:=/var/lib/neo4j/certificates/https}"
 
 # HTTP
 echo "dbms_connector_http_enabled" "${dbms_connector_http_enabled:=true}"
-echo "dbms_connector_http_advertised_address" "${dbms_connector_http_advertised_address:=0.0.0.0:7474}"
+echo "dbms_connector_http_advertised_address" "${dbms_connector_http_advertised_address:=:7474}"
 echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:=0.0.0.0:7474}"
 
 # BOLT
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
-echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=0.0.0.0:7687}"
+echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=:7687}"
 echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
-echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$INTERNAL_IP_ADDR}"
+echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$EXTERNAL_IP_ADDR}"
 echo "dbms_ssl_policy_bolt_enabled" "${dbms_ssl_policy_bolt_enabled:=true}"
 echo "dbms_ssl_policy_bolt_base_directory" "${dbms_ssl_policy_bolt_base_directory:=/var/lib/neo4j/certificates/bolt}"
 

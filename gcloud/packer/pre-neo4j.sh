@@ -104,19 +104,19 @@ declare -A NEO4J_SETTINGS
 # HTTPS
 
 NEO4J_SETTINGS[dbms_connector_https_enabled]=true
-NEO4J_SETTINGS[dbms_connector_https_advertised_address]=0.0.0.0:7473
+NEO4J_SETTINGS[dbms_connector_https_advertised_address]=:7473
 NEO4J_SETTINGS[dbms_connector_https_listen_address]=0.0.0.0:7473
 NEO4J_SETTINGS[dbms_ssl_policy_https_enabled]=true
 NEO4J_SETTINGS[dbms_ssl_policy_https_base_directory]=/var/lib/neo4j/certificates/https
 
 # HTTP
 NEO4J_SETTINGS[dbms_connector_http_enabled]=true
-NEO4J_SETTINGS[dbms_connector_http_advertised_address]=0.0.0.0:7474
+NEO4J_SETTINGS[dbms_connector_http_advertised_address]=:7474
 NEO4J_SETTINGS[dbms_connector_http_listen_address]=0.0.0.0:7474
 
 # BOLT
 NEO4J_SETTINGS[dbms_connector_bolt_enabled]=true
-NEO4J_SETTINGS[dbms_connector_bolt_advertised_address]=0.0.0.0:7687
+NEO4J_SETTINGS[dbms_connector_bolt_advertised_address]=:7687
 NEO4J_SETTINGS[dbms_connector_bolt_tls_level]=OPTIONAL
 NEO4J_SETTINGS[dbms_default_advertised_address]=$EXTERNAL_IP_ADDR
 NEO4J_SETTINGS[dbms_ssl_policy_bolt_enabled]=true
@@ -133,15 +133,17 @@ NEO4J_SETTINGS[causal_clustering_initial_discovery_members]=my-cluster-core-vm1:
 NEO4J_SETTINGS[causal_clustering_minimum_core_cluster_size_at_formation]=3
 NEO4J_SETTINGS[causal_clustering_minimum_core_cluster_size_at_runtime]=3
 NEO4J_SETTINGS[causal_clustering_discovery_advertised_address]=$HOSTNAME:5000
-NEO4J_SETTINGS[dbms_default_listen_address]=0.0.0.0
+NEO4J_SETTINGS[dbms_default_listen_address]=$INTERNAL_IP_ADDR
 NEO4J_SETTINGS[dbms_ssl_policy_cluster_enabled]=true
 NEO4J_SETTINGS[dbms_ssl_policy_cluster_base_directory]=/var/lib/neo4j/certificates/cluster
 NEO4J_SETTINGS[dbms_mode]=SINGLE
 
 # Logging
-echo "dbms_logs_http_enabled" "${dbms_logs_http_enabled:=true}"
-echo "dbms_logs_gc_enabled" "${dbms_logs_gc_enabled:=true}"
-echo "dbms_logs_debug_level" "${dbms_logs_debug_level:=INFO}"
+
+NEO4J_SETTINGS[dbms_logs_http_enabled]=false
+NEO4J_SETTINGS[dbms_logs_gc_enabled]=false
+NEO4J_SETTINGS[dbms_logs_security_level]=INFO
+
 
 # Misc
 echo "dbms_security_allow_csv_import_from_file_urls" "${dbms_security_allow_csv_import_from_file_urls:=true}"

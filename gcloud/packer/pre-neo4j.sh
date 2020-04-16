@@ -143,7 +143,7 @@ NEO4J_SETTINGS[dbms_logs_gc_enabled]=false
 NEO4J_SETTINGS[dbms_logs_security_level]=INFO
 
 # Misc
-echo "dbms_security_allow_csv_import_from_file_urls" "${dbms_security_allow_csv_import_from_file_urls:=true}"
+NEO4J_SETTINGS[dbms_security_allow_csv_import_from_file_urls]=true
 
 # Get a google metadata key, returning a default value
 # if it is not defined
@@ -175,7 +175,6 @@ for setting in "${!NEO4J_SETTINGS[@]}" ; do
    # See: https://stackoverflow.com/questions/9714902/how-to-use-a-variables-value-as-another-variables-name-in-bash
    export $setting="$METADATA_REQUEST"
 done
-
 
 echo "pre-neo4j.sh: External IP $EXTERNAL_IP_ADDR"
 

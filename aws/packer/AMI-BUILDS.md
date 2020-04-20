@@ -2,6 +2,40 @@
 
 This file tracks when AMIs were built by edition & version, storing the original mapping
 from AMI ID to region.
+## Neo4j Enterprise 4.0.3 with APOC 
+```
+ap-northeast-1: ami-043798e5a88ed163f
+ap-northeast-2: ami-00cd79af1bddbcee9
+ap-south-1: ami-08e332ab4fbcdcb13
+ap-southeast-1: ami-094f30fd0b12d1554
+ap-southeast-2: ami-0ce10a09df70004c3
+eu-central-1: ami-08487fa3f4469d767
+eu-west-1: ami-075216ff315e83b84
+eu-west-3: ami-06289d0ea14b7a79b
+sa-east-1: ami-0dcaf7bace54d0d24
+us-east-1: ami-041f846c27c133d27
+us-east-2: ami-0fb1bfc37c06d0008
+us-west-1: ami-0755dcc200e513f9b
+us-west-2: ami-0c894f57555c5027e
+
+```
+
+## Neo4j Community 4.0.3 with APOC 
+```
+ap-northeast-1: ami-0beb913bfaab42710
+ap-northeast-2: ami-052980148b1fa9389
+ap-south-1: ami-0943d453638fc04ea
+ap-southeast-1: ami-0f87cf1ce0d8e912d
+ap-southeast-2: ami-08ee71e45b7d774cb
+eu-central-1: ami-064bea4672f38a335
+eu-west-1: ami-0acfe576a2eecab70
+eu-west-3: ami-0c0b2c303d8edab54
+sa-east-1: ami-017d808e0002a9d6e
+us-east-1: ami-0ffa562a3ddfba849
+us-east-2: ami-0fa1b46acc82f99c9
+us-west-1: ami-0dca4456498d1c8fc
+us-west-2: ami-0f9d827968af8777e
+```
 
 ## Neo4j Enterprise 4.0.2 with APOC 
 ```

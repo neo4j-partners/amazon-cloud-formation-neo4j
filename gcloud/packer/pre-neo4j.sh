@@ -108,6 +108,7 @@ NEO4J_SETTINGS[dbms_connector_https_advertised_address]=:7473
 NEO4J_SETTINGS[dbms_connector_https_listen_address]=0.0.0.0:7473
 NEO4J_SETTINGS[dbms_ssl_policy_https_enabled]=true
 NEO4J_SETTINGS[dbms_ssl_policy_https_base_directory]=/var/lib/neo4j/certificates/https
+NEO4J_SETTINGS[dbms_ssl_policy_https_client_auth]=NONE
 
 # HTTP
 NEO4J_SETTINGS[dbms_connector_http_enabled]=true
@@ -121,6 +122,7 @@ NEO4J_SETTINGS[dbms_connector_bolt_tls_level]=OPTIONAL
 NEO4J_SETTINGS[dbms_default_advertised_address]=$EXTERNAL_IP_ADDR
 NEO4J_SETTINGS[dbms_ssl_policy_bolt_enabled]=true
 NEO4J_SETTINGS[dbms_ssl_policy_bolt_base_directory]=/var/lib/neo4j/certificates/bolt
+NEO4J_SETTINGS[dbms_ssl_policy_bolt_client_auth]=NONE
 
 # Backup
 #echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"

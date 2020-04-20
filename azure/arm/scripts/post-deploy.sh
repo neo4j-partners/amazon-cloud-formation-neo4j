@@ -8,7 +8,7 @@ LOGFILE=/root/post-deploy-setup.log
 
 echo `date` | tee -a $LOGFILE
 env 2>&1 | tee -a $LOGFILE
-
+sudo /usr/bin/neo4j-admin set-initial-password $NEO4J_PASSWORD
 # echo "CLOUDMARK" >> /var/log/neo4j/debug.log
 
 # Because in Azure it's possible to choose password auth in most common deploys,
@@ -23,14 +23,6 @@ sudo apt-get update 2>&1 | tee -a $LOGFILE
 # Loop waiting for neo4j service to start.
 while true; do
     if curl -s -I http://localhost:7474 | grep '200 OK'; then
-        echo `date` 'Neo4j is up; changing default password' 2>&1 | tee -a $LOGFILE
-        curl -v -H 'Content-Type: application/json' \
-                -XPOST -d '{"password":"'$NEO4J_PASSWORD'"}' \
-                -u neo4j:neo4j \
-                http://localhost:7474/user/neo4j/password \
-                2>&1 | tee -a $LOGFILE
-        
-        echo `date` 'Password reset; a graph user is you!' 2>&1 | tee -a $LOGFILE
         echo `date` 'Startup complete ' | tee -a $LOGFILE
         break
     fi

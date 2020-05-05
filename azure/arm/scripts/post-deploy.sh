@@ -20,15 +20,4 @@ sudo service ssh restart 2>&1 | tee -a $LOGFILE
 
 sudo apt-get update 2>&1 | tee -a $LOGFILE
 
-# Loop waiting for neo4j service to start.
-while true; do
-    if curl -s -I http://localhost:7474 | grep '200 OK'; then
-        echo `date` 'Startup complete ' | tee -a $LOGFILE
-        break
-    fi
-
-    echo `date` 'Waiting for neo4j to come up' 2>&1 | tee -a $LOGFILE
-    sleep 1
-done
-
 echo "Finished Neo4j setup" | tee -a $LOGFILE

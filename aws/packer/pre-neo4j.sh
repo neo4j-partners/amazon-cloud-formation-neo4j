@@ -138,6 +138,7 @@ echo "dbms_connector_https_advertised_address" "${dbms_connector_https_advertise
 echo "dbms_connector_https_listen_address" "${dbms_connector_https_listen_address:=0.0.0.0:7473}"
 echo "dbms_ssl_policy_https_enabled" "${dbms_ssl_policy_https_enabled:=true}"
 echo "dbms_ssl_policy_https_base_directory" "${dbms_ssl_policy_https_base_directory:=/var/lib/neo4j/certificates/https}"
+echo "$dbms_ssl_policy_https_client_auth" "${dbms_ssl_policy_https_client_auth:=NONE}"
 
 # HTTP
 echo "dbms_connector_http_enabled" "${dbms_connector_http_enabled:=true}"
@@ -151,6 +152,7 @@ echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}
 echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$EXTERNAL_IP_ADDR}"
 echo "dbms_ssl_policy_bolt_enabled" "${dbms_ssl_policy_bolt_enabled:=true}"
 echo "dbms_ssl_policy_bolt_base_directory" "${dbms_ssl_policy_bolt_base_directory:=/var/lib/neo4j/certificates/bolt}"
+echo "$dbms_ssl_policy_bolt_client_auth" "${dbms_ssl_policy_bolt_client_auth:=NONE}"
 
 # Backup
 echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
@@ -186,11 +188,13 @@ export dbms_connector_https_enabled \
     dbms_ssl_policy_https_enabled \
     dbms_connector_https_advertised_address \
     dbms_ssl_policy_https_base_directory \
+    dbms_ssl_policy_https_client_auth \
     dbms_connector_http_enabled \
     dbms_connector_http_listen_address \
     dbms_connector_http_advertised_address \
     dbms_connector_bolt_enabled \
     dbms_connector_bolt_advertised_address \
+    dbms_ssl_policy_bolt_client_auth \
     dbms_ssl_policy_bolt_enabled \
     dbms_connector_bolt_tls_level \
     dbms_ssl_policy_bolt_base_directory \
@@ -235,6 +239,6 @@ if [ "$?" -ne 0 ] && [ -f /etc/neo4j/password-reset.log ]; then
     echo "Startup: checking to see if password needs to be reset"
     exec /etc/neo4j/reset-password-aws.sh &
 fi
-
+sleep 5
 # This is the same command sysctl's service would have executed.
 exec /usr/share/neo4j/bin/neo4j console

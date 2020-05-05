@@ -147,6 +147,7 @@ echo "dbms_connector_https_advertised_address" "${dbms_connector_https_advertise
 echo "dbms_connector_https_listen_address" "${dbms_connector_https_listen_address:=0.0.0.0:7473}"
 echo "dbms_ssl_policy_https_enabled" "${dbms_ssl_policy_https_enabled:=true}"
 echo "dbms_ssl_policy_https_base_directory" "${dbms_ssl_policy_https_base_directory:=/var/lib/neo4j/certificates/https}"
+echo "$dbms_ssl_policy_https_client_auth" "${dbms_ssl_policy_https_client_auth:=NONE}"
 
 # HTTP
 echo "dbms_connector_http_enabled" "${dbms_connector_http_enabled:=true}"
@@ -157,9 +158,10 @@ echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
 echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=:7687}"
 echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
-echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$EXTERNAL_IP_ADDR }"
+echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$EXTERNAL_IP_ADDR}"
 echo "dbms_ssl_policy_bolt_enabled" "${dbms_ssl_policy_bolt_enabled:=true}"
 echo "dbms_ssl_policy_bolt_base_directory" "${dbms_ssl_policy_bolt_base_directory:=/var/lib/neo4j/certificates/bolt}"
+echo "$dbms_ssl_policy_bolt_client_auth" "${dbms_ssl_policy_bolt_client_auth:=NONE}"
 
 # Backup
 echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
@@ -167,10 +169,10 @@ echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
 
 # Causal Clustering
 echo "causal_clustering_discovery_type""${causal_clustering_discovery_type:=LIST}"
-echo "causal_clustering_initial_discovery_members" "${causal_clustering_initial_discovery_members:=localhost:5000}"
+echo "causal_clustering_initial_discovery_members" "${causal_clustering_initial_discovery_members:=neo4j-vm-core-0:5000,neo4j-vm-core-1:5000,neo4j-vm-core-2:5000}"
 echo "causal_clustering_minimum_core_cluster_size_at_formation" "${causal_clustering_minimum_core_cluster_size_at_formation:=3}"
 echo "causal_clustering_minimum_core_cluster_size_at_runtime" "${causal_clustering_minimum_core_cluster_size_at_runtime:=3}"
-echo "causal_clustering_discovery_advertised_address" "${causal_clustering_discovery_advertised_address:=$HOSTNAME:5000}"
+echo "causal_clustering_discovery_advertised_address" "${causal_clustering_discovery_advertised_address:=$(hostname -f):5000}"
 echo "dbms_default_listen_address" "${dbms_default_listen_address:=$INTERNAL_IP_ADDR}"
 echo "dbms_ssl_policy_cluster_enabled" "${dbms_ssl_policy_cluster_enabled:=true}"
 echo "dbms_ssl_policy_cluster_base_directory" "${dbms_ssl_policy_cluster_base_directory:=/var/lib/neo4j/certificates/cluster}"
@@ -195,11 +197,13 @@ export dbms_connector_https_enabled \
     dbms_ssl_policy_https_enabled \
     dbms_connector_https_advertised_address \
     dbms_ssl_policy_https_base_directory \
+    dbms_ssl_policy_https_client_auth \
     dbms_connector_http_enabled \
     dbms_connector_http_listen_address \
     dbms_connector_http_advertised_address \
     dbms_connector_bolt_enabled \
     dbms_connector_bolt_advertised_address \
+    dbms_ssl_policy_bolt_client_auth \
     dbms_ssl_policy_bolt_enabled \
     dbms_connector_bolt_tls_level \
     dbms_ssl_policy_bolt_base_directory \

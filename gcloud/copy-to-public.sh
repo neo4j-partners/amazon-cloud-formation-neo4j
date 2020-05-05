@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 # This script applies a google cloud license to an existing VM image, and copies
 # it to the public repository of images for neo4j so that the general public can
 # access it.

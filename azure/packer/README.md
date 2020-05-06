@@ -30,7 +30,7 @@ Make sure to set the env vars identified at the top of packer-template.json.
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:4.0.3" \
+    -var "neo4j_version=1:4.0.4" \
     packer-template.json
 ```
 

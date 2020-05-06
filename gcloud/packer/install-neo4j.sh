@@ -17,9 +17,9 @@ sudo apt-get update && sudo apt-get --yes upgrade
 
 echo "Installing Neo4j"
 if [ $neo4j_edition = "community" ]; then
-    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.0.2
+    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.0.4
 else
-    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.0.2
+    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.0.4
 fi
 
 if [ $? -ne 0 ] ; then

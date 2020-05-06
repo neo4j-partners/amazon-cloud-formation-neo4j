@@ -3,6 +3,9 @@
 This file tracks when AMIs were built by edition & version, storing the original mapping
 from AMI ID to region.
 
+us-gov-east-1: ami-08cdcbf8dc4a259be
+us-gov-west-1: ami-5a7f433b
+
 ## Neo4j Enterprise 4.0.3 with APOC
 
 ```

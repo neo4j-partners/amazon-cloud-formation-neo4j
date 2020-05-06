@@ -5,7 +5,7 @@
     "zone": "us-central1-a",
     "gcp_service_account_credentials_file": "./packer-sa.json",
     "gcp_base_image": "ubuntu-1604-xenial-v20180814",
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.0.0.4/apoc-4.0.0.4-all.jar"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.0.0.10/apoc-4.0.0.10-all.jar"
   },
   "builders": [
     {

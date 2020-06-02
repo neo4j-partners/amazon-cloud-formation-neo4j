@@ -6,9 +6,9 @@
 # Get our external IP from the google metadata catalog.
 echo "pre-neo4j.sh: Fetching GCP instance metadata"
 
+export NEO4J_HOME=/var/lib/neo4j
 export INSTANCE_API=http://metadata.google.internal/computeMetadata/v1/instance
-export INTERNAL_HOSTNAME=$(curl -s -H "Metadata-Flavor: Google" \
-   $INSTANCE_API/hostname)
+export INTERNAL_HOSTNAME=$(curl -s -H "Metadata-Flavor: Google" $INSTANCE_API/hostname)
 export EXTERNAL_IP_ADDR=$(curl -s -H "Metadata-Flavor: Google" \
    $INSTANCE_API/network-interfaces/0/access-configs/0/external-ip)
 # Google VMs don't have ifconfig.
@@ -93,7 +93,10 @@ chown "${userid}":"${groupid}" "${private_key}"
     cp "${public_cert}" "${certificates_dir}/cluster/trusted/"
 }
 
-generate_self_signed_certificates
+if [ ! -f "$NEO4J_HOME/certificates/https/private.key" ]; then
+    echo "Certificates does not exist, generating certificates..."
+    generate_self_signed_certificates
+fi
 
 # Settings and defaults
 # Bash associative array docs: https://www.artificialworlds.net/blog/2012/10/17/bash-associative-array-examples/

@@ -9,6 +9,7 @@
 ######################################################################################
 echo "pre-neo4j.sh: Fetching AWS instance metadata"
 # Documentation: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html
+export NEO4J_HOME=/var/lib/neo4j
 export API=http://169.254.169.254/latest/
 export MAC_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/)
 export INTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/local-ipv4s)
@@ -125,7 +126,10 @@ chown "${userid}":"${groupid}" "${private_key}"
     cp "${public_cert}" "${certificates_dir}/cluster/trusted/"
 }
 
-generate_self_signed_certificates
+if [ ! -f "$NEO4J_HOME/certificates/https/private.key" ]; then
+    echo "Certificates does not exist, generating certificates..."
+    generate_self_signed_certificates
+fi
 
 # At this point all env vars are in place, we only need to fill out those missing
 # with defaults provided below.

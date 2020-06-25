@@ -9,7 +9,7 @@ INITIAL_HEAP=2G
 MAX_HEAP=4G
 CONTAINER=benchmark-neo4j-$RUN_ID
 
-APOC_VERSION=4.0.0.13
+APOC_VERSION=4.1.0.0
 APOC=https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/$APOC_VERSION/apoc-$APOC_VERSION-all.jar
 mkdir /tmp/$CONTAINER && wget -P /tmp/$CONTAINER $APOC
 

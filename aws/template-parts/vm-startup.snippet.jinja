@@ -49,7 +49,7 @@
 {# Install cfn-signal utilities so that we can signal stack completion #}
 "mkdir aws-cfn-bootstrap-latest\n",
 "curl https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz | tar xz -C aws-cfn-bootstrap-latest --strip-components 1\n",
-"easy_install aws-cfn-bootstrap-latest\n",
+"python /usr/lib/python2.7/dist-packages/easy_install.py aws-cfn-bootstrap-latest\n",
 "\n",
 "echo Stack ID '", { "Ref": "AWS::StackId" }, "' | tee -a $LOGFILE\n",
 

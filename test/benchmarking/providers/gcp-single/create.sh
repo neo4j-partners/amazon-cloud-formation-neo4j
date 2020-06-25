@@ -26,7 +26,7 @@ fi
 echo "Creating instance"
 OUTPUT=$(gcloud compute instances create $STACK_NAME \
     --project $PROJECT \
-    --image neo4j-enterprise-1-4-0-5-apoc \
+    --image neo4j-enterprise-1-4-1-0-apoc \
     --tags neo4j \
     --machine-type $MACHINE \
     --boot-disk-size $DISK_SIZE \

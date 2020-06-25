@@ -18,8 +18,8 @@ export ADDRESS_ALLOCATION=dynamic
 # Configuration bits of what you're launching
 # Publisher:Offer:Sku:Version
 export PUBLISHER=neo4j
-export OFFER=neo4j-enterprise-4_0
-export SKU=neo4j_4_0_5_apoc
+export OFFER=neo4j-enterprise-4_1
+export SKU=neo4j_4_1_0_apoc
 export VERSION=latest
 export IMAGE=$PUBLISHER:$OFFER:$SKU:$VERSION
 

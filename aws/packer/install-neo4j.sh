@@ -1,23 +1,48 @@
 #!/bin/bash
+ulimit -n 40000
 # Instructions stolen from standard docs.
 # https://neo4j.com/docs/operations-manual/current/installation/linux/debian/
+
+echo '#########################################'
+echo '#######        SYSTEM UPDATE    #########'
+echo '#########################################'
+
+sudo sed -i '/preserve_hostname: false/c\preserve_hostname: true' /etc/cloud/cloud.cfg
+echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-selections
+echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
+
+wget -O - https://debian.neo4j.com/neotechnology.gpg.key | sudo apt-key add -
+echo 'deb http://debian.neo4j.com stable 4.1' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
+sudo add-apt-repository universe
+sudo add-apt-repository -y ppa:openjdk-r/ppa
+sudo apt-get update
+
+echo "Upgrading Packages..."
+
+# For an explanation of the magic flags on what should be a mundane command, context:
+# https://github.com/chef/bento/issues/661#issuecomment-354806596
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
+echo 'Held packages'
+sudo dpkg --get-selections | grep hold
 
 echo '#########################################'
 echo '####### BEGINNING NEO4J INSTALL #########'
 echo '#########################################'
 
-echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-selections
-echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
-
-wget -O - https://debian.neo4j.org/neotechnology.gpg.key | sudo apt-key add -
-echo 'deb http://debian.neo4j.org/repo stable/' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
-sudo apt-get update
-sudo apt-get --yes upgrade
-
 if [ $neo4j_edition = "community" ]; then
-    sudo apt-get --yes install neo4j=$neo4j_version
+    echo "neo4j=$neo4j_version"
+    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.1.0
 else
-    sudo apt-get --yes install neo4j-enterprise=$neo4j_version
+    echo "neo4j-enterprise=$neo4j_version"
+    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.1.0
+fi
+
+if [ $? -ne 0 ] ; then
+    echo ''
+    echo '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+    echo '########## NEO4J INSTALL FAILED #########'
+    echo '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'
+    exit 1
 fi
 
 echo "Enabling neo4j system service"
@@ -90,7 +115,6 @@ echo '########## NEO4J PLUGIN INSTALL #########'
 echo '#########################################'
 
 install_plugin "APOC" "$apoc_jar"
-install_plugin "Graph Algos" "$graphalgos_jar"
 
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload

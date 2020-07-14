@@ -13,18 +13,18 @@
 {# Software status only works if the VM has an external IP. #}
 {% set enableStatusWaiter = hasExternalIP %}
 
-{# 
- # Template configuration options specific to neo4j deploy 
+{#
+ # Template configuration options specific to neo4j deploy
  # Param will come as a string, take care to use goofy jinja int filter,
  # since jinja wants us to feel pain and doesn't expose python int(). :)
  #}
-{% if properties.has_key("clusterNodes") %}
+{% if "clusterNodes" in properties %}
    {% set clusterNodes = properties["clusterNodes"] | int %}
 {% else %}
    {% set clusterNodes = 3 | int %} {# Value must be >= 3 #}
 {% endif %}
 
-{% if properties.has_key("readReplicas") %}
+{% if "readReplicas" in properties %}
    {% set readReplicas = properties["readReplicas"] | int %}
 {% else %}
    {% set readReplicas = 0 | int %}
@@ -35,7 +35,7 @@
 {# Image must be hardcoded, and must be tied to launcher-public for correct perms.
  # Remember to update in c2d_deployment_configuration.json too!
  #}
-{% set vmImage = "https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-3-4-9-apoc" %}
+{% set vmImage = "https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-4-1-0-apoc" %}
 
 {# This is a prefix only. For n nodes, this template deploys
  # {{instanceName}}-1, {{instanceName}}-2, ... n.
@@ -62,7 +62,7 @@ resources:
       instanceName: {{ instanceName }}
       numberOfVMReplicas: {{ clusterNodes }}
       sourceImage: {{ vmImage }}
-      zone: {{ zone }}      
+      zone: {{ zone }}
       machineType: {{ machineType }}
       network: {{ network }}
       {% if subnetwork %}
@@ -110,7 +110,7 @@ resources:
       instanceName: {{ "%s-replica-vm" % deployment }}
       numberOfVMReplicas: {{ readReplicas }}
       sourceImage: {{ vmImage }}
-      zone: {{ zone }}      
+      zone: {{ zone }}
       machineType: {{ machineType }}
       network: {{ network }}
       {% if subnetwork %}
@@ -145,41 +145,59 @@ resources:
             - 'https://www.googleapis.com/auth/monitoring.write'
             - 'https://www.googleapis.com/auth/cloudruntimeconfig'
 
-  {# 
+  {#
    # Wait on signaled success of VM deploys before returning.
-   # Each VM writes a runtime config var under a random UUID.  We 
+   # Each VM writes a runtime config var under a random UUID.  We
    # want to see <successCardinality> of these before signaling the
    # deployment finished.  Clock on the timeout doesn't start until
    # the first VM (instanceName) is up.
    #}
   - name: cluster-waiter
     type: waiter.jinja
-    properties: 
+    properties:
       instanceName: {{ instanceName }}-1
       successCardinality: {{ clusterNodes }}
 
   {#
-   # Firewalling rules   
+   # Firewalling rules
    #}
+  {% if properties["enableTcp7687"] %}
   - name: {{ deployment[0:20] }}-bolt-7687
     type: compute.v1.firewall
     properties:
       network: $(ref.{{ instanceName }}-1.networkInterfaces[0].network)
+      {% if properties.get("tcp7687SourceRanges") %}
+      sourceRanges:
+        {% for source in properties["tcp7687SourceRanges"].split(',') %}
+        - '{{ source | trim }}'
+        {% endfor %}
+      {% else %}
       sourceRanges: ["0.0.0.0/0"]
+      {% endif %}
       targetTags: ["neo4j-{{ deployment }}"]
       allowed:
         - IPProtocol: TCP
           ports: ["7687"]
-   
-  - name: {{ deployment[0:20] }}-browser-https-7473
+  {% endif %}
+
+  {% if properties["enableTcp7473"] %}
+  - name: {{ deployment[0:20] }}-https-7473
     type: compute.v1.firewall
     properties:
       network: $(ref.{{ instanceName }}-1.networkInterfaces[0].network)
+      {% if properties.get("tcp7473SourceRanges") %}
+      sourceRanges:
+        {% for source in properties["tcp7473SourceRanges"].split(',') %}
+        - '{{ source | trim }}'
+        {% endfor %}
+      {% else %}
       sourceRanges: ["0.0.0.0/0"]
+      {% endif %}
       targetTags: ["neo4j-{{ deployment }}"]
       allowed:
         - IPProtocol: TCP
           ports: ["7473"]
+  {% endif %}
 
   - name: {{ deployment[0:20] }}-internal-comms
     type: compute.v1.firewall

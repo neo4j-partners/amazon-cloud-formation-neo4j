@@ -7,6 +7,19 @@ Amazon Marketplace entry
 * Install AWS CLI and authenticate
 * `pipenv install`
 
+## AWS CLI Setup
+
+This file assumes that you have "profiles" set up with your AWS CLI named "govcloud" and
+"marketplace".   The "marketplace" account is the one that hosts Neo4j's public marketplace
+presence on AWS.  And govcloud is what it sounds like.
+
+Take note of `-c profileName` arguments and `--profile profileName` arguments.   Steps
+below need to be repeated for public marketplaces and govcloud.
+
+For `aws` commands, you need multiple profile sections in your `$HOME/.aws/config`.
+
+For `s3cmd` commands, you need multiple config files in your `$HOME`.  For s3cmd also see [this important note](https://stanlemon.net/2013/05/23/s3cmd-and-govcloud/)
+
 ## Generate CloudFormation Template
 
 The CloudFormation stack is a jinja template which evaluates to a CloudFormation JSON file.
@@ -19,35 +32,80 @@ There are two possible templates you can use:
 * `deploy.jinja` is for n-node causal clusters
 * `deploy-standalone.jinja` is for single-node deploys
 
-Causal clusters:
+## GovCloud Support
+
+- We will only publish Enterprise on GovCloud.  For competitive reasons, Community will be
+unavailable.
+
+### Causal clusters:
 
 Generate from Jinja template, upload to S3, and validate.
 
 ```
-export VERSION=3.4.9
+# Profile should be either (marketplace|govcloud)
+for value in marketplace govcloud
+do
+  export PROFILE=$value
+  export VERSION=4.1.0
+  S3BUCKET=neo4j-cloudformation
+  if [ "$PROFILE" = "govcloud" ] ; then
+    export S3HOST=s3-us-gov-east-1.amazonaws.com
+  else 
+    export S3HOST=s3.amazonaws.com
+  fi
+  GEN_STACK=neo4j-enterprise-stack-$VERSION.json
+  pipenv run python3 generate.py \
+      --edition enterprise \
+      --profile $PROFILE \
+      --template deploy.jinja > $GEN_STACK && \
+  s3cmd -c $HOME/.s3cfg-$PROFILE -P put $GEN_STACK s3://$S3BUCKET/
+  aws cloudformation validate-template \
+    --template-url https://$S3HOST/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
+done
+```
+
+### Neo4j Enterprise Standalone:
+
+```
+for value in marketplace govcloud
+do
+  export PROFILE=$value
+  export VERSION=4.1.0
+  S3BUCKET=neo4j-cloudformation
+  if [ "$PROFILE" = "govcloud" ] ; then
+    export S3HOST=s3-us-gov-east-1.amazonaws.com
+  else 
+    export S3HOST=s3.amazonaws.com
+  fi
+  GEN_STACK=neo4j-enterprise-standalone-stack-$VERSION.json
+  pipenv run python3 generate.py \
+      --edition enterprise \
+      --profile $PROFILE \
+      --template deploy-standalone.jinja > $GEN_STACK && \
+  s3cmd -c $HOME/.s3cfg-$PROFILE -P put $GEN_STACK s3://$S3BUCKET/
+  aws cloudformation validate-template \
+    --template-url https://$S3HOST/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
+done
+```
+
+### Neo4j Community Standalone:
+
+```
+export VERSION=4.1.0
+export PROFILE=marketplace
 S3BUCKET=neo4j-cloudformation
-GEN_STACK=neo4j-enterprise-stack-$VERSION.json
-pipenv run python3 generate.py --template deploy.jinja > $GEN_STACK && \
-s3cmd -P put $GEN_STACK s3://$S3BUCKET/
+GEN_STACK=neo4j-community-standalone-stack-$VERSION.json
+pipenv run python3 generate.py \
+    --edition community \
+    --profile $PROFILE \
+    --template deploy-standalone.jinja > $GEN_STACK && \
+s3cmd -c $HOME/.s3cfg-marketplace -P put $GEN_STACK s3://$S3BUCKET/
+echo $GEN_STACK
 aws cloudformation validate-template \
-  --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK > /dev/null
+  --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
 ```
 
-Standalone:
-
-```
-export VERSION=3.4.9
-S3BUCKET=neo4j-cloudformation
-GEN_STACK=neo4j-enterprise-standalone-stack-$VERSION.json
-pipenv run python3 generate.py --template deploy-standalone.jinja > $GEN_STACK && \
-s3cmd -P put $GEN_STACK s3://$S3BUCKET/
-aws cloudformation validate-template \
-  --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK > /dev/null
-```
-
-CloudFormation can then be given these S3 URLs 
-* `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-stack.json`
-* `https://s3.amazonaws.com/neo4j-cloudformation/neo4j-enterprise-standalone-stack.json`
+CloudFormation can then be given the S3 URLs above
 
 ## Testing Deployed Stacks
 
@@ -78,19 +136,16 @@ Deregister example: `aws ec2 deregister-image --image-id ami-650be718 --region u
 
 ## Create CloudFormation Stack
 
-Check needed parameters in the generated CF stack file first, and do not copy/paste
-the below, but customize it.
+See the `deploy-*.sh` shell scripts.
+
+To get the status of a stack being deployed:
 
 ```
-aws cloudformation create-stack \
-   --stack-name StackyMcGrapherston \
-   --template-body file://neo4j-enterprise-stack.json \
-   --parameters ParameterKey=ClusterNodes,ParameterValue=3 \
-                ParameterKey=InstanceType,ParameterValue=m3.medium \
-                ParameterKey=NetworkWhitelist,ParameterValue=0.0.0.0/8 \
-                ParameterKey=Password,ParameterValue=s00pers3cret \
-                ParameterKey=SSHKeyName,ParameterValue=davidallen-aws-neo4j \
-                ParameterKey=VolumeSizeGB,ParameterValue=37 \
-                ParameterKey=VolumeType,ParameterValue=gp2 \
-  --capabilities CAPABILITY_NAMED_IAM
+aws cloudformation describe-stacks --stack-name $STACKNAME --region $REGION | jq -r .Stacks[0].StackStatus
+```
+
+To delete
+
+```
+aws cloudformation delete-stack --stack-name $STACKNAME --region $REGION
 ```

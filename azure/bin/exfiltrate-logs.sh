@@ -3,9 +3,11 @@
 # machines that are started in a test run.
 
 # Hosts look like this:
-# neo4j-7m0f-core-node-2.eastus.cloudapp.azure.com
-# neo4j-7m0f-read-replica-node-1.eastus.cloudapp.azure.com
-# Expected prefix is neo4j-7m0f
+# neo4j-core-node-0-tlpwuv5n4q5eo.westus.cloudapp.azure.com
+
+# Usage:
+# exfiltrate-logs.sh <prefix> <suffix> <region>
+# exfiltrate-logs.sh neo4j tlpwuv5n4q5eo westus
 
 echo My cluster prefix arg is $1
 prefix=$1
@@ -13,8 +15,11 @@ prefix=$1
 echo My cluster suffix arg is $2
 suffix=$2
 
+region=${3:-eastus}
+echo My region arg is $region
+
 cores=3
-read_replicas=1
+read_replicas=0
 
 USER=davidallen
 
@@ -23,7 +28,7 @@ exfil_logs () {
     idx=$2
     LOGDIR=/var/log/neo4j
 
-    host="$prefix-$mode-node-$idx-$suffix.eastus.cloudapp.azure.com"
+    host="$prefix-$mode-node-$idx-$suffix.$region.cloudapp.azure.com"
 
     dir="$prefix/$mode-$idx"
     mkdir -p "$prefix/${mode}-${idx}"

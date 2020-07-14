@@ -3,6 +3,17 @@
 ## Dependencies
 
 * `brew install azure-cli`
+* `brew install jq`
+
+## Setup the Azure Packer Builder
+
+Docs here: https://www.packer.io/docs/builders/azure-setup.html
+
+You will need:
+
+* A storage account
+* An active directory service principal
+* Various details including your client ID (AD SP), tenant ID, and subscription ID.
 
 ## Relevant Documentation
 
@@ -14,12 +25,12 @@
 You should specify edition (community/enterprise) and version.  Because this is debian based,
 versions should match what is in the debian package repo.
 
-You may omit the AWS key variables and set them in your environment.
+Make sure to set the env vars identified at the top of packer-template.json.
 
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
-    -var "neo4j_version=1:3.4.9" \
+    -var "neo4j_version=1:4.1.0" \
     packer-template.json
 ```
 

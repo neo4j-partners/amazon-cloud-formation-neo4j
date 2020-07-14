@@ -13,12 +13,12 @@ function fail {
 
 function cypher {
     # Use routing driver by default, send query wherever.
-    DEFAULT_ENDPOINT="bolt+routing://$host:7687"
+    DEFAULT_ENDPOINT="neo4j://$host:7687"
 
     # If caller specified, use a specific endpoint to route a query to just one node.
     ENDPOINT=${2:-$DEFAULT_ENDPOINT}
 
-    echo "$1" | cypher-shell --encryption true -u "$NEO4J_USERNAME" -a "$ENDPOINT" -p "$NEO4J_SECRETS_PASSWORD"
+    echo "$1" | cypher-shell --encryption false -u "$NEO4J_USERNAME" -a "$ENDPOINT" -p "$NEO4J_SECRETS_PASSWORD"
 }
 
 function get_bolt_endpoints_for_core {
@@ -35,7 +35,7 @@ function get_bolt_endpoints_for_rr {
 
 function runtest {
     # Use routing driver by default, send query wherever.
-    DEFAULT_ENDPOINT="bolt+routing://$host:7687"
+    DEFAULT_ENDPOINT="bolt://$host:7687"
 
     # If caller specified, use a specific endpoint to route a query to just one node.
     ENDPOINT=${3:-$DEFAULT_ENDPOINT}

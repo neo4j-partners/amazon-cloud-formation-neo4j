@@ -31,7 +31,7 @@
             "comments": "Define a new Virtual Network in the current resource group",
             "type": "Microsoft.Network/virtualNetworks",
             "name": "[parameters('NetworkName')]",
-            "apiVersion": "2017-10-01",
+            "apiVersion": "2019-04-01",
             "location": "[parameters('Location')]",
             "tags": "[parameters('Neo4JTags')]",
             "properties": {
@@ -48,8 +48,7 @@
                         }
                     }
                 ]
-            },
-            "dependsOn": []
+            }
         }
     ],
     "outputs": {

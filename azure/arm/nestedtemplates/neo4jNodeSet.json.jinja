@@ -56,6 +56,7 @@
         "DataDiskSizeGB": {
             "type": "int",
             "minValue": 5,
+            "maxvalue": 4095,
             "defaultValue": 1024
         },
 
@@ -93,30 +94,6 @@
             "type": "int"
         },
         
-        "Neo4jClusterPort": {
-            "type": "int",
-            "defaultValue": 5000,
-            "metadata": {
-                "description": "The port used for communication between instances in the cluster"
-            }
-        },
-
-        "Neo4jTransactionPort": {
-            "type": "int",
-            "defaultValue": 6000,
-            "metadata": {
-                "description": "The port used to read transaction data from the master"
-            }
-        },
-
-        "Neo4jRaftPort": {
-            "type": "int",
-            "defaultValue": 7000,
-            "metadata": {
-                "description": "The port used to read transaction data from the master"
-            }
-        },
-
         "Neo4JTags": {
             "type": "object",
             "metadata": {
@@ -124,7 +101,7 @@
             }
         },
 
-        "ArtifactsBase": {
+        "_artifactsLocation": {
             "type": "string",
             "metadata": {
                 "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
@@ -132,7 +109,7 @@
         },
 
         "_artifactsLocationSasToken": {
-            "type": "string"
+            "type": "securestring"
         }
     },
     "variables": {
@@ -185,31 +162,37 @@
     },
     "sku": {
         "name": "Aligned"
-    },
-    "dependsOn": []
+    }
 },
 {
     "type": "Microsoft.Network/publicIPAddresses",
     "name": "[concat(variables('namePrefixes').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]",
-    "apiVersion": "2017-08-01",
+    "apiVersion": "2019-04-01",
     "location": "[parameters('Location')]",
+    "copy": {
+        "name": "[concat('ip', parameters('NodePrefix'), 'CI')]",
+        "count": "[parameters('N')]"
+    },
     "properties": {
         "publicIPAllocationMethod": "[parameters('PublicIPAllocationMethod')]",
         "dnsSettings": {
             "domainNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex(), '-', variables('uniqueTag')))]"
         }                
-    },
-    "copy": {
-        "name": "[concat('ip', parameters('NodePrefix'), 'CI')]",
-        "count": "[parameters('N')]"
     }
 },
 {
     "type": "Microsoft.Network/networkInterfaces",
     "name": "[concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex())]",
-    "apiVersion": "2017-10-01",
+    "apiVersion": "2019-04-01",
     "location": "[parameters('Location')]",
     "tags": "[parameters('Neo4JTags')]",
+    "dependsOn": [
+        "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
+    ],
+    "copy": {
+        "name": "nicCI",
+        "count": "[parameters('N')]"
+    },
     "properties": {
         "ipConfigurations": [
             {
@@ -218,7 +201,7 @@
                     "subnet": { "id": "[parameters('SubnetID')]" },
                     "privateIPAllocationMethod": "Dynamic",
                     "publicIPAddress": {
-                        "id": "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(parameters('ClusterName'), '-public-ip', '-', parameters('NodePrefix'), '-', copyIndex()))]"
                     }
                 }
             }
@@ -227,22 +210,14 @@
          # is referenced in initial_cluster_members by the nodes
          #}
         "dnsSettings": {
-            "dnsServers": [],
             "internalDnsNameLabel": "[toLower(concat(parameters('ClusterName'), '-', parameters('NodePrefix'), '-node-', copyIndex()))]"
         },        
         "enableIPForwarding": false,
         "networkSecurityGroup": {
             "id": "[parameters('NetworkSecurityGroupId')]"
         }
-    },
-    "copy": {
-        "name": "nicCI",
-        "count": "[parameters('N')]"
-    },
-    "dependsOn": [
-        "[concat(variables('resourceIDs').publicIP, '-', parameters('NodePrefix'), '-', copyIndex())]"
-    ]
-}, 
+    }
+},
 {
     "type": "Microsoft.Compute/virtualMachines",
     "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
@@ -277,13 +252,21 @@
      # For local testing, comment out the "plan" object, and swap the "imageReference" below.
      #}
     "plan": {
-        "name": "neo4j_3_4_9_apoc",
+        "name": "neo4j_4_1_0_apoc",
         "publisher": "neo4j",
-        "product": "neo4j-enterprise"
+        "product": "neo4j-enterprise-4_1"
+    },
+    "dependsOn": [
+        "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex()))]"
+    ],
+    "copy": {
+        "name": "[concat('vm', parameters('DBMS_MODE'), 'CI')]",
+        "count": "[parameters('N')]"
     },
     "properties": {
-        "availabilitySet": {
-            "id": "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]"
+        "availabilitySet": {            
+            "id": "[resourceId('Microsoft.Compute/availabilitySets', concat(variables('namePrefixes').availabilitySet, '-', parameters('NodePrefix')))]"
         },
         "hardwareProfile": {
             "vmSize": "[parameters('VmSize')]"
@@ -291,8 +274,8 @@
         "storageProfile": {
 			"imageReference": {
                 "publisher": "neo4j",
-                "offer": "neo4j-enterprise",
-                "sku": "neo4j_3_4_9_apoc",
+                "offer": "neo4j-enterprise-4_1",
+                "sku": "neo4j_4_1_0_apoc",
                 "version": "latest"
 			},
 {#            
@@ -300,7 +283,7 @@
 #}
             "osDisk": {
                 "name": "[concat(variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex(), '-OS')]",
-                "createOption": "fromImage",
+                "createOption": "FromImage",
                 "managedDisk": {
                     "storageAccountType": "Standard_LRS"
                 }
@@ -331,20 +314,12 @@
                 }
             ]
         }
-    },
-    "copy": {
-        "name": "[concat('vm', parameters('DBMS_MODE'), 'CI')]",
-        "count": "[parameters('N')]"
-    },
-    "dependsOn": [
-        "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
-        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('namePrefixes').nic, '-', parameters('NodePrefix'), '-', copyIndex()))]"
-    ]
+    }
 },
 {
     "type": "Microsoft.Resources/deployments",
     "name": "[concat('ConfigureVM-', variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]",
-    "apiVersion": "2017-05-10",
+    "apiVersion": "2019-05-01",
     "dependsOn": [
         "[concat('Microsoft.Compute/virtualMachines/', variables('namePrefixes').vm, '-', parameters('NodePrefix'), '-', copyIndex())]"
     ],
@@ -355,7 +330,7 @@
     "properties": {
         "mode": "Incremental",
         "templateLink": {
-            "uri": "[uri(parameters('ArtifactsBase'), concat('nestedtemplates/scriptTemplate.json', parameters('_artifactsLocationSasToken')))]",
+            "uri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/scriptTemplate.json', parameters('_artifactsLocationSasToken')))]",
             "contentVersion": "1.0.0.0"
         },
         "parameters": {
@@ -368,8 +343,8 @@
             "Password": {
                 "value": "[parameters('Neo4jPassword')]"
             },
-            "ArtifactsBase": {
-                "value": "[parameters('ArtifactsBase')]"
+            "_artifactsLocation": {
+                "value": "[parameters('_artifactsLocation')]"
             },
             "_artifactsLocationSasToken": {
                 "value": "[parameters('_artifactsLocationSasToken')]"

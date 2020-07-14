@@ -1,15 +1,14 @@
 {
   "variables": {
-    "client_id": "07171ab8-105e-4305-87e8-075a9b852b7b",
+    "client_id": "{{env `AZURE_CLIENT_ID`}}",
     "client_secret": "{{env `AZURE_SP_PASSWORD`}}",
-    "tenant_id": "54e85725-ed2a-49a4-a19e-11c8d29f9a0f",
-    "subscription_id": "e4486a99-00d6-4e46-aab0-b087f918eda9",
+    "tenant_id": "{{env `AZURE_TENANT_ID`}}",
+    "subscription_id": "{{env `AZURE_SUBSCRIPTION_ID`}}",
     "object_id": "8e7b95b8-01f5-469a-98cc-60caf9aecb9d",
-    "neo4j_version": "1:3.4.9",
+    "neo4j_version": "1:4.1.0",
     "neo4j_edition": "enterprise",
 
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/3.4.0.3/apoc-3.4.0.3-all.jar",
-    "graphalgos_jar": "https://github.com/neo4j-contrib/neo4j-graph-algorithms/releases/download/3.5.0.1/graph-algorithms-algo-3.5.0.1.jar"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.1.0.0/apoc-4.1.0.0-all.jar"
   },
   "builders": [
     {
@@ -22,7 +21,7 @@
       "capture_container_name": "publicvhds",
       "capture_name_prefix": "neo4j-{{user `neo4j_edition`}}-{{user `neo4j_version` | clean_image_name}}",
       "resource_group_name": "neo4j-public",
-      "storage_account": "neo4jpublicstorage",
+      "storage_account": "neo4jpublic",
       "build_resource_group_name": "neo4j-public",
 
       "vm_size": "Standard_A2",
@@ -30,7 +29,7 @@
       "os_type": "Linux",
       "image_publisher": "Canonical",
       "image_offer": "UbuntuServer",
-      "image_sku": "16.04-LTS",
+      "image_sku": "18.04-LTS",
   
       "ssh_username": "ubuntu",
 
@@ -68,8 +67,7 @@
       "environment_vars": [
         "neo4j_version={{ user `neo4j_version` }}",
         "neo4j_edition={{ user `neo4j_edition` }}",
-        "apoc_jar={{ user `apoc_jar` }}",
-        "graphalgos_jar={{ user `graphalgos_jar` }}"
+        "apoc_jar={{ user `apoc_jar` }}"
       ]
     },
     {

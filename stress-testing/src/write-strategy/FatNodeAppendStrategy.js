@@ -5,12 +5,8 @@ const uuid = require('uuid');
 class FatNodeAppendStrategy extends Strategy {
     constructor(props) {
         super(props);
-        this.name = 'FatNodeAppendStrategy';
+        this.name = 'FatNodeAppend';
         this.label = props.label;
-    }
-
-    setup(driver) {
-        return Promise.resolve();
     }
 
     run(driver) {
@@ -32,7 +28,8 @@ class FatNodeAppendStrategy extends Strategy {
             uuid: $uuid
         }))`;
         this.lastParams = { uuid: uuid.v4(), data };
-        const f = () => this.session.run(this.lastQuery, this.lastParams);
+        
+        const f = (s = driver.session()) => s.writeTransaction(tx => tx.run(this.lastQuery, this.lastParams));
         return this.time(f);
     }
 }

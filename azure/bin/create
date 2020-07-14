@@ -65,13 +65,13 @@ echo $(cat <<JSON
         "value": ${READ_REPLICAS}
     },
     "VmSize": {
-        "value": "Standard_A1_v2"
+        "value": "Standard_B2ms"
     },
     "DataDiskType": {
         "value": "StandardSSD_LRS"
     },
     "DataDiskSizeGB": {
-        "value": 512
+        "value": 256
     },
     "AdminUserName": {
         "value": "${USERNAME}"
@@ -131,6 +131,8 @@ if ! az group deployment validate \
      --parameters @.parameters.json \
      --resource-group "${RESOURCE_GROUP}" >/dev/null ; then
     echo "Failed validation of templates, cannot continue"
+    echo "Deleting RG"
+    az group delete -n "${RESOURCE_GROUP}" --no-wait --yes
     exit 1
 fi
 

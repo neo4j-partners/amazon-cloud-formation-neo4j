@@ -71,6 +71,13 @@ the Azure Storage Explorer.
 
 If all of that sounds complex and confusing...that's because it is.
 
+Once a VHD is produced by packer, you have to generate a SAS URL to the VHD, which is what you need
+to update the marketplace.  Guidance on generating the SAS URL can be found here:
+
+https://docs.microsoft.com/en-us/azure/marketplace-publishing/marketplace-publishing-vm-image-creation#52-get-the-shared-access-signature-uri-for-your-vm-images
+
+I use the Microsoft Storage Explorer tool to generate it.
+
 ## Best Practices for Packaging (ARM)
 
 https://github.com/Azure/azure-quickstart-templates/blob/master/1-CONTRIBUTION-GUIDE/best-practices.md#deployment-artifacts-nested-templates-scripts
@@ -81,6 +88,20 @@ Stored in an Amazon S3 bucket called 'neo4j-arm', hosted here: `https://s3.amazo
 requires a fully-qualified public URL in order to resolve other files that belong.
 
 Two directories test and arm correspond to local dev testing and finished deployed version.
+
+## Deploying Public Templates
+
+To publish ARM templates, we want to copy them into a directory structure on the S3 bucket once
+they're prepped.  This public S3 bucket allows customers to deploy as needed, and get access to
+the code to customize deployments for their setups.
+
+Verify first that the templates are working with the bin/create script (which does jinja expansion)
+and then copy them like so:
+
+```
+export VERSION=4.1.0
+s3cmd put --recursive -P arm/* s3://neo4j-arm/$VERSION/causal-cluster/
+```
 
 ## Jinja Templating
 
@@ -98,6 +119,73 @@ pipenv run python3 generate.py --template somefile.json.jinja > somefile.json
 This command expands the template and saves the resulting JSON.  As part of the create script,
 this process is run on all of the jinja templates to prepare them for upload to S3, and
 interpretation by Azure ARM.
+
+## Updating ARM templates for new versions
+
+In the neo4j node set jinja templates, the "plan" object must be updated with details of the new
+offer, and the "imageReference" under storage profile as well.  
+
+In the marketplace portal, Offer IDs, Publisher IDs, names, and SKUs can be used to complete these fields.
+
+While it is possible to test the cluster templates against a local image, it requires changing the structure of the template just a bit as documented in that jinja template.  In general it's easier to 
+test and deploy the baseline image as a stand-alone product first, and then to test the cluster templates against the published marketplace stand-alone image to eliminate things which could go wrong in coordinating two different publish steps.
+
+Once the new VM image is published to the marketplace, before it can be programmatically deployed you
+have to accept legal terms.  Here's how to do that.
+
+Find the URN of the image:
+
+```
+az vm image list --all --publisher neo4j --offer neo4j-enterprise-4_1 --query '[].urn'
+```
+
+Then grab that URN and accept terms of it:
+
+```
+$ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_1:neo4j_4_1_0_apoc:4.1.0
+{
+  "accepted": true,
+  "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-4_1/plans/neo4j_4_1_3_apoc/agreements/current",
+  "licenseTextLink": "https://storelegalterms.blob.core.windows.net/legalterms/3E5ED_legalterms_NEO4J%253a24NEO4J%253a2DENTERPRISE%253a2D3%253a5F5%253a24NEO4J%253a5F3%253a5F5%253a5F1%253a5FAPOC%253a246B7QTJUDYN6IZQG4Y3VB33CWFLLCG3UGG7D2MIVE4PWNDHNYELSYU66EVZTSTHSFNRIATQXPV75ARRST64F6GK35S73HJKZL5H42P2Y.txt",
+  "name": "neo4j_4_1_0_apoc",
+  "plan": "neo4j_4_1_0_apoc",
+  "privacyPolicyLink": "https://neo4j.com/privacy-policy/",
+  "product": "neo4j-enterprise-4_1",
+  "publisher": "neo4j",
+  "retrieveDatetime": "2019-01-04T13:07:09.8321069Z",
+  "signature": "UG4V7654Q2BDFQUDHLJR73Y2QFAUG2UGCBLEPYPZ5HS3LWJ4WMOXTD2NQME2QNM3T7J3YIYFJ2F75FEWKFHLR2ATXAJUWYXDK3IDJEA",
+  "type": "Microsoft.MarketplaceOrdering/offertypes"
+}
+```
+
+ARM deployments can now work against that published VM.
+
+The relevant bits of the ARM:
+
+```
+			"imageReference": {
+                "publisher": "neo4j",
+                "offer": "neo4j-enterprise-4_1",
+                "sku": "neo4j_4_1_0_apoc",
+                "version": "latest"
+			},
+```
+
+and
+
+```
+    "plan": {
+        "name": "neo4j_4_1_0_apoc",
+        "publisher": "neo4j",
+        "product": "neo4j-enterprise-4_1"
+    },
+```
+
+## Packaging the ARM Templates for the Marketplace
+
+They just need to be zipped into a ZIP file and submitted to the marketplace
+UI.  See the `package.sh` script in the arm directory to package the right
+files in the right format, and upload the ZIP that results from that script.
 
 ## Relevant Documentation
 

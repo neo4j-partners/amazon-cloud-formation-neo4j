@@ -14,55 +14,48 @@
  */
 const neo4j = require('neo4j-driver').v1;
 const Promise = require('bluebird');
-const uuid = require('uuid');
+const yargs = require('yargs');
+const pool = require('./sessionPool');
+const strategies = require('./strategies');
+const runConfiguration = require('./run-configuration');
+const PromisePool = require('es6-promise-pool');
+const _ = require('lodash');
 
-const TOTAL_HITS = 100000;
-const p = Number(process.env.CONCURRENCY);
-const concurrency = { concurrency: (!Number.isNaN(p) && p > 0) ? p : 10 };
+const runConfig = runConfiguration(yargs.argv);
 
-// Each time, a random number is chosen, and this table is scanned through.
-// If the random number is less than the strategy number, it executes.
-// So for example if the random number is 0.30, then aggregateRead is executed.
-// By tweaking the distribution of these numbers you can control how frequently
-// each strategy is executed.
-const probabilityTable = [
-  [ 0.1, 'fatnodeWrite' ],
-  [ 0.2, 'naryWrite' ],
-  [ 0.3, 'mergeWrite' ],
-  [ 0.4, 'randomLinkage' ],
-  [ 0.50, 'aggregateRead' ],
-  // [ 0.60, 'metadataRead' ],
-  [ 0.70, 'longPathRead' ],
-  [ 1, 'rawWrite' ],
-];
+console.log('Connecting to ', runConfig.address);
+const driver = neo4j.driver(runConfig.address,
+  neo4j.auth.basic(runConfig.username, runConfig.password));
 
-if (!process.env.NEO4J_URI) {
-  console.error('Set env vars NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD');
-  process.exit(1);
-}
+const sessionPool = pool.getPool(driver, runConfig.concurrency);
 
-if (!process.env.NEO4J_URI || !process.env.NEO4J_USER || !process.env.NEO4J_PASSWORD) {
-  throw new Error('One or more of necessary NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD env vars missing');
-}
+const shutdownConnections = () => {
+  return sessionPool.drain()
+    .then(() => sessionPool.clear())
+    .catch(err => {
+      console.error('Some error draining/clearing pool', err);
+    })
+    .then(() => driver.close());
+};
 
-console.log('Connecting to ', process.env.NEO4J_URI);
+const strategyTable = strategies.builder(sessionPool);
+const stats = { completed: 0, running: 0, error: 0 };
 
-const driver = neo4j.driver(process.env.NEO4J_URI,
-  neo4j.auth.basic(process.env.NEO4J_USER,
-    process.env.NEO4J_PASSWORD) );
+const printStatus = () => {
+  const pctDone = parseFloat(Math.round(runConfig.iterateUntil.progress() * 100)).toFixed(2);
+  console.log(`Progress: ${pctDone}% ${stats.completed} completed; ${stats.running} running ${stats.error} error`);
 
-const session = driver.session();
-
-const stats = { completed: 0 };
+  if (!interrupted) {
+    // Schedule myself again.
+    setTimeout(printStatus, runConfig.checkpointFreq);
+  }
+};
 
 const checkpoint = data => {
-   if (interrupted) { return data; }
-
-   stats.completed++;
-   if(stats.completed % (process.env.CHECKPOINT_FREQUENCY || 50) === 0) {
-     console.log(stats);
-   }
-   return data;
+  if (interrupted) { return data; }
+  stats.completed++;
+  stats.running = stats.running - 1;
+  return data;
 };
 
 let interrupted = false;
@@ -75,29 +68,6 @@ const didStrategy = name => {
   stats[name] = (stats[name] || 0) + 1;
 };
 
-const NAryTreeStrategy = require('./write-strategy/NAryTreeStrategy');
-const FatNodeAppendStrategy = require('./write-strategy/FatNodeAppendStrategy');
-const MergeWriteStrategy = require('./write-strategy/MergeWriteStrategy');
-const RawWriteStrategy = require('./write-strategy/RawWriteStrategy');
-const RandomLinkageStrategy = require('./write-strategy/RandomLinkageStrategy');
-const AggregateReadStrategy = require('./read-strategy/AggregateReadStrategy');
-const MetadataReadStrategy = require('./read-strategy/MetadataReadStrategy');
-const LongPathReadStrategy = require('./read-strategy/LongPathReadStrategy');
-
-const strategies = {
-  // WRITE STRATEGIES
-  naryWrite: new NAryTreeStrategy({ n: 2 }),
-  fatnodeWrite: new FatNodeAppendStrategy({}),
-  mergeWrite: new MergeWriteStrategy({ n: 1000000 }),
-  rawWrite: new RawWriteStrategy({ n: 10 }),
-  randomLinkage: new RandomLinkageStrategy({ n: 1000000 }),
-
-  // READ STRATEGIES
-  aggregateRead: new AggregateReadStrategy({}),
-  metadataRead: new MetadataReadStrategy({}),
-  longPathRead: new LongPathReadStrategy({}),
-};
-
 const runStrategy = (driver) => {
   if (interrupted) { return Promise.resolve(null); }
   const roll = Math.random();
@@ -105,48 +75,72 @@ const runStrategy = (driver) => {
   let strat;
   let key;
 
-  for (let i=0; i<probabilityTable.length; i++) {
-    const entry = probabilityTable[i];
+  for (let i = 0; i < runConfig.probabilityTable.length; i++) {
+    const entry = runConfig.probabilityTable[i];
     if (roll <= entry[0]) {
       key = entry[1];
       break;
     }
   }
 
-  strat = strategies[key];
+  strat = strategyTable[key];
   didStrategy(key);
   return strat.run(driver);
 };
 
-const setupPromises = Object.keys(strategies).map(key => strategies[key].setup(driver));
-
-// Pre-run this prior to script: FOREACH (id IN range(0,1000) | MERGE (:Node {id:id}));
-const arr = Array.apply(null, { length: TOTAL_HITS }).map(Number.call, Number);
-
-console.log('Running setup actions for ', Object.keys(strategies).length, ' strategies; ', probabilityTable);
+console.log(_.pick(runConfig, [
+  'address', 'username', 'concurrency', 'n', 'ms', 'checkpointFreq',
+]));
 process.on('SIGINT', sigintHandler);
 
 let exitCode = 0;
 
-Promise.all(setupPromises)
-  .then(() => console.log(`Starting parallel strategies: concurrency ${concurrency.concurrency}`))
-  .then(() => Promise.map(arr, item => runStrategy(driver).then(checkpoint), concurrency))
-  .catch(err => {
-    console.error(err);
-    Object.keys(strategies).forEach(strat => {
-      console.log(strat, 'last query');
-      console.log(strategies[strat].lastQuery);
-      console.log(strategies[strat].lastParams);
-    });
-    exitCode = 1;
-  })
-  .finally(() => driver.close())
-  .then(() => {
-    console.log('Strategy report');
-    Object.keys(strategies).forEach(strategy => {
-      const strat = strategies[strategy];
-      strat.summarize();
-    });
+const promiseProducer = () => {
+  if (interrupted) { return null; }
 
-    process.exit(exitCode);
-  })
+  const v = runConfig.iterateUntil.next();
+  if (v.done) {
+    // Signal to the pool that we're done.
+    return null;
+  }
+
+  stats.running++;
+  return runStrategy(driver).then(checkpoint);
+};
+
+const promisePool = new PromisePool(promiseProducer, runConfig.concurrency);
+promisePool.addEventListener('rejected', event => { stats.error++; });
+
+const phase = (phase, fn) => {
+  console.log('Beginning phase', phase);
+  return fn();
+};
+
+const setupPromisesFn = () =>
+  Object.keys(strategyTable).map(key => strategyTable[key].setup(driver));
+
+const main = () => {
+  const startTime = new Date().getTime();
+
+  return Promise.all(phase('SETUP', setupPromisesFn))
+    .then(printStatus)
+    .then(() => phase('STRATEGIES', () => promisePool.start()))
+    .catch(err => {
+      console.error(err);
+      strategies.showLastQuery(strategyTable);
+      exitCode = 1;
+    })
+    .finally(() => phase('SHUTDOWN', shutdownConnections))
+    .then(() => {
+      const endTime = new Date().getTime();
+      // Because strategies run in parallel, you can not time this
+      // by adding their times.  Rather we time the overall execution
+      // process.
+      let totalElapsed = (endTime - startTime);
+      console.log(`BENCHMARK_ELAPSED=${totalElapsed}\n`);
+    })
+    .then(() => phase('REPORT', () => strategies.report(strategyTable)))
+    .then(() => process.exit(exitCode));
+};
+
+main();

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 # This script applies a google cloud license to an existing VM image, and copies
 # it to the public repository of images for neo4j so that the general public can
 # access it.
@@ -46,7 +47,7 @@ license_and_copy() {
     # Path relative to packer directory.
     # The disk by default gets the same name as the VM we created.
     echo "Licensing disk and creating target public image"
-    python2.7 partner-utils/image_creator.py --project $PROJECT --disk $TARGET \
+    python3 partner-utils/image_creator.py --project $PROJECT --disk $TARGET \
     --name $PACKER_IMAGE --description "Neo4j Enterprise" \
     --family neo4j-enterprise \
     --destination-project $PUBLIC_PROJECT \
@@ -63,6 +64,7 @@ just_copy() {
     echo "Copying image without license; $PROJECT -> $PUBLIC_PROJECT"
     gcloud compute --project="$PUBLIC_PROJECT" images create \
         "$PACKER_IMAGE" \
+        --family neo4j \
         --source-image="$PACKER_IMAGE" \
         --source-image-project="$PROJECT"
 }

@@ -11,14 +11,14 @@
         "Password": {
             "type": "securestring"
         },
-        "ArtifactsBase": {
+        "_artifactsLocation": {
             "type": "string",
             "metadata": {
                 "description": "base URL at which Marketplace package files are stored. Value adjusted automatically during Marketplace submission process."
             }
         },
         "_artifactsLocationSasToken": {
-            "type": "string"
+            "type": "securestring"
         }
     },
     "variables": {},
@@ -35,7 +35,7 @@
                 "autoUpgradeMinorVersion": true,
                 "settings": {
                     "fileUris": [
-                        "[uri(parameters('ArtifactsBase'), concat('scripts/post-deploy.sh', parameters('_artifactsLocationSasToken')))]"
+                        "[uri(parameters('_artifactsLocation'), concat('scripts/post-deploy.sh', parameters('_artifactsLocationSasToken')))]"
                     ]
                 },
                 "protectedSettings": {

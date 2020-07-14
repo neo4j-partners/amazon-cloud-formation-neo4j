@@ -19,6 +19,8 @@ if [ -z $NEO4J_URI ] || [ -z $NEO4J_USERNAME ] || [ -z $NEO4J_PASSWORD ] || \
     exit 1
 fi
 
+FOLLOWERS=$((CORES-1+CORES-1))
+echo $FOLLOWERS
 host=$NEO4J_URI
 echo "HOST $host"
 # This endpoint proves availability of the overall service
@@ -59,7 +61,7 @@ echo "TOPOLOGY $topology"
 # LEADERS
 leaders=$(echo $topology | grep -o LEADER | wc -l)
 test="Cluster has 1 leader"
-if [ $leaders -eq 1 ] ; then
+if [ $leaders -eq $((CORES-1)) ] ; then
     succeed "$test"
 else
     fail "$test" "$leaders leaders"
@@ -68,7 +70,7 @@ fi
 # FOLLOWERS
 followers=$(echo $topology | grep -o FOLLOWER | wc -l)
 test="Cluster has 1-CORES followers"
-if [ $followers -eq $((CORES-1)) ] ; then
+if [ $followers -eq $((CORES-1+CORES-1)) ] ; then
     succeed "$test"
 else
     fail "$test" "$followers followers"

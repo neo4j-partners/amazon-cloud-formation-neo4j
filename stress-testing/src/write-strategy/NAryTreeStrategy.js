@@ -5,10 +5,11 @@ class NAryTreeStrategy extends Strategy {
     constructor(props) {
         super(props);
         this.n = props.n;
-        this.name = 'NAryTreeStrategy';
+        this.name = 'NAryTree';
     }
 
     setup(driver) {
+        super.setup(driver);
         const session = driver.session();
 
         const queries = [
@@ -22,10 +23,6 @@ class NAryTreeStrategy extends Strategy {
     }
 
     run(driver) {
-        if (!this.session) {
-            this.session = driver.session();
-        }
-
         this.tracker = (this.tracker || 1) + 1;
         this.lastParams = { tracker: this.tracker };
 
@@ -47,7 +44,7 @@ class NAryTreeStrategy extends Strategy {
             RETURN p.val;
         `;
 
-        const f = () => this.session.run(this.lastQuery, this.lastParams);
+        const f = (s) => s.writeTransaction(tx => tx.run(this.lastQuery, this.lastParams));
         return this.time(f);
     }
 }

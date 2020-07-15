@@ -1,0 +1,1 @@
+- Check with Azure POC on AvailabilitySet parameters

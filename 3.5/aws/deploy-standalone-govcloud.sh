@@ -13,7 +13,7 @@ export SINGLE_TEMPLATE=http://$S3HOST/$BUCKET/neo4j-enterprise-standalone-stack-
 export STACKNAME=neo4j-single-testdeploy-$(echo $VERSION | sed s/[^A-Za-z0-9]/-/g)
 export INSTANCE=t2.large
 export REGION=us-gov-east-1
-export SSHKEY=bfeshti
+export SSHKEY=david.allen.local
 
 aws cloudformation create-stack \
    --stack-name $STACKNAME \

@@ -1,6 +1,10 @@
 {
   "defaultDeploymentType": "MULTI_VM",
+<<<<<<< HEAD:4.0/gcloud/solutions/causal-cluster/c2d_deployment_configuration.json
   "imageName": "neo4j-enterprise-1-4-0-5-apoc",
+=======
+  "imageName": "neo4j-enterprise-1-4-1-0-apoc",
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:gcloud/solutions/causal-cluster/c2d_deployment_configuration.json
   "projectId": "launcher-public",
   "templateName": "neo4j-causal-cluster",
   "useSolutionPackage": true

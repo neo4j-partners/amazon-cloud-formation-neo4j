@@ -3,4 +3,4 @@
 Do not maintain this chart.  It is a shallow copy of the same chart we use
 for the Neo4j GKE Marketplace, which can be found here:
 
-https://github.com/neo-technology/neo4j-google-k8s-marketplace/tree/3.5/chart
+https://github.com/neo-technology/neo4j-google-k8s-marketplace/tree/4.0/chart

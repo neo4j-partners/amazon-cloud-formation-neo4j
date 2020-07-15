@@ -15,15 +15,24 @@ contact <david.allen@neo4j.com> for access.
 
 You should specify edition (community/enterprise) and version.  Because this is
 ubuntu based,versions should match what is in the debian package repo.  Watch 
+<<<<<<< HEAD:3.5/gcloud/packer/README.md
 out because of recent package naming, if you want v3.5.5, you need to install
 `1:3.5.5`.
+=======
+out because of recent package naming, if you want v4.1.0, you need to install
+`1:4.1.0`.
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:gcloud/packer/README.md
 
 You may omit the AWS key variables and set them in your environment.
 
 ```
 packer build \
     -var "neo4j_edition=enterprise" \
+<<<<<<< HEAD:3.5/gcloud/packer/README.md
     -var "neo4j_version=1:3.5.16" \
+=======
+    -var "neo4j_version=1:4.1.0" \
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:gcloud/packer/README.md
     packer-template.json
 ```
 
@@ -56,7 +65,7 @@ See the test directory at the top of the repo for scripts which will do this.
 Note that licenses contains our entry.  Here's what good metadata looks like:
 
 ```
-$ gcloud compute images describe neo4j-enterprise-1-3-4-3-apoc --project launcher-public
+$ gcloud compute images describe neo4j-enterprise-1-4-1-0-apoc --project launcher-public
 archiveSizeBytes: '830832128'
 creationTimestamp: '2018-03-29T06:15:32.483-07:00'
 description: Neo4j Enterprise
@@ -85,7 +94,7 @@ status: READY
 
 ```
 gcloud compute instances create my-neo4j-instance \
-    --image neo4j-enterprise-1-3-4-3 \
+    --image neo4j-enterprise-1-4-1-0 \
     --tags neo4j \
     --image-project launcher-public
 ```

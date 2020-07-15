@@ -8,8 +8,8 @@
 # can be controlled by tags put on the instance.
 ######################################################################################
 echo "pre-neo4j.sh: Fetching AWS instance metadata"
-
 # Documentation: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html
+export NEO4J_HOME=/var/lib/neo4j
 export API=http://169.254.169.254/latest/
 export MAC_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/)
 export INTERNAL_IP_ADDR=$(curl --silent $API/meta-data/network/interfaces/macs/$MAC_ADDR/local-ipv4s)
@@ -51,8 +51,85 @@ tags_to_env () {
 ami_tags=$(get_ami_tags)
 instance_tags=$(get_instance_tags)
 
-tags_to_env "$ami_tags"
+tags_to_env "$ami_tags  "
 tags_to_env "$instance_tags"
+
+running_as_root () {
+    test "$(id -u)" = "0"
+}
+
+create_dir_if_necessary () {
+    for directory in "$@"; do
+        if [ ! -d "${directory}" ]; then
+            mkdir -p "${directory}"
+            chown "${userid}":"${groupid}" "${directory}"
+            chown "${userid}":"${groupid}" "${certificates_dir}"
+        fi
+    done
+}
+
+create_dir_if_necessary
+
+generate_self_signed_certificates () {
+    local ip_address="$EXTERNAL_IP_ADDR"
+    local dns_address="${SSL_DNS:-0.0.0.0}"
+    local certificates_dir="${NEO4J_HOME}/certificates"
+    if [ -d /ssl ]; then
+        certificates_dir="/ssl"
+    fi
+
+    create_dir_if_necessary "${certificates_dir}/bolt/trusted" \
+        "${certificates_dir}/bolt/revoked" \
+        "${certificates_dir}/https/trusted" \
+        "${certificates_dir}/https/revoked" \
+        "${certificates_dir}/cluster/trusted" \
+        "${certificates_dir}/cluster/revoked"
+    local openssl_config="
+[ req ]
+prompt = no
+distinguished_name = req_distinguished_name
+x509_extensions = san_self_signed
+[ req_distinguished_name ]
+CN=$EXTERNAL_IP_ADDR
+[ san_self_signed ]
+subjectAltName = IP:$EXTERNAL_IP_ADDR,DNS:${dns_address}
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always,issuer
+basicConstraints = CA:false
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment, dataEncipherment, keyCertSign, cRLSign
+extendedKeyUsage = serverAuth, clientAuth, timeStamping
+"
+
+    local private_key="${certificates_dir}/bolt/private.key"
+    local public_cert="${certificates_dir}/bolt/public.crt"
+
+    openssl req \
+      -newkey rsa:2048 -nodes \
+      -keyout "${private_key}" \
+      -x509 -sha256 -days 800 \
+      -config <(echo "${openssl_config}") \
+      -out "${public_cert}"
+
+chown "${userid}":"${groupid}" "${private_key}"
+    if running_as_root; then
+        chmod 444 "${private_key}"
+    else
+        chmod 440 "${private_key}"
+    fi
+    chown "${userid}":"${groupid}" "${public_cert}"
+    chmod 444 "${public_cert}"
+
+    cp "${private_key}" "${certificates_dir}/https/"
+    cp "${public_cert}" "${certificates_dir}/https/"
+    cp "${private_key}" "${certificates_dir}/cluster/"
+    cp "${public_cert}" "${certificates_dir}/cluster/"
+    cp "${public_cert}" "${certificates_dir}/cluster/trusted/"
+}
+
+if [ ! -f "$NEO4J_HOME/certificates/https/private.key" ]; then
+    echo "Certificates does not exist, generating certificates..."
+    generate_self_signed_certificates
+fi
 
 # At this point all env vars are in place, we only need to fill out those missing
 # with defaults provided below.
@@ -61,30 +138,45 @@ tags_to_env "$instance_tags"
 
 # HTTPS
 echo "dbms_connector_https_enabled" "${dbms_connector_https_enabled:=true}"
+echo "dbms_connector_https_advertised_address" "${dbms_connector_https_advertised_address:=:7473}"
 echo "dbms_connector_https_listen_address" "${dbms_connector_https_listen_address:=0.0.0.0:7473}"
+echo "dbms_ssl_policy_https_enabled" "${dbms_ssl_policy_https_enabled:=true}"
+echo "dbms_ssl_policy_https_base_directory" "${dbms_ssl_policy_https_base_directory:=/var/lib/neo4j/certificates/https}"
+echo "$dbms_ssl_policy_https_client_auth" "${dbms_ssl_policy_https_client_auth:=NONE}"
 
 # HTTP
 echo "dbms_connector_http_enabled" "${dbms_connector_http_enabled:=true}"
+echo "dbms_connector_http_advertised_address" "${dbms_connector_http_advertised_address:=:7474}"
 echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:=0.0.0.0:7474}"
 
 # BOLT
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
+<<<<<<< HEAD:3.5/aws/packer/pre-neo4j.sh
 echo "dbms_connector_bolt_listen_address" "${dbms_connector_bolt_listen_address:=0.0.0.0:7687}"
 echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
+=======
+echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=:7687}"
+echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
+echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$EXTERNAL_IP_ADDR}"
+echo "dbms_ssl_policy_bolt_enabled" "${dbms_ssl_policy_bolt_enabled:=true}"
+echo "dbms_ssl_policy_bolt_base_directory" "${dbms_ssl_policy_bolt_base_directory:=/var/lib/neo4j/certificates/bolt}"
+echo "$dbms_ssl_policy_bolt_client_auth" "${dbms_ssl_policy_bolt_client_auth:=NONE}"
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:aws/packer/pre-neo4j.sh
 
 # Backup
 echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
 echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
 
 # Causal Clustering
-echo "causal_clustering_discovery_type" "${causal_clustering_discovery_type:=LIST}"
-echo "causal_clustering_initial_discovery_members" "${causal_clustering_initial_discovery_members:=localhost:5000}"
+echo "causal_clustering_discovery_type""${causal_clustering_discovery_type:=LIST}"
+echo "causal_clustering_initial_discovery_members" "${causal_clustering_initial_discovery_members:=node0.neo4j:5000,node1.neo4j:5000,node2.neo4j:5000}"
 echo "causal_clustering_minimum_core_cluster_size_at_formation" "${causal_clustering_minimum_core_cluster_size_at_formation:=3}"
 echo "causal_clustering_minimum_core_cluster_size_at_runtime" "${causal_clustering_minimum_core_cluster_size_at_runtime:=3}"
-
-echo "dbms_connectors_default_listen_address" "${dbms_connectors_default_listen_address:=0.0.0.0}"
+echo "causal_clustering_discovery_advertised_address" "${causal_clustering_discovery_advertised_address:=$(hostname -f):5000}"
+echo "dbms_default_listen_address" "${dbms_default_listen_address:=$INTERNAL_IP_ADDR}"
+echo "dbms_ssl_policy_cluster_enabled" "${dbms_ssl_policy_cluster_enabled:=true}"
+echo "dbms_ssl_policy_cluster_base_directory" "${dbms_ssl_policy_cluster_base_directory:=/var/lib/neo4j/certificates/cluster}"
 echo "dbms_mode" "${dbms_mode:=SINGLE}"
-echo "causal_clustering_discovery_listen_address" "${causal_clustering_discovery_listen_address:=0.0.0.0:5000}"
 
 # Logging
 echo "dbms_logs_http_enabled" "${dbms_logs_http_enabled:=false}"
@@ -102,11 +194,19 @@ echo "neo4j_mode" "${neo4j_mode:=SINGLE}"
 
 export dbms_connector_https_enabled \
     dbms_connector_https_listen_address \
+    dbms_ssl_policy_https_enabled \
+    dbms_connector_https_advertised_address \
+    dbms_ssl_policy_https_base_directory \
+    dbms_ssl_policy_https_client_auth \
     dbms_connector_http_enabled \
     dbms_connector_http_listen_address \
+    dbms_connector_http_advertised_address \
     dbms_connector_bolt_enabled \
-    dbms_connector_bolt_listen_address \
+    dbms_connector_bolt_advertised_address \
+    dbms_ssl_policy_bolt_client_auth \
+    dbms_ssl_policy_bolt_enabled \
     dbms_connector_bolt_tls_level \
+    dbms_ssl_policy_bolt_base_directory \
     dbms_backup_enabled \
     dbms_backup_address \
     causal_clustering_discovery_type \
@@ -114,9 +214,12 @@ export dbms_connector_https_enabled \
     causal_clustering_minimum_core_cluster_size_at_formation \
     causal_clustering_minimum_core_cluster_size_at_runtime \
     causal_clustering_expected_core_cluster_size \
-    dbms_connectors_default_listen_address \
+    dbms_ssl_policy_cluster_enabled \
+    dbms_ssl_policy_cluster_base_directory \
+    dbms_default_advertised_address \
+    dbms_default_listen_address \
     dbms_mode \
-    causal_clustering_discovery_listen_address \
+    causal_clustering_discovery_advertised_address \
     dbms_logs_http_enabled \
     dbms_logs_gc_enabled \
     dbms_logs_security_level \
@@ -143,8 +246,12 @@ if [ "$?" -ne 0 ] && [ -f /etc/neo4j/password-reset.log ]; then
     # during a packer build, the password doesn't get reset to the packer instance ID,
     # and only happens on first user startup.
     echo "Startup: checking to see if password needs to be reset"
-    exec /etc/neo4j/reset-password-aws.sh & 
+    exec /etc/neo4j/reset-password-aws.sh &
 fi
-
+sleep 5
 # This is the same command sysctl's service would have executed.
+<<<<<<< HEAD:3.5/aws/packer/pre-neo4j.sh
 exec /usr/share/neo4j/bin/neo4j console
+=======
+exec /usr/share/neo4j/bin/neo4j console
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:aws/packer/pre-neo4j.sh

@@ -3,7 +3,11 @@
 # machines that are started in a test run.
 
 # Hosts look like this:
+<<<<<<< HEAD:4.1/azure/bin/exfiltrate-logs.sh
 # neo4j-vm-core-0-tlpwuv5n4q5eo.westus.cloudapp.azure.com
+=======
+# neo4j-core-node-0-tlpwuv5n4q5eo.westus.cloudapp.azure.com
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/bin/exfiltrate-logs.sh
 
 # Usage:
 # exfiltrate-logs.sh <prefix> <suffix> <region>

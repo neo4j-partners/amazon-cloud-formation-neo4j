@@ -39,6 +39,7 @@
             },                   
             { "Key": "Application", "Value": { "Ref" : "AWS::StackId"} },
             { "Key": "neo4j_mode", "Value": "cluster" },
+            { "Key": "node_name", "Value": "node{{i}}.neo4j" },
             { "Key": "dbms_mode", "Value": "{{dbms_mode}}" },
             {#
                 # Per cluster team, irrespective of cluster size we set initial size

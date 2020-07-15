@@ -99,7 +99,11 @@ Verify first that the templates are working with the bin/create script (which do
 and then copy them like so:
 
 ```
+<<<<<<< HEAD:4.0/azure/README.md
 export VERSION=4.0.5
+=======
+export VERSION=4.1.0
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/README.md
 s3cmd put --recursive -P arm/* s3://neo4j-arm/$VERSION/causal-cluster/
 ```
 
@@ -136,12 +140,17 @@ have to accept legal terms.  Here's how to do that.
 Find the URN of the image:
 
 ```
+<<<<<<< HEAD:4.0/azure/README.md
 az vm image list --all --publisher neo4j --offer neo4j-enterprise-4_0 --query '[].urn'
+=======
+az vm image list --all --publisher neo4j --offer neo4j-enterprise-4_1 --query '[].urn'
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/README.md
 ```
 
 Then grab that URN and accept terms of it:
 
 ```
+<<<<<<< HEAD:4.0/azure/README.md
 $ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_0:neo4j_4_0_5_apoc:4.0.5
 {
   "accepted": true,
@@ -151,6 +160,17 @@ $ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_0:neo4j_4_0_5_apoc:4.0
   "plan": "neo4j_4_0_5_apoc",
   "privacyPolicyLink": "https://neo4j.com/privacy-policy/",
   "product": "neo4j-enterprise-4_0",
+=======
+$ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_1:neo4j_4_1_0_apoc:4.1.0
+{
+  "accepted": true,
+  "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-4_1/plans/neo4j_4_1_3_apoc/agreements/current",
+  "licenseTextLink": "https://storelegalterms.blob.core.windows.net/legalterms/3E5ED_legalterms_NEO4J%253a24NEO4J%253a2DENTERPRISE%253a2D3%253a5F5%253a24NEO4J%253a5F3%253a5F5%253a5F1%253a5FAPOC%253a246B7QTJUDYN6IZQG4Y3VB33CWFLLCG3UGG7D2MIVE4PWNDHNYELSYU66EVZTSTHSFNRIATQXPV75ARRST64F6GK35S73HJKZL5H42P2Y.txt",
+  "name": "neo4j_4_1_0_apoc",
+  "plan": "neo4j_4_1_0_apoc",
+  "privacyPolicyLink": "https://neo4j.com/privacy-policy/",
+  "product": "neo4j-enterprise-4_1",
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/README.md
   "publisher": "neo4j",
   "retrieveDatetime": "2019-01-04T13:07:09.8321069Z",
   "signature": "UG4V7654Q2BDFQUDHLJR73Y2QFAUG2UGCBLEPYPZ5HS3LWJ4WMOXTD2NQME2QNM3T7J3YIYFJ2F75FEWKFHLR2ATXAJUWYXDK3IDJEA",
@@ -165,8 +185,13 @@ The relevant bits of the ARM:
 ```
 			"imageReference": {
                 "publisher": "neo4j",
+<<<<<<< HEAD:4.0/azure/README.md
                 "offer": "neo4j-enterprise-4_0",
                 "sku": "neo4j_4_0_5_apoc",
+=======
+                "offer": "neo4j-enterprise-4_1",
+                "sku": "neo4j_4_1_0_apoc",
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/README.md
                 "version": "latest"
 			},
 ```
@@ -175,9 +200,15 @@ and
 
 ```
     "plan": {
+<<<<<<< HEAD:4.0/azure/README.md
         "name": "neo4j_4_0_5_apoc",
         "publisher": "neo4j",
         "product": "neo4j-enterprise-4_0"
+=======
+        "name": "neo4j_4_1_0_apoc",
+        "publisher": "neo4j",
+        "product": "neo4j-enterprise-4_1"
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/README.md
     },
 ```
 

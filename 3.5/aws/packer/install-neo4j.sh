@@ -7,11 +7,16 @@ echo '#########################################'
 echo '#######        SYSTEM UPDATE    #########'
 echo '#########################################'
 
+sudo sed -i '/preserve_hostname: false/c\preserve_hostname: true' /etc/cloud/cloud.cfg
 echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-selections
 echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
 
 wget -O - https://debian.neo4j.com/neotechnology.gpg.key | sudo apt-key add -
+<<<<<<< HEAD:3.5/aws/packer/install-neo4j.sh
 echo 'deb https://debian.neo4j.com stable 3.5' | sudo tee /etc/apt/sources.list.d/neo4j.list
+=======
+echo 'deb http://debian.neo4j.com stable 4.1' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:aws/packer/install-neo4j.sh
 sudo add-apt-repository universe
 sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update
@@ -30,10 +35,17 @@ echo '#########################################'
 
 if [ $neo4j_edition = "community" ]; then
     echo "neo4j=$neo4j_version"
+<<<<<<< HEAD:3.5/aws/packer/install-neo4j.sh
     sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=1.1.13
 else
     echo "neo4j-enterprise=$neo4j_version"
     sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=1.1.13
+=======
+    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.1.0
+else
+    echo "neo4j-enterprise=$neo4j_version"
+    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.1.0
+>>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:aws/packer/install-neo4j.sh
 fi
 
 if [ $? -ne 0 ] ; then
@@ -114,7 +126,6 @@ echo '########## NEO4J PLUGIN INSTALL #########'
 echo '#########################################'
 
 install_plugin "APOC" "$apoc_jar"
-install_plugin "Graph Algos" "$graphalgos_jar"
 
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload

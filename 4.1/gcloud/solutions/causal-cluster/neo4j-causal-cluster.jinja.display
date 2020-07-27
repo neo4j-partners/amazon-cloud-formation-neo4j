@@ -11,7 +11,7 @@ description:
 <<<<<<< HEAD:4.1/gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja.display
   version: 4.1.1
 =======
-  version: 4.1.0
+  version: 4.1.1
 >>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja.display
   documentations:
   - title: Register Neo4j Instance/Get a License

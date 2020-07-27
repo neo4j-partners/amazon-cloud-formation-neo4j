@@ -115,6 +115,7 @@ echo '########## NEO4J PLUGIN INSTALL #########'
 echo '#########################################'
 
 install_plugin "APOC" "$apoc_jar"
+install_plugin "GDS" "$gds_jar"
 
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload

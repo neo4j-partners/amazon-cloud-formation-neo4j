@@ -15,6 +15,5 @@ export VERSION=4.1.1
 #envsubst < "s3cfg" > "/root/.s3cfg"
 #envsubst < "s3cfg-marketplace" > "/root/.s3cfg-marketplace"
 #envsubst < "s3cfg-govcloud" > "/root/.s3cfg-govcloud"
-export AWS_PROFILE=marketplace
 cd /app/aws/packer
 ./packer-deploy.sh

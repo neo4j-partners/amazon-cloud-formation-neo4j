@@ -1,12 +1,5 @@
 #!/usr/bin/perl
-#
-# Deregister a batch of AWS AMIs.   **Use with care!**
-# In debugging, quite a few images may be created that ultimately aren't
-# needed.  This script is just a utility to help clean up multi-zone litter
-# which would otherwise be left behind.
-# 
-# Works nicely with the output of packer.
-#
+
 # Usage:
 # echo "
 # ap-northeast-1: ami-5100fc2f
@@ -18,7 +11,7 @@
 # us-east-2: ami-c2d2eead
 # us-west-1: ami-b3acb4dd
 # us-west-2: ami-c47b02bd
-# " | ./deregister-ami-group.pl
+# " | ./generate-region-mappings.pl
 
 print "{\n";
 my $first = true;

@@ -151,6 +151,7 @@ echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:
 
 # BOLT
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
+echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=:7687}"
 echo "dbms_connector_bolt_listen_address" "${dbms_connector_bolt_listen_address:=0.0.0.0:7687}"
 echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
 

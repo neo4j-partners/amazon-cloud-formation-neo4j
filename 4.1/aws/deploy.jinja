@@ -458,6 +458,12 @@
                     },
                     {
                         "IpProtocol": "tcp",
+                        "FromPort": "7688",
+                        "ToPort": "7688",
+                        "CidrIp": { "Ref": "NetworkWhitelist" }
+                    },
+                    {
+                        "IpProtocol": "tcp",
                         "FromPort": "7473",
                         "ToPort": "7473",
                         "CidrIp": { "Ref": "NetworkWhitelist" }

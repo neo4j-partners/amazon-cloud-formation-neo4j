@@ -252,15 +252,9 @@
      # For local testing, comment out the "plan" object, and swap the "imageReference" below.
      #}
     "plan": {
-<<<<<<< HEAD:3.5/azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
-        "name": "neo4j_3_5_14_apoc",
+        "name": "neo4j_3_5_21_apoc",
         "publisher": "neo4j",
         "product": "neo4j-enterprise-3_5"
-=======
-        "name": "neo4j_4_1_0_apoc",
-        "publisher": "neo4j",
-        "product": "neo4j-enterprise-4_1"
->>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
     },
     "dependsOn": [
         "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
@@ -280,13 +274,8 @@
         "storageProfile": {
 			"imageReference": {
                 "publisher": "neo4j",
-<<<<<<< HEAD:3.5/azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
                 "offer": "neo4j-enterprise-3_5",
-                "sku": "neo4j_3_5_14_apoc",
-=======
-                "offer": "neo4j-enterprise-4_1",
-                "sku": "neo4j_4_1_0_apoc",
->>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
+                "sku": "neo4j_3_5_21_apoc",
                 "version": "latest"
 			},
 {#            

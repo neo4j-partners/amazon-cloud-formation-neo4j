@@ -120,17 +120,8 @@ NEO4J_SETTINGS[dbms_connector_http_listen_address]=0.0.0.0:7474
 
 # BOLT
 NEO4J_SETTINGS[dbms_connector_bolt_enabled]=true
-<<<<<<< HEAD:3.5/gcloud/packer/pre-neo4j.sh
 NEO4J_SETTINGS[dbms_connector_bolt_listen_address]=0.0.0.0:7687
 NEO4J_SETTINGS[dbms_connector_bolt_tls_level]=OPTIONAL
-=======
-NEO4J_SETTINGS[dbms_connector_bolt_advertised_address]=:7687
-NEO4J_SETTINGS[dbms_connector_bolt_tls_level]=OPTIONAL
-NEO4J_SETTINGS[dbms_default_advertised_address]=$EXTERNAL_IP_ADDR
-NEO4J_SETTINGS[dbms_ssl_policy_bolt_enabled]=true
-NEO4J_SETTINGS[dbms_ssl_policy_bolt_base_directory]=/var/lib/neo4j/certificates/bolt
-NEO4J_SETTINGS[dbms_ssl_policy_bolt_client_auth]=NONE
->>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:gcloud/packer/pre-neo4j.sh
 
 # Backup
 #echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
@@ -192,7 +183,6 @@ done
 
 echo "pre-neo4j.sh: External IP $EXTERNAL_IP_ADDR"
 
-<<<<<<< HEAD:3.5/gcloud/packer/pre-neo4j.sh
 export INTERNAL_HOSTNAME=$(curl -s -H "Metadata-Flavor: Google" \
    $INSTANCE_API/hostname)
 
@@ -210,10 +200,6 @@ echo "pre-neo4j.sh Internal hostname $INTERNAL_HOSTNAME"
 # So we're pulling just the 10.138.0.4 part.
 export INTERNAL_IP_ADDR=$(curl -s -H "Metadata-Flavor: Google" $INSTANCE_API/network-interfaces/0/ip)
 
-=======
-echo "pre-neo4j.sh Internal hostname $INTERNAL_HOSTNAME"
-
->>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:gcloud/packer/pre-neo4j.sh
 echo "pre-neo4j.sh internal IP $INTERNAL_IP_ADDR"
 
 echo "pre-neo4j.sh environment for configuration setup"

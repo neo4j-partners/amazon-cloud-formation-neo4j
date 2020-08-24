@@ -10,26 +10,15 @@ echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-select
 echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
 
 wget -O - https://debian.neo4j.com/neotechnology.gpg.key | sudo apt-key add -
-<<<<<<< HEAD:3.5/gcloud/packer/install-neo4j.sh
 echo 'deb https://debian.neo4j.com stable 3.5' | sudo tee /etc/apt/sources.list.d/neo4j.list
-=======
-echo 'deb http://debian.neo4j.com stable latest' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
-sudo add-apt-repository universe
->>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:gcloud/packer/install-neo4j.sh
 sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update && sudo apt-get --yes upgrade 
 
 echo "Installing Neo4j"
 if [ $neo4j_edition = "community" ]; then
-<<<<<<< HEAD:3.5/gcloud/packer/install-neo4j.sh
     sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=1.1.13
 else
     sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=1.1.13
-=======
-    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.1.0
-else
-    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.1.0
->>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:gcloud/packer/install-neo4j.sh
 fi
 
 if [ $? -ne 0 ] ; then

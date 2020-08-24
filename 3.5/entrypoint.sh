@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-export VERSION=3.5.16
+export VERSION=3.5.21
 #export STACKVERSION=3-5-16
 
 #export NEO4J_USERNAME=neo4j

@@ -31,6 +31,13 @@ us-gov-west-1: ami-92e5d5f3
 us-gov-east-1: ami-0890be6f4249366ed
 us-gov-west-1: ami-916354f0
 ```
+## Neo4j Enterprise 3.5.21 with APOC & Graph Algos
+
+```
+us-gov-east-1: ami-05b9e8cbd10c9aa53
+us-gov-west-1: ami-0d7ecf2d6c56fa92c
+
+```
 
 ## Neo4j Enterprise 3.5.16 with APOC & Graph Algos
 

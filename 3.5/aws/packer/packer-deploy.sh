@@ -27,8 +27,8 @@ packer build \
 else
    echo "Parameter: $ENVIRONMENT is not valid"
 fi
-#export PROFILE=govcloud
-#export AWS_PROFILE=govcloud
+#export PROFILE=govcloud \
+#export AWS_PROFILE=govcloud \
 #packer build \
 #    -var "neo4j_edition=enterprise" \
 #    -var "neo4j_version=1:3.5.21" \

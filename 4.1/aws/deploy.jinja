@@ -496,7 +496,7 @@
                 condition="CreateReplica%s" % i,
                 groupName="replica",
                 resourceName="Neo4jReplica%s" % i %} 
-                {% include 'template-parts/dnsentry.jinja' %}, 
+                {% include 'template-parts/dnsentry-rr.jinja' %},
         {% endwith %}
 
         {# A Neo4jServerX is a core node #}

@@ -43,7 +43,7 @@ function runtest {
     echo "Running $1 against $ENDPOINT"
     output=$(cypher "$2" "$3")
 
-    if [ $? -eq 0 ] ; then  
+    if [ $? -eq 0 ] ; then
     succeed "$1"
     else
     echo "Last output -- $output"

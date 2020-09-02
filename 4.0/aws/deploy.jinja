@@ -458,6 +458,12 @@
                     },
                     {
                         "IpProtocol": "tcp",
+                        "FromPort": "7688",
+                        "ToPort": "7688",
+                        "CidrIp": { "Ref": "NetworkWhitelist" }
+                    },
+                    {
+                        "IpProtocol": "tcp",
                         "FromPort": "7473",
                         "ToPort": "7473",
                         "CidrIp": { "Ref": "NetworkWhitelist" }
@@ -490,7 +496,7 @@
                 condition="CreateReplica%s" % i,
                 groupName="replica",
                 resourceName="Neo4jReplica%s" % i %} 
-                {% include 'template-parts/dnsentry.jinja' %}, 
+                {% include 'template-parts/dnsentry-rr.jinja' %},
         {% endwith %}
 
         {# A Neo4jServerX is a core node #}

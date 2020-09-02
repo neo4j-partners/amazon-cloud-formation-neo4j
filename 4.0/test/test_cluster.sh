@@ -79,7 +79,7 @@ fi
 # REPLICAS
 read_replicas=$(echo $topology | grep -o READ_REPLICA | wc -l)
 test="Cluster has $READ_REPLICAS read replicas"
-if [ $read_replicas -eq $READ_REPLICAS ] ; then
+if [ $read_replicas -eq $((READ_REPLICAS+READ_REPLICAS)) ] ; then
     succeed "$test"
 else
     fail "$test" "$read_replicas replicas"

@@ -1,4 +1,5 @@
 #!/bin/bash
+#!/bin/bash
 #
 # This startup script replaces the normal neo4j startup process for cloud environments.
 # The purpose of the script is to gather machine IP and other settings, such as key/value
@@ -151,9 +152,9 @@ echo "dbms_connector_http_listen_address" "${dbms_connector_http_listen_address:
 
 # BOLT
 echo "dbms_connector_bolt_enabled" "${dbms_connector_bolt_enabled:=true}"
-echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=:7687}"
+echo "dbms_connector_bolt_advertised_address" "${dbms_connector_bolt_advertised_address:=$EXTERNAL_IP_ADDR:7687}"
 echo "dbms_connector_bolt_tls_level" "${dbms_connector_bolt_tls_level:=OPTIONAL}"
-echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$EXTERNAL_IP_ADDR}"
+echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$INTERNAL_IP_ADDR}"
 echo "dbms_ssl_policy_bolt_enabled" "${dbms_ssl_policy_bolt_enabled:=true}"
 echo "dbms_ssl_policy_bolt_base_directory" "${dbms_ssl_policy_bolt_base_directory:=/var/lib/neo4j/certificates/bolt}"
 echo "$dbms_ssl_policy_bolt_client_auth" "${dbms_ssl_policy_bolt_client_auth:=NONE}"

@@ -19,8 +19,6 @@ if [ -z $NEO4J_URI ] || [ -z $NEO4J_USERNAME ] || [ -z $NEO4J_PASSWORD ] || \
     exit 1
 fi
 
-FOLLOWERS=$((CORES-1+CORES-1))
-echo $FOLLOWERS
 host=$NEO4J_URI
 echo "HOST $host"
 # This endpoint proves availability of the overall service
@@ -51,7 +49,7 @@ cypher "CALL dbms.cluster.overview();"
 
 runtest "Bolt is available" "RETURN 'yes';"
 runtest "Basic read queries, encrypted connection"         "MATCH (n) RETURN COUNT(n);"
-runtest "Database is in clustered mode"                    "CALL dbms.cluster.overview();" 
+runtest "Database is in clustered mode"                    "CALL dbms.cluster.overview();"
 runtest "Cluster accepts writes"                           'CREATE (t:TestNode) RETURN count(t);'
 
 # Data from server on cluster topology.
@@ -61,7 +59,7 @@ echo "TOPOLOGY $topology"
 # LEADERS
 leaders=$(echo $topology | grep -o LEADER | wc -l)
 test="Cluster has 1 leader"
-if [ $leaders -eq $((CORES-1)) ] ; then
+if [ $leaders -eq 1 ] ; then
     succeed "$test"
 else
     fail "$test" "$leaders leaders"
@@ -70,7 +68,7 @@ fi
 # FOLLOWERS
 followers=$(echo $topology | grep -o FOLLOWER | wc -l)
 test="Cluster has 1-CORES followers"
-if [ $followers -eq $((CORES-1+CORES-1)) ] ; then
+if [ $followers -eq $((CORES-1)) ] ; then
     succeed "$test"
 else
     fail "$test" "$followers followers"
@@ -118,7 +116,7 @@ for core_endpoint in $(get_bolt_endpoints_for_core); do
 
     if [ $found_results -eq 1 ] ; then
         succeed "$test"
-    else 
+    else
         fail "$test" "Canary read did not return data -- $found_results found results from $result"
     fi
     else
@@ -136,7 +134,7 @@ for replica_endpoint  in $(get_bolt_endpoints_for_rr) ; do
         if [ $found_results -eq 1 ] ; then
         succeed "$test" "Canary read did not return data -- $found_results found results from $result"
         else
-        fail "$test" 
+        fail "$test"
         fi
     else
         fail "$test" "Canary read did not return data -- exit code $exit_code / RESULT -- $result"

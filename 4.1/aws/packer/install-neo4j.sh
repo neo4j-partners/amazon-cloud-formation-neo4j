@@ -31,10 +31,10 @@ echo '#########################################'
 
 if [ $neo4j_edition = "community" ]; then
     echo "neo4j=$neo4j_version"
-    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.1.1
+    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.1.3
 else
     echo "neo4j-enterprise=$neo4j_version"
-    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.1.1
+    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.1.3
 fi
 
 if [ $? -ne 0 ] ; then

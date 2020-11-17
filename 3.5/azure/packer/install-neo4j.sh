@@ -99,6 +99,7 @@ install_plugin () {
 }
 
 install_plugin "APOC" "$apoc_jar"
+install_plugin "GDS" "$gds_jar"
 
 sleep 10
 echo "After re-configuration, service status"

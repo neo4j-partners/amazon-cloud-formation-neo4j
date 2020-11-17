@@ -114,8 +114,12 @@ echo '#########################################'
 echo '########## NEO4J PLUGIN INSTALL #########'
 echo '#########################################'
 
-install_plugin "APOC" "$apoc_jar"
-install_plugin "GDS" "$gds_jar"
+if [ $neo4j_edition = "enterprise" ]; then
+  install_plugin "APOC" "$apoc_jar"
+  install_plugin "GDS" "$gds_jar"
+else
+  echo "Skipping plugins in Community Edition"
+fi
 
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload

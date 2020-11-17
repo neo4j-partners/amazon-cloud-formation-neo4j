@@ -9,15 +9,19 @@
 #
 # Usage:
 # echo "
-# ap-northeast-1: ami-5100fc2f
-# ap-southeast-1: ami-beefd2cf
-# eu-central-1: ami-462e05ae
-# eu-west-1: ami-259da35d
-# sa-east-1: ami-ef39678d
-# us-east-1: ami-5b7d1a2d
-# us-east-2: ami-c2d2eead
-# us-west-1: ami-b3acb4dd
-# us-west-2: ami-c47b02bd
+# ap-northeast-1: ami-0d96dcc4e312fa802
+# ap-northeast-2: ami-09948d9dd1634aeea
+# ap-south-1: ami-0176461de4f735c03
+# ap-southeast-1: ami-028e5eb964cd20dc7
+# ap-southeast-2: ami-01c24bc7e777c3a08
+# eu-central-1: ami-0db5e8632356248f4
+# eu-west-1: ami-0a568bb7fcf953556
+# eu-west-3: ami-0bd97e67fd06c8300
+# sa-east-1: ami-0baeb731dbf452dad
+# us-east-1: ami-07c7a545c1cdea042
+# us-east-2: ami-07c46c8b38e06e393
+# us-west-1: ami-0caf44f9e935db243
+# us-west-2: ami-0fff496cc9501bdd5
 # " | ./deregister-ami-group.pl
 
 while (my $line = <STDIN>) {

@@ -1,15 +1,15 @@
 {#
- # This sub-template creates a collection of VMs, and resources necessary for those VMs,
+ # This sub-template creates a collection of VMs, and plugins necessary for those VMs,
  # including IP addresses, availability sets, and so on.
  #
   # Intention behind this snippet is to be able to create a node set as either CORE or READ_REPLICA
- # with all dependent resources.
+ # with all dependent plugins.
  # 
  # Note that this template has many ARM parameter/variable dependencies, generally taken from
  # mainTemplate.json and clusterTemplate.json
  #}
  {%
-  set image = "neo4j-enterprise-1-4.1.1-apoc_2018-09-11T12_14_38Z"
+  set image = "neo4j-enterprise-1-4.1.3-apoc_2018-09-11T12_14_38Z"
  %}
  {
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
@@ -252,7 +252,7 @@
      # For local testing, comment out the "plan" object, and swap the "imageReference" below.
      #}
     "plan": {
-        "name": "neo4j_4_1_1_apoc",
+        "name": "neo4j_4_1_3_apoc",
         "publisher": "neo4j",
         "product": "neo4j-enterprise-4-1-series"
     },
@@ -275,7 +275,7 @@
 			"imageReference": {
                 "publisher": "neo4j",
                 "offer": "neo4j-enterprise-4-1-series",
-                "sku": "neo4j_4_1_1_apoc",
+                "sku": "neo4j_4_1_3_apoc",
                 "version": "latest"
 			},
 {#            

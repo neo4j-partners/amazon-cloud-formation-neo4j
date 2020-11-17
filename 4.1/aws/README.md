@@ -95,7 +95,7 @@ export VERSION=4.1.3
 export PROFILE=marketplace
 S3BUCKET=neo4j-cloudformation
 GEN_STACK=neo4j-community-standalone-stack-$VERSION.json
-pipenv run python3 generate.py \
+python3 generate.py \
     --edition community \
     --profile $PROFILE \
     --template deploy-standalone.jinja > $GEN_STACK && \

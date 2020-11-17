@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 #
 # This startup script replaces the normal neo4j startup process for cloud environments.
 # The purpose of the script is to gather machine IP and other settings, such as key/value
@@ -144,6 +143,7 @@ echo "dbms_connector_https_listen_address" "${dbms_connector_https_listen_addres
 echo "dbms_ssl_policy_https_enabled" "${dbms_ssl_policy_https_enabled:=true}"
 echo "dbms_ssl_policy_https_base_directory" "${dbms_ssl_policy_https_base_directory:=/var/lib/neo4j/certificates/https}"
 echo "$dbms_ssl_policy_https_client_auth" "${dbms_ssl_policy_https_client_auth:=NONE}"
+echo "$dbms_ssl_policy_https_trust_all" "${dbms_ssl_policy_https_trust_all:=true}"
 
 # HTTP
 echo "dbms_connector_http_enabled" "${dbms_connector_http_enabled:=true}"
@@ -158,10 +158,12 @@ echo "dbms_default_advertised_address" "${dbms_default_advertised_address:=$INTE
 echo "dbms_ssl_policy_bolt_enabled" "${dbms_ssl_policy_bolt_enabled:=true}"
 echo "dbms_ssl_policy_bolt_base_directory" "${dbms_ssl_policy_bolt_base_directory:=/var/lib/neo4j/certificates/bolt}"
 echo "$dbms_ssl_policy_bolt_client_auth" "${dbms_ssl_policy_bolt_client_auth:=NONE}"
+echo "$dbms_ssl_policy_bolt_trust_all" "${dbms_ssl_policy_bolt_trust_all:=true}"
 
 # Backup
 echo "dbms_backup_enabled" "${dbms_backup_enabled:=true}"
 echo "dbms_backup_address" "${dbms_backup_address:=localhost:6362}"
+echo "$dbms_ssl_policy_backup_trust_all" "${dbms_ssl_policy_backup_trust_all:=true}"
 
 # Causal Clustering
 echo "causal_clustering_discovery_type""${causal_clustering_discovery_type:=LIST}"
@@ -171,6 +173,7 @@ echo "causal_clustering_minimum_core_cluster_size_at_runtime" "${causal_clusteri
 echo "causal_clustering_discovery_advertised_address" "${causal_clustering_discovery_advertised_address:=$(hostname -f):5000}"
 echo "dbms_default_listen_address" "${dbms_default_listen_address:=$INTERNAL_IP_ADDR}"
 echo "dbms_ssl_policy_cluster_enabled" "${dbms_ssl_policy_cluster_enabled:=true}"
+echo "dbms_ssl_policy_cluster_trust_all" "${dbms_ssl_policy_cluster_trust_all:=true}"
 echo "dbms_ssl_policy_cluster_base_directory" "${dbms_ssl_policy_cluster_base_directory:=/var/lib/neo4j/certificates/cluster}"
 echo "dbms_mode" "${dbms_mode:=SINGLE}"
 
@@ -193,6 +196,7 @@ export dbms_connector_https_enabled \
     dbms_ssl_policy_https_enabled \
     dbms_connector_https_advertised_address \
     dbms_ssl_policy_https_base_directory \
+    dbms_ssl_policy_https_trust_all \
     dbms_ssl_policy_https_client_auth \
     dbms_connector_http_enabled \
     dbms_connector_http_listen_address \
@@ -202,9 +206,11 @@ export dbms_connector_https_enabled \
     dbms_ssl_policy_bolt_client_auth \
     dbms_ssl_policy_bolt_enabled \
     dbms_connector_bolt_tls_level \
+    dbms_ssl_policy_bolt_trust_all \
     dbms_ssl_policy_bolt_base_directory \
     dbms_backup_enabled \
     dbms_backup_address \
+    dbms_ssl_policy_backup_trust_all \
     causal_clustering_discovery_type \
     causal_clustering_initial_discovery_members \
     causal_clustering_minimum_core_cluster_size_at_formation \
@@ -212,6 +218,7 @@ export dbms_connector_https_enabled \
     causal_clustering_expected_core_cluster_size \
     dbms_ssl_policy_cluster_enabled \
     dbms_ssl_policy_cluster_base_directory \
+    dbms_ssl_policy_cluster_trust_all \
     dbms_default_advertised_address \
     dbms_default_listen_address \
     dbms_mode \
@@ -232,18 +239,18 @@ envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
 echo "pre-neo4j.sh: Starting neo4j console..."
 
 # Check to see if enterprise is installed.
-dpkg -l | grep neo4j-enterprise
-if [ "$?" -ne 0 ] && [ -f /etc/neo4j/password-reset.log ]; then
-    # Only reset password for community, which is deployed as single AMI w/o
-    # CloudFormation templating. In the enterprise case, cloudformation handles
-    # the password reset bit.
-    #
-    # Also, only do this if the password reset log exists.  This ensures that
-    # during a packer build, the password doesn't get reset to the packer instance ID,
-    # and only happens on first user startup.
-    echo "Startup: checking to see if password needs to be reset"
-    exec /etc/neo4j/reset-password-aws.sh &
-fi
+#dpkg -l | grep neo4j-enterprise
+#if [ "$?" -ne 0 ] && [ -f /etc/neo4j/password-reset.log ]; then
+#    # Only reset password for community, which is deployed as single AMI w/o
+#    # CloudFormation templating. In the enterprise case, cloudformation handles
+#    # the password reset bit.
+#    #
+#    # Also, only do this if the password reset log exists.  This ensures that
+#    # during a packer build, the password doesn't get reset to the packer instance ID,
+#    # and only happens on first user startup.
+#    echo "Startup: checking to see if password needs to be reset"
+#    exec /etc/neo4j/reset-password-aws.sh &
+#fi
 sleep 5
 # This is the same command sysctl's service would have executed.
 exec /usr/share/neo4j/bin/neo4j console

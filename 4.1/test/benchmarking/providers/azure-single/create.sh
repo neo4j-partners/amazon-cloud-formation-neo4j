@@ -19,7 +19,7 @@ export ADDRESS_ALLOCATION=dynamic
 # Publisher:Offer:Sku:Version
 export PUBLISHER=neo4j
 export OFFER=neo4j-enterprise-4_1
-export SKU=neo4j_4_1_1_apoc
+export SKU=neo4j_4_1_3_apoc
 export VERSION=latest
 export IMAGE=$PUBLISHER:$OFFER:$SKU:$VERSION
 

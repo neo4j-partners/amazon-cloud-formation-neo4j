@@ -5,7 +5,7 @@ from AMI ID to region.
 
 
 
-## Neo4j Enterprise 4.1.1 with APOC 
+## Neo4j Enterprise 4.1.3 with APOC 
 ```
 ap-northeast-1: ami-0931243cbff9b1212
 ap-northeast-2: ami-0e7947c125ca9386b

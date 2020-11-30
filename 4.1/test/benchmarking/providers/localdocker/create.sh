@@ -3,7 +3,7 @@
 export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 PASSWORD=admin
 CWD=`pwd`
-NEO4J=neo4j:4.1.1-enterprise
+NEO4J=neo4j:4.1.3-enterprise
 PAGE_CACHE=1G
 INITIAL_HEAP=2G
 MAX_HEAP=4G

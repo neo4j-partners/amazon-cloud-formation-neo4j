@@ -2,7 +2,7 @@
   "variables": {
     "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
     "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
-    "neo4j_version": "1:4.2.0",
+    "neo4j_version": "1:4.2.1",
     "neo4j_edition": "enterprise",
     "region": "us-east-1",
     "instance_type": "t2.micro",

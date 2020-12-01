@@ -31,7 +31,7 @@ Make sure to set the env vars identified at the top of packer-template.json.
 packer build \
     -var "neo4j_edition=enterprise" \
 <<<<<<< HEAD:4.0/azure/packer/README.md
-    -var "neo4j_version=1:4.0.5" \
+    -var "neo4j_version=1:4.0.10" \
 =======
     -var "neo4j_version=1:4.1.0" \
 >>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/packer/README.md

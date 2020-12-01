@@ -117,10 +117,10 @@ package.
 There is a google storage bucket called `neo4j-deploy` which resides here:
 https://console.cloud.google.com/storage/browser/neo4j-deploy?project=launcher-public&organizationId=1061230109173
 
-There should be a subdirectory for every deployed version (i.e. 4.0.0) and the jinja templates are copied to this location like so:
+There should be a subdirectory for every deployed version (i.e. 4.0.10) and the jinja templates are copied to this location like so:
 
 ```
-export VERSION=4.0.5
+export VERSION=4.0.10
 gsutil -m cp -r solutions/causal-cluster/* gs://neo4j-deploy/$VERSION/causal-cluster/
 ```
 

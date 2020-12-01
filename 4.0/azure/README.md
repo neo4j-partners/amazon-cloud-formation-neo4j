@@ -100,7 +100,7 @@ and then copy them like so:
 
 ```
 <<<<<<< HEAD:4.0/azure/README.md
-export VERSION=4.0.5
+export VERSION=4.0.10
 =======
 export VERSION=4.1.0
 >>>>>>> 2c0d46007beca3d30d062c8db199948c94572b4a:azure/README.md
@@ -151,13 +151,13 @@ Then grab that URN and accept terms of it:
 
 ```
 <<<<<<< HEAD:4.0/azure/README.md
-$ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_0:neo4j_4_0_5_apoc:4.0.5
+$ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_0:neo4j_4_0_10_apoc:4.0.10
 {
   "accepted": true,
-  "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-4_0/plans/neo4j_4_0_3_apoc/agreements/current",
+  "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-4_0/plans/neo4j_4_0_10_apoc/agreements/current",
   "licenseTextLink": "https://storelegalterms.blob.core.windows.net/legalterms/3E5ED_legalterms_NEO4J%253a24NEO4J%253a2DENTERPRISE%253a2D3%253a5F5%253a24NEO4J%253a5F3%253a5F5%253a5F1%253a5FAPOC%253a246B7QTJUDYN6IZQG4Y3VB33CWFLLCG3UGG7D2MIVE4PWNDHNYELSYU66EVZTSTHSFNRIATQXPV75ARRST64F6GK35S73HJKZL5H42P2Y.txt",
-  "name": "neo4j_4_0_5_apoc",
-  "plan": "neo4j_4_0_5_apoc",
+  "name": "neo4j_4_0_10_apoc",
+  "plan": "neo4j_4_0_10_apoc",
   "privacyPolicyLink": "https://neo4j.com/privacy-policy/",
   "product": "neo4j-enterprise-4_0",
 =======
@@ -187,7 +187,7 @@ The relevant bits of the ARM:
                 "publisher": "neo4j",
 <<<<<<< HEAD:4.0/azure/README.md
                 "offer": "neo4j-enterprise-4_0",
-                "sku": "neo4j_4_0_5_apoc",
+                "sku": "neo4j_4_0_10_apoc",
 =======
                 "offer": "neo4j-enterprise-4_1",
                 "sku": "neo4j_4_1_0_apoc",
@@ -201,7 +201,7 @@ and
 ```
     "plan": {
 <<<<<<< HEAD:4.0/azure/README.md
-        "name": "neo4j_4_0_5_apoc",
+        "name": "neo4j_4_0_10_apoc",
         "publisher": "neo4j",
         "product": "neo4j-enterprise-4_0"
 =======

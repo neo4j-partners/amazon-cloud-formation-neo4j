@@ -5,7 +5,7 @@
     "tenant_id": "{{env `AZURE_TENANT_ID`}}",
     "subscription_id": "{{env `AZURE_SUBSCRIPTION_ID`}}",
     "object_id": "8e7b95b8-01f5-469a-98cc-60caf9aecb9d",
-    "neo4j_version": "1:4.0.5",
+    "neo4j_version": "1:4.0.10",
     "neo4j_edition": "enterprise",
 
     "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.0.0.13/apoc-4.0.0.13-all.jar"

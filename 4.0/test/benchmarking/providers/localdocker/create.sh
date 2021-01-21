@@ -3,13 +3,13 @@
 export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 PASSWORD=admin
 CWD=`pwd`
-NEO4J=neo4j:4.0.10-enterprise
+NEO4J=neo4j:4.0.11-enterprise
 PAGE_CACHE=1G
 INITIAL_HEAP=2G
 MAX_HEAP=4G
 CONTAINER=benchmark-neo4j-$RUN_ID
 
-APOC_VERSION=4.0.0.13
+APOC_VERSION=4.0.0.18
 APOC=https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/$APOC_VERSION/apoc-$APOC_VERSION-all.jar
 mkdir /tmp/$CONTAINER && wget -P /tmp/$CONTAINER $APOC
 

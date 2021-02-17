@@ -31,10 +31,10 @@ echo '#########################################'
 
 if [ $neo4j_edition = "community" ]; then
     echo "neo4j=$neo4j_version"
-    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.2.2
+    sudo apt-get --yes install neo4j=$neo4j_version
 else
     echo "neo4j-enterprise=$neo4j_version"
-    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.2.2
+    sudo apt-get --yes install neo4j-enterprise=$neo4j_version
 fi
 
 if [ $? -ne 0 ] ; then
@@ -116,7 +116,6 @@ echo '#########################################'
 
 if [ $neo4j_edition = "enterprise" ]; then
   install_plugin "APOC" "$apoc_jar"
-  install_plugin "GDS" "$gds_jar"
 else
   echo "Skipping plugins in Community Edition"
 fi

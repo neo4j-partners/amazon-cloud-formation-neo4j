@@ -17,9 +17,9 @@ sudo apt-get update && sudo apt-get --yes upgrade
 
 echo "Installing Neo4j"
 if [ $neo4j_edition = "community" ]; then
-    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.2.2
+    sudo apt-get --yes install neo4j=$neo4j_version
 else
-    sudo apt-get --yes install neo4j-enterprise=$neo4j_version cypher-shell=4.2.2
+    sudo apt-get --yes install neo4j-enterprise=$neo4j_version
 fi
 
 if [ $? -ne 0 ] ; then
@@ -86,7 +86,6 @@ echo '########## NEO4J PLUGIN INSTALL #########'
 echo '#########################################'
 
 install_plugin "APOC" "$apoc_jar"
-install_plugin "GDS" "$gds_jar"
 
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload

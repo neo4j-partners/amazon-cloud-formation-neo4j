@@ -16,7 +16,7 @@ sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update
 
 if [ $neo4j_edition = "community" ]; then
-    sudo apt-get --yes install neo4j=$neo4j_version cypher-shell=4.2.2
+    sudo apt-get --yes install neo4j=$neo4j_version
 else
     sudo apt-get --yes install neo4j-enterprise=$neo4j_version
 fi
@@ -99,7 +99,6 @@ install_plugin () {
 }
 
 install_plugin "APOC" "$apoc_jar"
-install_plugin "GDS" "$gds_jar"
 
 sleep 10
 echo "After re-configuration, service status"

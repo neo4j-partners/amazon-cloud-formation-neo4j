@@ -1,12 +1,11 @@
 {
   "variables": {
-    "neo4j_version": "1:4.2.2",
+    "neo4j_version": "1:4.2.3",
     "neo4j_edition": "enterprise",
     "zone": "us-central1-a",
     "gcp_service_account_credentials_file": "./packer-sa.json",
     "gcp_base_image": "ubuntu-1804-bionic-v20190617",
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.2.0.0/apoc-4.2.0.0-all.jar",
-    "gds_jar": "https://github.com/neo4j/graph-data-science/releases/download/1.4.0/neo4j-graph-data-science-1.4.0-standalone.jar"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.2.0.1/apoc-4.2.0.1-all.jar"
   },
   "builders": [
     {
@@ -48,8 +47,7 @@
       "environment_vars": [
         "neo4j_version={{ user `neo4j_version` }}",
         "neo4j_edition={{ user `neo4j_edition` }}",
-        "apoc_jar={{ user `apoc_jar` }}",
-        "gds_jar={{ user `gds_jar`  }}"
+        "apoc_jar={{ user `apoc_jar` }}"
       ]
     }
   ]

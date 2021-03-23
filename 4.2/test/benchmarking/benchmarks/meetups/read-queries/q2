@@ -1,6 +1,0 @@
-MATCH (t:Topic) 
-WITH collect(t) as topics 
-WITH apoc.coll.randomItem(topics) as targetTopic
-MATCH (targetTopic)-[:TOPIC]-(g:Group)-[:HELD]-(e:Event)<-[:EVENT]-(r:RSVP)-[:MEMBER]-(member:Member)
-RETURN targetTopic.name as topic, member.name as member, count(r) as RSVPs
-ORDER BY RSVPs DESC limit 10;

@@ -1,5 +1,0 @@
-[
-    [ 0.33, "aggregateRead" ],
-    [ 0.66, "longPathRead" ],
-    [ 1, "randomAccess" ]
-]

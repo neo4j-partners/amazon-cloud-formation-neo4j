@@ -1,6 +1,0 @@
-MATCH (t:Topic)
-WITH collect(t) as topics
-WITH apoc.coll.randomItem(topics) as t1,
-     apoc.coll.randomItem(topics) as t2
-MATCH p=shortestPath((t1)-[*]-(t2))
-RETURN p;

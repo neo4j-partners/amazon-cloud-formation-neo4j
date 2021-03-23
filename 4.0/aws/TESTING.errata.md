@@ -1,4 +1,0 @@
-- Startup time of a cluster is fairly variable.  From completion of the CF deploy,
-minimum time is probably about 20 seconds.  Times of 5 minutes have been observed. This is post VM startup, just the cluster coordination and neo4j service start.  This was observed worst in `eu-central-1`
-- Deploy in us-west-1 periodically fails with:  `Value (us-west-1b) for parameter availabilityZone is invalid. Subnets can currently only be created in the following availability zones: us-west-1c, us-west-1a`.  There does not appear to be a runtime method of determining which AZs can host subnets. [Reference](https://github.com/hashicorp/terraform/issues/7959).
-- Further resource inavailability: `Your requested instance type (r4.large) is not supported in your requested Availability Zone (sa-east-1b). Please retry your request by not specifying an Availability Zone or choosing sa-east-1a, sa-east-1c.`

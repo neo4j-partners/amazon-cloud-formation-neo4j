@@ -2,13 +2,13 @@
   "variables": {
     "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
     "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
-    "neo4j_version": "1:4.2.3",
+    "neo4j_version": "1:4.2.4",
     "neo4j_edition": "enterprise",
     "region": "us-east-1",
     "instance_type": "t2.micro",
     "destination_regions": "us-east-1",
     "base_owner": "099720109477",
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.2.0.1/apoc-4.2.0.1-all.jar"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.2.0.2/apoc-4.2.0.2-all.jar"
   },
   "builders": [
     {

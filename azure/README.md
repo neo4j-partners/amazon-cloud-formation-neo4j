@@ -99,7 +99,7 @@ Verify first that the templates are working with the bin/create script (which do
 and then copy them like so:
 
 ```
-export VERSION=4.2.3
+export VERSION=4.2.4
 s3cmd put --recursive -P arm/* s3://neo4j-arm/$VERSION/causal-cluster/
 ```
 
@@ -142,7 +142,7 @@ az vm image list --all --publisher neo4j --offer neo4j-enterprise-4_2 --query '[
 Then grab that URN and accept terms of it:
 
 ```
-$ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_2:neo4j_4_2_3_apoc:4.2.3
+$ az vm image accept-terms --urn neo4j:neo4j-enterprise-4_2:neo4j_4_2_3_apoc:4.2.4
 {
   "accepted": true,
   "id": "/subscriptions/e4486a99-00d6-4e46-aab0-b087f918eda9/providers/Microsoft.MarketplaceOrdering/offerTypes/Microsoft.MarketplaceOrdering/offertypes/publishers/neo4j/offers/neo4j-enterprise-4_2/plans/neo4j_4_2_3_apoc/agreements/current",

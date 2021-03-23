@@ -1,6 +1,0 @@
-imports:
-- path: neo4j-causal-cluster.jinja
-
-resources:
-- name: neo4j-causal-cluster
-  type: neo4j-causal-cluster.jinja

@@ -1,7 +1,0 @@
-MATCH (v:Venue)
-WHERE v.name is not null
-WITH collect(v) as venues
-WITH apoc.coll.randomItem(venues) as v1,
-     apoc.coll.randomItem(venues) as v2
-MATCH p=shortestPath((v1)-[*]-(v2))
-RETURN p;

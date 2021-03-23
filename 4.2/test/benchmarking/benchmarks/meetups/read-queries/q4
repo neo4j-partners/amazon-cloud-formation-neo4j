@@ -1,9 +1,0 @@
-MATCH (m:Member)
-WITH collect(m) as members
-WITH apoc.coll.randomItem(members) as m1,
-     apoc.coll.randomItem(members) as m2,
-     apoc.coll.randomItem(members) as m3
-MATCH p1=shortestPath((m1)-[*]-(m2)),
-      p2=shortestPath((m2)-[*]-(m3)),
-      p3=shortestPath((m1)-[*]-(m3))
-RETURN p1, p2, p3;

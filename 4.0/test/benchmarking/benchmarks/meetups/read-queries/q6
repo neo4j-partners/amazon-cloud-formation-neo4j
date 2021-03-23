@@ -1,8 +1,0 @@
-MATCH (v:Venue)
-WHERE v.name is not null
-WITH collect(v) as venues
-WITH apoc.coll.randomItem(venues) as venue
-MATCH (venue)<-[:LOCATED_AT]-(e:Event)<-[:HELD]-(g:Group),
- (e)-[:EVENT]-(r:RSVP)
-RETURN venue.name, venue.location, e.name, g.name, count(r) as RSVPs
-LIMIT 10;

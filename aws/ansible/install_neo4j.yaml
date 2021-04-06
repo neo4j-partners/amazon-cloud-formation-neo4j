@@ -1,0 +1,9 @@
+- name: Starting
+
+  hosts: all
+#  remote_user: ubuntu
+  become: true
+  become_method: sudo
+
+  roles:
+    - neo4j

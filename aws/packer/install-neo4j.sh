@@ -12,7 +12,7 @@ echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-select
 echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
 
 wget -O - https://debian.neo4j.com/neotechnology.gpg.key | sudo apt-key add -
-echo 'deb https://debian.neo4j.com stable latest' | sudo tee /etc/apt/sources.list.d/neo4j.list
+echo 'deb https://debian.neo4j.com stable 4.3' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
 sudo add-apt-repository universe
 sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update
@@ -24,6 +24,18 @@ echo "Upgrading Packages..."
 sudo DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
 echo 'Held packages'
 sudo dpkg --get-selections | grep hold
+
+#Create directories
+sudo mkdir -p /etc/neo4j
+sudo chown "${userid}":"${groupid}" "/etc/neo4j"
+sudo mkdir -p /var/lib/neo4j/logs
+sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/logs"
+sudo mkdir -p /var/lib/neo4j/conf
+sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/conf"
+sudo mkdir -p /var/lib/neo4j/metrics
+sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/metrics"
+sudo mkdir -p /var/lib/neo4j/plugins
+sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/plugins"
 
 echo '#########################################'
 echo '####### BEGINNING NEO4J INSTALL #########'
@@ -114,11 +126,8 @@ echo '#########################################'
 echo '########## NEO4J PLUGIN INSTALL #########'
 echo '#########################################'
 
-if [ $neo4j_edition = "enterprise" ]; then
-  install_plugin "APOC" "$apoc_jar"
-else
-  echo "Skipping plugins in Community Edition"
-fi
+install_plugin "APOC" "$apoc_jar"
+install_plugin "BLOOM" "$bloom_jar"
 
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload
@@ -138,8 +147,6 @@ if [ $neo4j_edition = "community" ]; then
    # reset the default password during the packer install.
    sudo touch /etc/neo4j/password-reset.log   
 fi
-
-sudo chown neo4j /etc/neo4j/*
 
 echo ''
 echo '#########################################'

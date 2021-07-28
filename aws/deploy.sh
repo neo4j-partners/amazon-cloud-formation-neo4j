@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ -z $VERSION ] ; then
-   echo "You must set the VERSION env var, e.g. 4.2.4"
+   echo "You must set the VERSION env var, e.g. 4.3.2"
    exit 1
 fi
 if [[ $DEPLOYMENT_TYPE == "CLUSTER" ]]; then

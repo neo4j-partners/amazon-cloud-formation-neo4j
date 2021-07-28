@@ -2,13 +2,14 @@
   "variables": {
     "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
     "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
-    "neo4j_version": "1:4.2.4",
+    "neo4j_version": "1:4.3.2",
     "neo4j_edition": "enterprise",
     "region": "us-east-1",
     "instance_type": "t2.micro",
     "destination_regions": "us-east-1",
     "base_owner": "099720109477",
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.2.0.2/apoc-4.2.0.2-all.jar"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.0/apoc-4.3.0.0-all.jar",
+    "bloom_jar": "https://github.com/neo4j-devtools/neo4j-bloom/archive/refs/tags/1.7.0.tar.gz"
   },
   "builders": [
     {
@@ -30,7 +31,7 @@
       },
       "instance_type": "{{ user `instance_type` }}",
       "ssh_username": "ubuntu",
-      "ami_name": "neo4j-{{user `neo4j_edition`}}-{{user `neo4j_version` | clean_ami_name}}-apoc {{isotime \"2006-01-02T03_04_05Z\"}}",
+      "ami_name": "neo4j-{{user `neo4j_edition`}}-{{user `neo4j_version` | clean_ami_name}}-{{isotime \"2006-01-02T03_04_05Z\"}}",
       "ami_regions": "{{user `destination_regions`}}",
       "tags": {
         "neo4j-install-date": "{{isotime \"2006-01-02T03:04:05Z\"}}",
@@ -71,7 +72,8 @@
       "environment_vars": [
         "neo4j_version={{ user `neo4j_version` }}",
         "neo4j_edition={{ user `neo4j_edition` }}",
-        "apoc_jar={{ user `apoc_jar` }}"
+        "apoc_jar={{ user `apoc_jar` }}",
+        "bloom_jar={{ user `bloom_jar` }}"
       ]
     },
     {

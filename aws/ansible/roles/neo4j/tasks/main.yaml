@@ -106,6 +106,6 @@
 
 - name: download APOC
   get_url:
-    url: https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.2.0.2/apoc-4.2.0.2-all.jar
-    dest: /var/lib/neo4j/plugins/apoc-4.2.0.2-all.jar
+    url: https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.0/apoc-4.3.0.0-all.jar
+    dest: /var/lib/neo4j/plugins/apoc-4.3.0.0-all.jar
   when: neo4j_edition == "community"

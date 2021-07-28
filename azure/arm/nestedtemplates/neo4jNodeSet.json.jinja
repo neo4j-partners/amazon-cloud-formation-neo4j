@@ -9,7 +9,7 @@
  # mainTemplate.json and clusterTemplate.json
  #}
  {%
-  set image = "neo4j-enterprise-1-4.2.4-apoc_2018-09-11T12_14_38Z"
+  set image = "neo4j-enterprise-1-4.3.2-apoc_2018-09-11T12_14_38Z"
  %}
  {
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
@@ -252,9 +252,9 @@
      # For local testing, comment out the "plan" object, and swap the "imageReference" below.
      #}
     "plan": {
-        "name": "neo4j_4_2_3_apoc",
+        "name": "neo4j_4_3_2_apoc",
         "publisher": "neo4j",
-        "product": "neo4j-enterprise-4_2"
+        "product": "neo4j-enterprise-4_3"
     },
     "dependsOn": [
         "[concat(variables('resourceIDs').availabilitySet, '-', parameters('NodePrefix'))]",
@@ -274,8 +274,8 @@
         "storageProfile": {
 			"imageReference": {
                 "publisher": "neo4j",
-                "offer": "neo4j-enterprise-4_2",
-                "sku": "neo4j_4_2_3_apoc",
+                "offer": "neo4j-enterprise-4_3",
+                "sku": "neo4j_4_3_2_apoc",
                 "version": "latest"
 			},
 {#            

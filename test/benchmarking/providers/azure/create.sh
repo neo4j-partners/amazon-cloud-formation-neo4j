@@ -17,7 +17,11 @@ export DEPLOYMENT=neo4j-bmdeploy
 export LOCATION="East US"
 
 # The ARM template to deploy
+<<<<<<< HEAD
 export TEMPLATE_BASE=http://neo4j-arm.s3.amazonaws.com/4.3.0/causal-cluster/
+=======
+export TEMPLATE_BASE=http://neo4j-arm.s3.amazonaws.com/4.3.2/causal-cluster/
+>>>>>>> neo4j-v4.3.0
 export TEMPLATE_URL=${TEMPLATE_BASE}mainTemplate.json
 
 echo $(cat <<JSON

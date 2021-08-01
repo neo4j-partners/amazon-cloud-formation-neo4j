@@ -1,6 +1,10 @@
 {
   "defaultDeploymentType": "MULTI_VM",
+<<<<<<< HEAD
   "imageName": "neo4j-enterprise-1-4-3-0-apoc",
+=======
+  "imageName": "neo4j-enterprise-1-4-3-2-apoc",
+>>>>>>> neo4j-v4.3.0
   "projectId": "launcher-public",
   "templateName": "neo4j-causal-cluster",
   "useSolutionPackage": true

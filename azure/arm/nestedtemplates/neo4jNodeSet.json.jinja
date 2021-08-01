@@ -9,7 +9,11 @@
  # mainTemplate.json and clusterTemplate.json
  #}
  {%
+<<<<<<< HEAD:azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
   set image = "neo4j-enterprise-1-4.3.0-apoc_2018-09-11T12_14_38Z"
+=======
+  set image = "neo4j-enterprise-1-4.3.2-apoc_2018-09-11T12_14_38Z"
+>>>>>>> neo4j-v4.3.0:4.2/azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
  %}
  {
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
@@ -252,7 +256,11 @@
      # For local testing, comment out the "plan" object, and swap the "imageReference" below.
      #}
     "plan": {
+<<<<<<< HEAD:azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
         "name": "neo4j_4_3_0_apoc",
+=======
+        "name": "neo4j_4_3_2_apoc",
+>>>>>>> neo4j-v4.3.0:4.2/azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
         "publisher": "neo4j",
         "product": "neo4j-enterprise-4_3"
     },
@@ -275,7 +283,11 @@
 			"imageReference": {
                 "publisher": "neo4j",
                 "offer": "neo4j-enterprise-4_3",
+<<<<<<< HEAD:azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
                 "sku": "neo4j_4_3_0_apoc",
+=======
+                "sku": "neo4j_4_3_2_apoc",
+>>>>>>> neo4j-v4.3.0:4.2/azure/arm/nestedtemplates/neo4jNodeSet.json.jinja
                 "version": "latest"
 			},
 {#            

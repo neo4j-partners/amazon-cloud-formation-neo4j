@@ -8,8 +8,13 @@ description:
   tagline: 'Neo4j Enterprise: Causal Clustering'
   title: Neo4j Enterprise
   url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
+<<<<<<< HEAD:gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja.display
 4.3/gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja.display
   version: 4.3.0
+=======
+4.2/gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja.display
+  version: 4.3.2
+>>>>>>> neo4j-v4.3.0:4.2/gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja.display
 
   documentations:
   - title: Register Neo4j Instance/Get a License
@@ -153,5 +158,9 @@ runtime:
 
 annotations:
   autogenSpecType: 'MULTI_VM'
+<<<<<<< HEAD:gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja.display
   vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-4.3.0-apoc
+=======
+  vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-4.3.2-apoc
+>>>>>>> neo4j-v4.3.0:4.2/gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja.display
 metadata_version: v1

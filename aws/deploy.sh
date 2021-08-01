@@ -1,7 +1,11 @@
 #!/bin/bash
 
 if [ -z $VERSION ] ; then
+<<<<<<< HEAD
    echo "You must set the VERSION env var, e.g. 4.3.0"
+=======
+   echo "You must set the VERSION env var, e.g. 4.3.2"
+>>>>>>> neo4j-v4.3.0
    exit 1
 fi
 if [[ $DEPLOYMENT_TYPE == "CLUSTER" ]]; then

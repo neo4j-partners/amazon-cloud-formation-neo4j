@@ -1,11 +1,15 @@
 {
   "variables": {
+<<<<<<< HEAD:gcloud/packer/packer-template.json
     "neo4j_version": "1:4.3.0",
+=======
+    "neo4j_version": "1:4.3.2",
+>>>>>>> neo4j-v4.3.0:4.2/gcloud/packer/packer-template.json
     "neo4j_edition": "enterprise",
     "zone": "us-central1-a",
     "gcp_service_account_credentials_file": "./packer-sa.json",
     "gcp_base_image": "ubuntu-1804-bionic-v20190617",
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.2.0.1/apoc-4.2.0.1-all.jar"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.0/apoc-4.3.0.0-all.jar"
   },
   "builders": [
     {

@@ -1,10 +1,6 @@
 {
   "variables": {
-<<<<<<< HEAD:gcloud/packer/packer-template.json
-    "neo4j_version": "1:4.3.0",
-=======
     "neo4j_version": "1:4.3.2",
->>>>>>> neo4j-v4.3.0:4.2/gcloud/packer/packer-template.json
     "neo4j_edition": "enterprise",
     "zone": "us-central1-a",
     "gcp_service_account_credentials_file": "./packer-sa.json",

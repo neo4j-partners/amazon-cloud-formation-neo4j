@@ -3,11 +3,7 @@
 export RUN_ID=$(head -c 1024 /dev/urandom | md5)
 PASSWORD=admin
 CWD=`pwd`
-<<<<<<< HEAD:test/benchmarking/providers/localdocker/create.sh
-NEO4J=neo4j:4.3.0-enterprise
-=======
 NEO4J=neo4j:4.3.2-enterprise
->>>>>>> neo4j-v4.3.0:4.1/test/benchmarking/providers/localdocker/create.sh
 PAGE_CACHE=1G
 INITIAL_HEAP=2G
 MAX_HEAP=4G

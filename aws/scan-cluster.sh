@@ -5,11 +5,7 @@
 # key setup aspects of all VMs in a cluster.
 #
 # Adjust STACK_NAME and KEY_LOCATION for whatever you deployed and run.
-<<<<<<< HEAD:aws/scan-cluster.sh
-export STACK_NAME=neo4j-cloudlauncher-testdeploy-4-3-0
-=======
 export STACK_NAME=neo4j-cloudlauncher-testdeploy-4-3-2
->>>>>>> neo4j-v4.3.0:4.2/aws/scan-cluster.sh
 export KEY_LOCATION=~/.aws/bfeshti.pem
 
 CLUSTER_PUBLIC_IPS=$(aws ec2 describe-instances --filters "Name=tag:aws:cloudformation:stack-name,Values=$STACK_NAME" --query 'Reservations[*].Instances[*].NetworkInterfaces[*].Association.PublicIp' --output text)

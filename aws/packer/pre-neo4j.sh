@@ -235,10 +235,7 @@ env
 
 echo "neo4j_mode $neo4j_mode"
 envsubst < /etc/neo4j/neo4j.template > /etc/neo4j/neo4j.conf
-<<<<<<< HEAD
-=======
 cp -rf /etc/neo4j/neo4j.conf /var/lib/neo4j/conf/neo4j.conf
->>>>>>> neo4j-v4.3.0
 
 echo "pre-neo4j.sh: Starting neo4j console..."
 

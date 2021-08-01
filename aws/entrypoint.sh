@@ -1,12 +1,7 @@
 #!/bin/bash
 set -e
-<<<<<<< HEAD
-export VERSION=4.3.0
-#export STACKVERSION=4-3-0
-=======
 export VERSION=4.3.2
 #export STACKVERSION=4.3.2
->>>>>>> neo4j-v4.3.0
 
 #export NEO4J_USERNAME=neo4j
 #export NEO4J_PASSWORD=

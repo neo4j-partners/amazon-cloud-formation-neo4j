@@ -12,11 +12,7 @@ echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-select
 echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
 
 wget -O - https://debian.neo4j.com/neotechnology.gpg.key | sudo apt-key add -
-<<<<<<< HEAD
-echo 'deb https://debian.neo4j.com stable latest' | sudo tee /etc/apt/sources.list.d/neo4j.list
-=======
 echo 'deb https://debian.neo4j.com stable 4.3' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
->>>>>>> neo4j-v4.3.0
 sudo add-apt-repository universe
 sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update
@@ -29,8 +25,6 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confd
 echo 'Held packages'
 sudo dpkg --get-selections | grep hold
 
-<<<<<<< HEAD
-=======
 #Create directories
 sudo mkdir -p /etc/neo4j
 sudo chown "${userid}":"${groupid}" "/etc/neo4j"
@@ -43,7 +37,6 @@ sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/metrics"
 sudo mkdir -p /var/lib/neo4j/plugins
 sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/plugins"
 
->>>>>>> neo4j-v4.3.0
 echo '#########################################'
 echo '####### BEGINNING NEO4J INSTALL #########'
 echo '#########################################'
@@ -133,16 +126,8 @@ echo '#########################################'
 echo '########## NEO4J PLUGIN INSTALL #########'
 echo '#########################################'
 
-<<<<<<< HEAD
-if [ $neo4j_edition = "enterprise" ]; then
-  install_plugin "APOC" "$apoc_jar"
-else
-  echo "Skipping plugins in Community Edition"
-fi
-=======
 install_plugin "APOC" "$apoc_jar"
 install_plugin "BLOOM" "$bloom_jar"
->>>>>>> neo4j-v4.3.0
 
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload
@@ -163,11 +148,6 @@ if [ $neo4j_edition = "community" ]; then
    sudo touch /etc/neo4j/password-reset.log   
 fi
 
-<<<<<<< HEAD
-sudo chown neo4j /etc/neo4j/*
-
-=======
->>>>>>> neo4j-v4.3.0
 echo ''
 echo '#########################################'
 echo '########## NEO4J SETUP COMPLETE #########'

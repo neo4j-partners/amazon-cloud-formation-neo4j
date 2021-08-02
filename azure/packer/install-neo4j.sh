@@ -15,14 +15,6 @@ sudo add-apt-repository universe
 sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update
 
-echo "Upgrading Packages..."
-
-# For an explanation of the magic flags on what should be a mundane command, context:
-# https://github.com/chef/bento/issues/661#issuecomment-354806596
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
-echo 'Held packages'
-sudo dpkg --get-selections | grep hold
-
 #Create directories
 sudo mkdir -p /etc/neo4j
 sudo chown "${userid}":"${groupid}" "/etc/neo4j"

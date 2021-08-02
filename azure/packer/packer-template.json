@@ -8,7 +8,8 @@
     "neo4j_version": "1:4-3-2",
     "neo4j_edition": "enterprise",
 
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.0/apoc-4.3.0.0-all.jar"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.0/apoc-4.3.0.0-all.jar",
+    "bloom_jar": "https://github.com/neo4j-devtools/neo4j-bloom/archive/refs/tags/1.7.0.tar.gz"
   },
   "builders": [
     {
@@ -67,7 +68,8 @@
       "environment_vars": [
         "neo4j_version={{ user `neo4j_version` }}",
         "neo4j_edition={{ user `neo4j_edition` }}",
-        "apoc_jar={{ user `apoc_jar` }}"
+        "apoc_jar={{ user `apoc_jar` }}",
+        "bloom_jar={{ user `bloom_jar` }}"
       ]
     },
     {

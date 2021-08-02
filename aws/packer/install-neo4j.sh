@@ -79,8 +79,6 @@ echo '#########################################'
 echo '########## NEO4J POST-INSTALL ###########'
 echo '#########################################'
 
-ls -l /home/ubuntu
-
 # Provisioned copy of conf needs to be put in place.
 if [ $neo4j_edition = "community" ]; then
     sudo cp /home/ubuntu/neo4j-community.conf /etc/neo4j/neo4j.template

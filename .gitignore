@@ -1,3 +1,6 @@
+# IntelliJ directory
+.idea
+
 generated.json
 neo4j-*stack*.json
 neo4j-standalone.json

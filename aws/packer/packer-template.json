@@ -2,14 +2,15 @@
   "variables": {
     "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
     "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
-    "neo4j_version": "1:4.3.2",
+    "neo4j_version": "1:4.3.6",
     "neo4j_edition": "enterprise",
     "region": "us-east-1",
     "instance_type": "t2.micro",
     "destination_regions": "us-east-1,us-east-2,us-west-1,us-west-2,eu-west-1,eu-west-3,eu-central-1,ap-northeast-1,ap-northeast-2,ap-south-1,sa-east-1,ap-southeast-1,ap-southeast-2",
     "base_owner": "099720109477",
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.0/apoc-4.3.0.0-all.jar",
-    "bloom_jar": "https://github.com/neo4j-devtools/neo4j-bloom/archive/refs/tags/1.7.0.tar.gz"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.3/apoc-4.3.0.3-all.jar",
+    "bloom_jar": "bloom-plugin-4.x-1.9.0.jar",
+    "gds_jar": "https://github.com/neo4j/graph-data-science/releases/download/1.6.4/neo4j-graph-data-science-1.6.4.jar"
   },
   "builders": [
     {
@@ -31,7 +32,7 @@
       },
       "instance_type": "{{ user `instance_type` }}",
       "ssh_username": "ubuntu",
-      "ami_name": "neo4j-{{user `neo4j_edition`}}-{{user `neo4j_version` | clean_ami_name}}-{{isotime \"2006-01-02T03_04_05Z\"}}",
+      "ami_name": "neo4j-{{user `neo4j_edition`}}-{{user `neo4j_version` | clean_ami_name}}-apoc-bloom-{{isotime \"2006-01-02T03_04_05Z\"}}",
       "ami_regions": "{{user `destination_regions`}}",
       "ami_groups": [
         "all"
@@ -70,13 +71,19 @@
       "destination": "/home/ubuntu"
     },
     {
+      "type": "file",
+      "source": "../../plugins",
+      "destination": "/tmp"
+    },
+    {
       "type": "shell",
       "script": "./install-neo4j.sh",
       "environment_vars": [
         "neo4j_version={{ user `neo4j_version` }}",
         "neo4j_edition={{ user `neo4j_edition` }}",
         "apoc_jar={{ user `apoc_jar` }}",
-        "bloom_jar={{ user `bloom_jar` }}"
+        "bloom_jar={{ user `bloom_jar` }}",
+        "gds_jar={{ user `gds_jar` }}"
       ]
     },
     {

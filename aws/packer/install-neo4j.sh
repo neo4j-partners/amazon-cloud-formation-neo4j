@@ -79,8 +79,6 @@ echo '#########################################'
 echo '########## NEO4J POST-INSTALL ###########'
 echo '#########################################'
 
-ls -l /home/ubuntu
-
 # Provisioned copy of conf needs to be put in place.
 if [ $neo4j_edition = "community" ]; then
     sudo cp /home/ubuntu/neo4j-community.conf /etc/neo4j/neo4j.template
@@ -126,8 +124,14 @@ echo '#########################################'
 echo '########## NEO4J PLUGIN INSTALL #########'
 echo '#########################################'
 
+if [ $neo4j_edition = "enterprise" ]; then
 install_plugin "APOC" "$apoc_jar"
-install_plugin "BLOOM" "$bloom_jar"
+sudo mv "/tmp/$bloom_jar" /var/lib/neo4j/plugins
+else
+  echo "Skipping BLOOM plugin in Community Edition"
+  install_plugin "APOC" "$apoc_jar"
+  install_plugin "GDS" "$gds_jar"
+fi
 
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload

@@ -9,7 +9,8 @@ description:
   title: Neo4j Enterprise
   url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
 4.2/gcloud/solutions/causal-cluster/neo4j-causal-cluster.jinja.display
-  version: 4.3.2
+
+  version: 4.3.6
   documentations:
   - title: Register Neo4j Instance/Get a License
     url: "https://neo4j.com/lp/enterprise-cloud/?utm_content=google-marketplace"
@@ -152,5 +153,5 @@ runtime:
 
 annotations:
   autogenSpecType: 'MULTI_VM'
-  vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-4.3.2-apoc
+  vmImage0: https://www.googleapis.com/compute/v1/projects/launcher-public/global/images/neo4j-enterprise-1-4.3.6-apoc-bloom
 metadata_version: v1

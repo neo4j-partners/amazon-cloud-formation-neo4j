@@ -1,7 +1,0 @@
-{
-  "defaultDeploymentType": "MULTI_VM",
-  "imageName": "neo4j-enterprise-1-4-3-6-apoc-bloom",
-  "projectId": "launcher-public",
-  "templateName": "neo4j-causal-cluster",
-  "useSolutionPackage": true
-}

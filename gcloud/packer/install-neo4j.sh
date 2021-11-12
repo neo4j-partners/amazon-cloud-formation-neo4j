@@ -10,15 +10,29 @@ echo "neo4j-enterprise neo4j/question select I ACCEPT" | sudo debconf-set-select
 echo "neo4j-enterprise neo4j/license note" | sudo debconf-set-selections
 
 wget -O - https://debian.neo4j.com/neotechnology.gpg.key | sudo apt-key add -
-echo 'deb http://debian.neo4j.com stable 4.3' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
+echo 'deb https://debian.neo4j.com stable 4.3' | sudo tee -a /etc/apt/sources.list.d/neo4j.list
 sudo add-apt-repository universe
 sudo add-apt-repository -y ppa:openjdk-r/ppa
-sudo apt-get update && sudo apt-get --yes upgrade 
+sudo apt-get update
+
+#Create directories
+sudo mkdir -p /etc/neo4j
+sudo chown "${userid}":"${groupid}" "/etc/neo4j"
+sudo mkdir -p /var/lib/neo4j/logs
+sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/logs"
+sudo mkdir -p /var/lib/neo4j/conf
+sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/conf"
+sudo mkdir -p /var/lib/neo4j/metrics
+sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/metrics"
+sudo mkdir -p /var/lib/neo4j/plugins
+sudo chown "${userid}":"${groupid}" "/var/lib/neo4j/plugins"
 
 echo "Installing Neo4j"
 if [ $neo4j_edition = "community" ]; then
+    echo "neo4j=$neo4j_version"
     sudo apt-get --yes install neo4j=$neo4j_version
 else
+    echo "neo4j-enterprise=$neo4j_version"
     sudo apt-get --yes install neo4j-enterprise=$neo4j_version
 fi
 
@@ -49,9 +63,14 @@ echo '########## NEO4J POST-INSTALL ###########'
 echo '#########################################'
 
 # Provisioned copy of conf needs to be put in place.
-sudo cp /home/ubuntu/neo4j.conf /etc/neo4j/neo4j.template
+if [ $neo4j_edition = "community" ]; then
+    sudo cp /home/ubuntu/neo4j-community.conf /etc/neo4j/neo4j.template
+else
+    sudo cp /home/ubuntu/neo4j.conf /etc/neo4j/neo4j.template
+fi
+
 sudo cp /home/ubuntu/pre-neo4j.sh /etc/neo4j/pre-neo4j.sh
-sudo cp -r /home/ubuntu/licensing /etc/neo4j/
+sudo cp -r /home/ubuntu/licensing /var/lib/neo4j
 sudo chmod +x /etc/neo4j/pre-neo4j.sh
 
 # Edit startup profile for this system service to call our pre-neo4j wrapper (which in turn
@@ -86,6 +105,7 @@ echo '########## NEO4J PLUGIN INSTALL #########'
 echo '#########################################'
 
 install_plugin "APOC" "$apoc_jar"
+install_plugin "BLOOM" "$bloom_jar"
 
 echo "Daemon reload and restart"
 sudo systemctl daemon-reload

@@ -9,7 +9,7 @@
  # mainTemplate.json and clusterTemplate.json
  #}
  {%
-  set image = "neo4j-enterprise-1-4.3.2-apoc_2018-09-11T12_14_38Z"
+  set image = "neo4j-enterprise-1-4.3.6-apoc_2018-09-11T12_14_38Z"
  %}
  {
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
@@ -252,7 +252,7 @@
      # For local testing, comment out the "plan" object, and swap the "imageReference" below.
      #}
     "plan": {
-        "name": "neo4j_enterprise_4_3_2",
+        "name": "neo4j_enterprise_4_3_6",
         "publisher": "neo4j",
         "product": "neo4j-enterprise-4-3"
     },
@@ -275,7 +275,7 @@
 			"imageReference": {
                 "publisher": "neo4j",
                 "offer": "neo4j-enterprise-4-3",
-                "sku": "neo4j_enterprise_4_3_2",
+                "sku": "neo4j_enterprise_4_3_6",
                 "version": "latest"
 			},
 {#            

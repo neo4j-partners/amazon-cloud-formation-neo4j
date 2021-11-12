@@ -5,11 +5,11 @@
     "tenant_id": "{{env `AZURE_TENANT_ID`}}",
     "subscription_id": "{{env `AZURE_SUBSCRIPTION_ID`}}",
     "object_id": "7ecbf387-86a1-4158-84ad-8026b33ddc9f",
-    "neo4j_version": "1:4-3-2",
+    "neo4j_version": "1:4-3-6",
     "neo4j_edition": "enterprise",
 
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.0/apoc-4.3.0.0-all.jar",
-    "bloom_jar": "https://github.com/neo4j-devtools/neo4j-bloom/archive/refs/tags/1.7.0.tar.gz"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.3/apoc-4.3.0.3-all.jar",
+    "bloom_jar": "https://github.com/neo4j-devtools/neo4j-bloom/archive/refs/tags/1.9.0.tar.gz"
   },
   "builders": [
     {

@@ -1,11 +1,12 @@
 {
   "variables": {
-    "neo4j_version": "1:4.3.2",
+    "neo4j_version": "1:4.3.6",
     "neo4j_edition": "enterprise",
     "zone": "us-central1-a",
     "gcp_service_account_credentials_file": "./packer-sa.json",
     "gcp_base_image": "ubuntu-1804-bionic-v20190617",
-    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.0/apoc-4.3.0.0-all.jar"
+    "apoc_jar": "https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/4.3.0.3/apoc-4.3.0.3-all.jar",
+    "bloom_jar": "https://github.com/neo4j-devtools/neo4j-bloom/archive/refs/tags/1.9.0.tar.gz"
   },
   "builders": [
     {
@@ -16,7 +17,7 @@
       "ssh_username": "ubuntu",
       "zone": "{{user `zone`}}",
       "image_family": "neo4j",
-      "image_name": "neo4j-{{user `neo4j_edition` | clean_image_name}}-{{user `neo4j_version` | clean_image_name}}-apoc",
+      "image_name": "neo4j-{{user `neo4j_edition` | clean_image_name}}-{{user `neo4j_version` | clean_image_name}}-apoc-bloom",
       "image_labels": {
         "neo4j_package": "{{user `neo4j_version` | clean_image_name}}",
         "neo4j_edition": "{{user `neo4j_edition` | clean_image_name}}",
@@ -47,7 +48,8 @@
       "environment_vars": [
         "neo4j_version={{ user `neo4j_version` }}",
         "neo4j_edition={{ user `neo4j_edition` }}",
-        "apoc_jar={{ user `apoc_jar` }}"
+        "apoc_jar={{ user `apoc_jar` }}",
+        "bloom_jar={{ user `bloom_jar` }}"
       ]
     }
   ]

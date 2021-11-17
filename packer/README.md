@@ -3,7 +3,6 @@
 ## Dependencies
 
 * `brew install packer`
-* marketplaces@neo4j.com credentials.  David Allen, Kurt Freytag, and Ryan Boyd have them.
 
 ## Build Neo4j Enterprise AMI
 

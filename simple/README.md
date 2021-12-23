@@ -31,6 +31,7 @@ Then you'll want to clone this repo.  You can do that with the command:
 
     git clone https://github.com/neo4j-partners/amazon-cloud-formation-neo4j.git
     cd amazon-cloud-formation-neo4j
+    cd simple
 
 ## Creating a Stack
 

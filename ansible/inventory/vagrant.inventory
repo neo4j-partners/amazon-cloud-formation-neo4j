@@ -1,3 +1,0 @@
-[node1]
-127.0.0.1 ansible_ssh_port=2222 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ControlMaster=auto -o ControlPersist=60s -o PreferredAuthentications=publickey ' ansible_ssh_user=vagrant ansible_ssh_private_key_file=/Users/bledifeshti/work/repos/neo4j-cloud-launcher/aws/packer/.vagrant/machines/default/virtualbox/private_key
-

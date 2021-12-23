@@ -1,151 +1,47 @@
-## Overview
+# amazon-cloud-formation-neo4j
+This is an Amazon CloudFormation Template (CFT) that deploys Neo4j Enterprise on AWS.  It sets up Neo4j Graph Database, Graph Data Science and Bloom.
 
-Amazon Marketplace entry
+# Instructions
+To deploy this template from the command line, follow these instructions.
 
-## Dependencies
+## Environment Setup
+First we need to install and configure the AWS CLI.  Follow the instructions Amazon provides [here](http://docs.aws.amazon.com/cli/latest/userguide/installing.html).  Basically all you need to do is:
 
-* Install AWS CLI and authenticate
-* `pipenv install`
+    pip install --upgrade --user awscli
+    aws configure
 
-## AWS CLI Setup
+You can confirm the CLI is working properly by running:
 
-This file assumes that you have "profiles" set up with your AWS CLI named "govcloud" and
-"marketplace".   The "marketplace" account is the one that hosts Neo4j's public marketplace
-presence on AWS.  And govcloud is what it sounds like.
+    aws ec2 describe-account-attributes
 
-Take note of `-c profileName` arguments and `--profile profileName` arguments.   Steps
-below need to be repeated for public marketplaces and govcloud.
+If you don't have a key, you'll also need to create one.  That can be done with these commands:
 
-For `aws` commands, you need multiple profile sections in your `$HOME/.aws/config`.
+    REGION=`aws configure get region`
+    KEY_NAME="neo4j-${REGION}"
+    KEY_FILENAME=~/.ssh/${KEY_NAME}.pem
+    aws ec2 create-key-pair \
+      --region ${REGION} \
+      --key-name ${KEY_NAME} \
+      --query 'KeyMaterial' \
+      --output text > ${KEY_FILENAME}
+    chmod 600 ${KEY_FILENAME}
+    echo "Key saved to ${KEY_FILENAME}"
 
-For `s3cmd` commands, you need multiple config files in your `$HOME`.  For s3cmd also see [this important note](https://stanlemon.net/2013/05/23/s3cmd-and-govcloud/)
+Then you'll want to clone this repo.  You can do that with the command:
 
-## Generate CloudFormation Template
+    git clone https://github.com/neo4j-partners/amazon-cloud-formation-neo4j.git
+    cd amazon-cloud-formation-neo4j
 
-The CloudFormation stack is a jinja template which evaluates to a CloudFormation JSON file.
+## Creating a Stack
 
-Generate and copy to the right S3 bucket.  If the generate step fails due to a syntax
-error, check the intermediate `generated.json` file, which contains raw jinja substitutions
-before JSON parsing.
+The AWS word for a deployment is a stack.  [deploy.sh](deploy.sh) is a helper script to deploy a stack.  Take a look at it and modify any variables, then run it as:
 
-There are two possible templates you can use:
-* `deploy.jinja` is for n-node causal clusters
-* `deploy-standalone.jinja` is for single-node deploys
+    ./deploy.sh <STACK_NAME>
 
-## GovCloud Support
+When complete you can access the Neo4j console on port 7474 of any node.
 
-- We will only publish Enterprise on GovCloud.  For competitive reasons, Community will be
-unavailable.
+## Deleting a Stack
 
-### Causal clusters:
+To delete your deployment you can either run the command below or use the GUI in the web console [here](https://console.aws.amazon.com/cloudformation/home).
 
-Generate from Jinja template, upload to S3, and validate.
-
-```
-# Profile should be either (marketplace|govcloud)
-for value in marketplace govcloud
-do
-  export PROFILE=$value
-  export VERSION=4.3.6
-  S3BUCKET=neo4j-cloudformation
-  if [ "$PROFILE" = "govcloud" ] ; then
-    export S3HOST=s3-us-gov-east-1.amazonaws.com
-  else 
-    export S3HOST=s3.amazonaws.com
-  fi
-  GEN_STACK=neo4j-enterprise-stack-$VERSION.json
-  python3 generate.py \
-      --edition enterprise \
-      --profile $PROFILE \
-      --template deploy.jinja > $GEN_STACK && \
-  s3cmd -c $HOME/.s3cfg-$PROFILE -P put $GEN_STACK s3://$S3BUCKET/
-  aws cloudformation validate-template \
-    --template-url https://$S3HOST/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
-done
-```
-
-### Neo4j Enterprise Standalone:
-
-```
-for value in marketplace govcloud
-do
-  export PROFILE=$value
-  export VERSION=4.3.6
-  S3BUCKET=neo4j-cloudformation
-  if [ "$PROFILE" = "govcloud" ] ; then
-    export S3HOST=s3-us-gov-east-1.amazonaws.com
-  else 
-    export S3HOST=s3.amazonaws.com
-  fi
-  GEN_STACK=neo4j-enterprise-standalone-stack-$VERSION.json
-  python3 generate.py \
-      --edition enterprise \
-      --profile $PROFILE \
-      --template deploy-standalone.jinja > $GEN_STACK && \
-  s3cmd -c $HOME/.s3cfg-$PROFILE -P put $GEN_STACK s3://$S3BUCKET/
-  aws cloudformation validate-template \
-    --template-url https://$S3HOST/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
-done
-```
-
-### Neo4j Community Standalone:
-
-```
-export VERSION=4.3.6
-export PROFILE=marketplace
-S3BUCKET=neo4j-cloudformation
-GEN_STACK=neo4j-community-standalone-stack-$VERSION.json
-python3 generate.py \
-    --edition community \
-    --profile $PROFILE \
-    --template deploy-standalone.jinja > $GEN_STACK && \
-s3cmd -c $HOME/.s3cfg-marketplace -P put $GEN_STACK s3://$S3BUCKET/
-echo $GEN_STACK
-aws cloudformation validate-template \
-  --template-url https://s3.amazonaws.com/$S3BUCKET/$GEN_STACK --profile $PROFILE > /dev/null
-```
-
-CloudFormation can then be given the S3 URLs above
-
-## Testing Deployed Stacks
-
-### Scanning Clusters after startup for debugging purposes
-
-Check the `scan-cluster.sh` script, which can gather metrics for everything
-in a deployed stack; useful if something is going wrong.
-
-### Stress Tests
-
-Run the stress tests in this repo, and verify with the followers that they
-received all data.
-
-### NMap
-
-Run nmap to enumerate ports on the VMs and ensure that only bolt and HTTPS are open.
-
-## List AMIs
-
-```
-for region in `aws ec2 describe-regions --query 'Regions[].{Name:RegionName}' --output text` ; do
-  echo "REGION $region" 
-  aws ec2 describe-images --filters Name=name,Values=\*neo4j\* --owners self --region $region;
-done
-```
-
-Deregister example: `aws ec2 deregister-image --image-id ami-650be718 --region us-east-1`
-
-## Create CloudFormation Stack
-
-See the `deploy-*.sh` shell scripts.
-
-To get the status of a stack being deployed:
-
-```
-aws cloudformation describe-stacks --stack-name $STACKNAME --region $REGION | jq -r .Stacks[0].StackStatus
-```
-
-To delete
-
-```
-aws cloudformation delete-stack --stack-name $STACKNAME --region $REGION
-```
+    aws cloudformation delete-stack --stack-name <STACK_NAME>

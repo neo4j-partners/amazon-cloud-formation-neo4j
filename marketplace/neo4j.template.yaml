@@ -18,34 +18,38 @@ Metadata:
           - InstanceType
           - DiskSize
           - KeyName
-  ParameterLabels:
-    GraphDatabaseVersion: 
-      default: Graph Database Version
-    GraphDataScienceVersion: 
-      default: Graph Data Science Version
-    BloomVersion:
-      default: Bloom Version
-    Password: 
-      default: Password
-    LicenseKey: 
-      default: License Key
-    NodeCount: 
-      default: Node Count
-    InstanceType: 
-      default: Instance Type
-    DiskSize: 
-      default: Disk Size
-    KeyName: 
-      default: Key Name
+          - ImageId
+    ParameterLabels:
+      GraphDatabaseVersion: 
+        default: Graph Database Version
+      GraphDataScienceVersion: 
+        default: Graph Data Science Version
+      BloomVersion:
+        default: Bloom Version
+      Password: 
+        default: Password
+      LicenseKey: 
+        default: License Key
+      NodeCount: 
+        default: Node Count
+      InstanceType: 
+        default: Instance Type
+      DiskSize: 
+        default: Disk Size
+      KeyName: 
+        default: Key Name
+      ImageId: 
+        default: AMI ID
 
 Parameters:
   GraphDatabaseVersion:
     Description: Neo4j Graph Database Version
     Type: String
-    Default: '4.4.1'
+    Default: '4.4.3'
     AllowedValues:
-      - '4.4.1'
-      - '4.3.8'
+      - '4.4.3'
+      - '4.3.10'
+      - '4.2.14'
 
   GraphDataScienceVersion:
     Description: Neo4j Graph Data Science Version
@@ -72,7 +76,7 @@ Parameters:
   LicenseKey:
     Description: Optional License Key for Graph Data Science and/or Bloom
     Type: String
-    Default: AWS::NoValue
+    Default: 'None'
 
   NodeCount:
     Description: Number of core nodes
@@ -126,6 +130,13 @@ Resources:
       MaxSize: 3
       DesiredCapacity:
         Ref: NodeCount
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+          PropagateAtLaunch: true
 
   Neo4jLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration

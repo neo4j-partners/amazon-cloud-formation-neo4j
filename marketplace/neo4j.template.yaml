@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Neo4j Enterprise. Do Not Remove Apache License Version 2.0. (qs-1shnl7a6p)
+Description: Neo4j Enterprise Edition
 Metadata:
   AWS::CloudFormation::Interface: 
     ParameterGroups: 
@@ -113,7 +113,7 @@ Parameters:
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-01893222c83843146
+      BYOL: ami-0a429f6e2ba4e8eb0
 
 Resources:
   Neo4jAutoScalingGroup:

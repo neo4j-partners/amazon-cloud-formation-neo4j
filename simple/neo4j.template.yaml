@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Neo4j Enterprise. Do Not Remove Apache License Version 2.0. (qs-1shnl7a6p)
+Description: Neo4j Enterprise Edition
 Metadata:
   AWS::CloudFormation::Interface: 
     ParameterGroups: 

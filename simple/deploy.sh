@@ -20,6 +20,6 @@ ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=KeyName,ParameterValue=${KeyName} \
 ParameterKey=NodeCount,ParameterValue=${NodeCount} \
 ParameterKey=GraphDataScienceVersion,ParameterValue=${GraphDataScienceVersion} \
-ParameterKey=License,ParameterValue="None"
+ParameterKey=LicenseKey,ParameterValue="None"
 
-#ParameterKey=License,ParameterValue=$( cat neo4j.license )
+#ParameterKey=LicenseKey,ParameterValue=$( cat neo4j.license )

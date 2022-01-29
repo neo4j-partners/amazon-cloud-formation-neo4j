@@ -18,7 +18,6 @@ Metadata:
           - InstanceType
           - DiskSize
           - KeyName
-          - ImageId
     ParameterLabels:
       GraphDatabaseVersion: 
         default: Graph Database Version
@@ -38,8 +37,6 @@ Metadata:
         default: Disk Size
       KeyName: 
         default: Key Name
-      ImageId: 
-        default: AMI ID
 
 Parameters:
   GraphDatabaseVersion:
@@ -113,10 +110,10 @@ Parameters:
     Description: Name of an existing EC2 KeyPair
     Type: AWS::EC2::KeyPair::KeyName
 
-  ImageId:
-    Description: AMI ID for each node
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+Mappings:
+  Neo4j:
+    us-east-1:
+      BYOL: ami-01893222c83843146
 
 Resources:
   Neo4jAutoScalingGroup:
@@ -141,7 +138,10 @@ Resources:
   Neo4jLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
-      ImageId: !Ref ImageId
+      ImageId: !FindInMap
+          - Neo4j
+          - !Ref 'AWS::Region'
+          - BYOL
       InstanceType:
         Ref: InstanceType
       SecurityGroups:

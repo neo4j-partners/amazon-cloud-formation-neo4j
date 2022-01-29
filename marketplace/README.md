@@ -10,10 +10,10 @@ If you're a Neo4j employee updating the AWS Marketplace listing, you're first go
 
 You'll want to take the AMI ID and use it in this command:
 
-aws ec2 copy-image \
-    --source-region us-east-1 \
-    --source-image-id ami-01893222c83843146 \
-    --name "Neo4j Enterprise Edition"
+    aws ec2 copy-image \
+        --source-region us-east-1 \
+        --source-image-id ami-01893222c83843146 \
+        --name "Neo4j Enterprise Edition"
 
 You'll then want to take the AMI ID from that and stuff it both into the CFT and the product load form.
 

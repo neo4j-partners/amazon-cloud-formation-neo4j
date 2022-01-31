@@ -17,6 +17,8 @@ You'll want to take the AMI ID and use it in this command:
 
 You'll then want to take the AMI ID from that and stuff it both into the CFT and the product load form.
 
+There's also some required magic to make the AMI accessible to the AWS Marketplace people [here](https://docs.aws.amazon.com/marketplace/latest/userguide/ami-single-ami-products.html#single-ami-marketplace-ami-access).
+
 # Updating the Marketplace Listing
 CFT deploys in AWS Marketplace aren't self service.  At some point that might change.  So, next up is updating the product load form.  That's stored [here](https://docs.google.com/spreadsheets/d/1Nmpw3etZX7xj6nQgS5w3K2B-i0gJevdQ/edit?usp=sharing&ouid=115505246243451814800&rtpof=true&sd=true).  Note that AWS will almost certainly continue to rev the product load form.  So, you might periodically be forced to grab a new copy from to publisher portal.
 

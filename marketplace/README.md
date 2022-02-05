@@ -4,7 +4,9 @@ This template is used by the Neo4j AWS Marketplace offer. It is not intended to 
 Unless you are a Neo4j employee updating the Azure Marketplace listing, you probably want to be using either the Marketplace listing itself or [simple](../simple).
 
 # Updating the AMI
-If you're a Neo4j employee updating the AWS Marketplace listing, you're first going to have to get a new AMI ID. To do that, first grab the latest Amazon Linux 2 AMI ID:
+If you're a Neo4j employee updating the AWS Marketplace listing, you're first going to have to get a new AMI ID.  First off, make extra special sure you do this work in the AWS account associated with our publisher.  It's seems AMI sharing across accounts has bugs, so you want to avoid needing to use that. 
+
+First grab the latest Amazon Linux 2 AMI ID:
 
     aws ssm get-parameters --names /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 --region us-east-1 
 
@@ -15,7 +17,7 @@ You'll want to take the AMI ID and use it in this command:
         --source-image-id ami-01893222c83843146 \
         --name "Neo4j Enterprise Edition"
 
-Go into the AMI permissions and make it public.
+Go into the AMI permissions and add the AMI ingest role as described [here](https://docs.aws.amazon.com/marketplace/latest/userguide/ami-single-ami-products.html#single-ami-marketplace-ami-access).
 
 You'll then want to take the AMI ID from that and stuff it both into the CFT and the product load form.
 

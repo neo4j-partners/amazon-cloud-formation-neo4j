@@ -124,7 +124,7 @@ Parameters:
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-08d61b38c0fb2d322
+      BYOL: ami-08889c8234ad784d2
 
 Resources:
   Neo4jAutoScalingGroup:

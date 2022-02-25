@@ -58,7 +58,7 @@ Parameters:
     Default: 'None'
     AllowedValues:
       - 'None'
-      - '1.8.0'
+      - '1.8.3'
 
   BloomVersion:
     Description: Neo4j Bloom Version
@@ -66,6 +66,7 @@ Parameters:
     Default: 'None'
     AllowedValues:
       - 'None'
+      - '2.1.0'
       - '2.0.0'
 
   Password:

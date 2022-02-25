@@ -48,7 +48,6 @@ Parameters:
     Default: '4.4.4'
     AllowedValues:
       - '4.4.4'
-      - '4.4.3'
       - '4.3.10'
       - '4.2.14'
 

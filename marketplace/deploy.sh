@@ -7,9 +7,8 @@ REGION=`aws configure get region`
 
 Password="foo123"
 KeyName="neo4j-${REGION}"
-SSHCIDR="0.0.0.0/0"
 NodeCount="3"
-GraphDataScienceVersion="None"
+SSHCIDR="0.0.0.0/0"
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -19,7 +18,6 @@ aws cloudformation create-stack \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=KeyName,ParameterValue=${KeyName} \
-ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=NodeCount,ParameterValue=${NodeCount} \
-ParameterKey=GraphDataScienceVersion,ParameterValue=${GraphDataScienceVersion} \
+ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=LicenseKey,ParameterValue="None"

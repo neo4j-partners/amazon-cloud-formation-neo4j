@@ -21,6 +21,6 @@ Things you'll probably want to update in the product load from are:
 * CFT template link
 * Version of the offer
 
-We should really investigate if AWS has any APIs we could use to automate this.  However given the lack of portal self service, I suspect not.
-
 Once the product load form is all up to date, you'll just need to resubmit it in the portal [here](https://aws.amazon.com/marketplace/management/offers).
+
+There is currently no API for any of this, so the process has to be manual.  If we didn't have a CFT we could automate.

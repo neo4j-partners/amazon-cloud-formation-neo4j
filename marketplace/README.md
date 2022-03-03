@@ -1,7 +1,7 @@
 # marketplace
 This template is used by the Neo4j AWS Marketplace offer. It is not intended to be used outside the marketplace. 
 
-Unless you are a Neo4j employee updating the Azure Marketplace listing, you probably want to be using either the Marketplace listing itself or [simple](../simple).
+Unless you are a Neo4j employee updating the AWS Marketplace listing, you probably want to be using either the Marketplace listing itself or [simple](../simple).
 
 # Updating the AMI
 If you're a Neo4j employee updating the AWS Marketplace listing, you're first going to have to get a new AMI ID.  First off, make extra special sure you do this work in the AWS account associated with our publisher.  It's seems AMI sharing across accounts has bugs, so you want to avoid needing to use that. 

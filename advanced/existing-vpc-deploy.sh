@@ -2,7 +2,7 @@
 
 STACK_NAME=$1
 
-TEMPLATE_BODY="file://existingvpc-neo4j.template.yaml"
+TEMPLATE_BODY="file://existing-vpc-neo4j.template.yaml"
 REGION=`aws configure get region`
 
 Password="foo123"

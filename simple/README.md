@@ -34,7 +34,6 @@ Then you'll want to clone this repo.  You can do that with the command:
     cd simple
 
 ## Creating a Stack
-
 The AWS word for a deployment is a stack.  [deploy.sh](deploy.sh) is a helper script to deploy a stack.  Take a look at it and modify any variables, then run it as:
 
     ./deploy.sh <STACK_NAME>
@@ -42,7 +41,9 @@ The AWS word for a deployment is a stack.  [deploy.sh](deploy.sh) is a helper sc
 When complete you can access the Neo4j console on port 7474 of any node.
 
 ## Deleting a Stack
-
 To delete your deployment you can either run the command below or use the GUI in the web console [here](https://console.aws.amazon.com/cloudformation/home).
 
     aws cloudformation delete-stack --stack-name <STACK_NAME>
+
+## Debugging
+If the Neo4j Browser isn't coming up, there's a good chance something isn't right in your deployment.  One thing to investigate is the cloud-init logs.  `/var/log/cloud-init-output.log` is probably the best starting point.  If that looks good, the next place to check out is `/var/log/neo4j/debug.log`.

@@ -259,8 +259,8 @@ Resources:
 
             - "if [[ \"$graphDataScienceVersion\" != None ]]; then\n"
             - "  echo Installing Graph Data Science...\n"
-            - "  curl \"https://s3-eu-west-1.amazonaws.com/com.neo4j.graphalgorithms.dist/graph-data-science/neo4j-graph-data-science-${graphDataScienceVersion}-standalone.zip\" -o neo4j-graph-data-science-${graphDataScienceVersion}-standalone.zip\n"
-            - "  unzip neo4j-graph-data-science-${graphDataScienceVersion}-standalone.zip\n"
+            - "  curl \"https://graphdatascience.ninja/neo4j-graph-data-science-${graphDataScienceVersion}.zip\" -o neo4j-graph-data-science-${graphDataScienceVersion}-standalone.zip\n"
+            - "  unzip neo4j-graph-data-science-${graphDataScienceVersion}.zip\n"
             - "  mv neo4j-graph-data-science-${graphDataScienceVersion}.jar /var/lib/neo4j/plugins\n"
             - "fi\n"
 

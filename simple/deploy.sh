@@ -18,5 +18,5 @@ aws cloudformation create-stack \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=KeyName,ParameterValue=${KeyName} \
 ParameterKey=NodeCount,ParameterValue=${NodeCount} \
-ParameterKey=GraphDataScienceLicenseKey,ParameterValue="None"\
+ParameterKey=GraphDataScienceLicenseKey,ParameterValue="None" \
 ParameterKey=BloomLicenseKey,ParameterValue="None"

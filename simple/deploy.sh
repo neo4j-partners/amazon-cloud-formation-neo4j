@@ -7,7 +7,7 @@ REGION=`aws configure get region`
 
 Password="foo123"
 KeyName="neo4j-${REGION}"
-NodeCount="3"
+NodeCount="1"
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -18,4 +18,5 @@ aws cloudformation create-stack \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=KeyName,ParameterValue=${KeyName} \
 ParameterKey=NodeCount,ParameterValue=${NodeCount} \
-ParameterKey=LicenseKey,ParameterValue="None"
+ParameterKey=GraphDataScienceLicenseKey,ParameterValue="None"\
+ParameterKey=BloomLicenseKey,ParameterValue="None"

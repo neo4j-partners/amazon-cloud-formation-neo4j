@@ -72,7 +72,7 @@ Parameters:
       - 'False'
 
   BloomLicenseKey:
-    Description: License Key for Graph Data Science
+    Description: License Key for Bloom
     Type: String
     Default: 'None'
 

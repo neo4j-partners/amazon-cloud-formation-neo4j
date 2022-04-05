@@ -15,11 +15,7 @@ You'll then want to take the AMI ID from that and stuff it both into the CFT and
 # Updating the Marketplace Listing
 CFT deploys in AWS Marketplace aren't self service.  At some point that might change.  So, next up is updating the product load form.  That's stored [here](https://docs.google.com/spreadsheets/d/1Nmpw3etZX7xj6nQgS5w3K2B-i0gJevdQ/edit?usp=sharing&ouid=115505246243451814800&rtpof=true&sd=true).  Note that AWS will almost certainly continue to rev the product load form.  So, you might periodically be forced to grab a new copy from to publisher portal.
 
-Things you'll probably want to update in the product load from are:
-
-* AMI ID
-* CFT template link
-* Version of the offer
+You'll defintely want to update the version ID in the product load form.  You will need to update the AMI ID as well, if you built a new one.
 
 Once the product load form is all up to date, you'll just need to resubmit it in the portal [here](https://aws.amazon.com/marketplace/management/offers).
 

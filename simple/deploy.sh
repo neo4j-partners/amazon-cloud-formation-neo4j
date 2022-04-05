@@ -17,5 +17,4 @@ aws cloudformation create-stack \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=KeyName,ParameterValue=${KeyName} \
-ParameterKey=NodeCount,ParameterValue=${NodeCount} \
-ParameterKey=LicenseKey,ParameterValue="None"
+ParameterKey=NodeCount,ParameterValue=${NodeCount}

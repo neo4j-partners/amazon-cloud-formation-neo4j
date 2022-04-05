@@ -27,6 +27,15 @@ If you don't have a key, you'll also need to create one.  That can be done with 
     chmod 600 ${KEY_FILENAME}
     echo "Key saved to ${KEY_FILENAME}"
 
+You should check ~/.ssh/ to see that key is saved.
+
+    cd ~/.ssh
+    ls -la
+
+You shouold see a file like this:
+
+    -rw-------   1 <name> <admin> 1679 Mar 29 14:09 neo4j-us-west-1.pem
+    
 Then you'll want to clone this repo.  You can do that with the command:
 
     git clone https://github.com/neo4j-partners/amazon-cloud-formation-neo4j.git

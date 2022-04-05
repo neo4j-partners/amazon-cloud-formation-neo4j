@@ -19,5 +19,4 @@ aws cloudformation create-stack \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=KeyName,ParameterValue=${KeyName} \
 ParameterKey=NodeCount,ParameterValue=${NodeCount} \
-ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
-ParameterKey=LicenseKey,ParameterValue="None"
+ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR}

@@ -8,11 +8,11 @@ Metadata:
         Parameters: 
           - GraphDatabaseVersion
           - GraphDataScienceVersion
-          - InstallBloom
-          - InstallGraphDataScience
           - BloomVersion
           - ApocVersion
-          - Password
+          - InstallBloom
+          - InstallGraphDataScience
+          - AdminPassword
           - GraphDataScienceLicenseKey
           - BloomLicenseKey
       - Label: 
@@ -36,8 +36,8 @@ Metadata:
         default: Install Graph Data Science
       InstallBloom:
         default: Install Bloom
-      Password:
-        default: Password
+      AdminPassword:
+        default: Admin Password
       GraphDataScienceLicenseKey:
         default: Graph Data Science License Key
       BloomLicenseKey:
@@ -57,8 +57,9 @@ Parameters:
   GraphDatabaseVersion:
     Description: Neo4j Graph Database Version
     Type: String
-    Default: '4.4.4'
+    Default: '4.4.5'
     AllowedValues:
+      - '4.4.5'
       - '4.4.4'
       - '4.3.10'
       - '4.2.14'
@@ -105,7 +106,7 @@ Parameters:
       - 'None'
       - '4.4.0.3'
 
-  Password:
+  AdminPassword:
     Description: Password for Neo4j
     Type: String
     MinLength: 6
@@ -208,6 +209,9 @@ Resources:
           - ''
           - - "#!/bin/bash\n"
             - "echo Running startup script...\n"
+            - "adminPassword="
+            - Ref: AdminPassword
+            - "\n"
 
             - "graphDatabaseVersion="
             - Ref: GraphDatabaseVersion
@@ -233,10 +237,6 @@ Resources:
             - Ref: ApocVersion
             - "\n"
 
-            - "password="
-            - Ref: Password
-            - "\n"
-
             - "graphDataScienceLicenseKey="
             - Ref: GraphDataScienceLicenseKey
             - "\n"
@@ -250,7 +250,7 @@ Resources:
             - "\n"
 
             - "echo \"Using the settings... \"\n"
-            - "echo \"NodeCount: ${NodeCount}\"\n"
+            - "echo \"NodeCount: ${nodeCount}\"\n"
             - "echo \"adminPassword: ${adminPassword}\"\n"
             - "echo \"graphDatabaseVersion: ${graphDatabaseVersion}\"\n"
             - "echo \"installGraphDataScience: ${installGraphDataScience}\"\n"
@@ -270,6 +270,7 @@ Resources:
             - "echo \"\n"
             - "[neo4j]\n"
             - "name=Neo4j Yum Repo\n"
+
             - "baseurl=http://yum.neo4j.com/stable\n"
             - "enabled=1\n"
             - "gpgcheck=1\" > /etc/yum.repos.d/neo4j.repo\n"
@@ -283,10 +284,11 @@ Resources:
 
             - "echo Configuring network in neo4j.conf...\n"
             - "sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
-            -
+            
             - "publicHostname=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)\n"
             - "echo \"publicHostname: ${publicHostname}\"\n"
             - "sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${publicHostname}/g /etc/neo4j/neo4j.conf\n"
+
 
             - "echo Installing on ${nodeCount} node\n"
             - "if [[ $nodeCount == 1 ]]; then\n"
@@ -311,6 +313,7 @@ Resources:
             - "else\n"
             - "    echo Not installing Graph Data Science\n"
             - "fi\n"
+
 
             - "if [[ $installBloom == True ]]; then\n"
             - "  if [[ $bloomVersion == None ]]; then\n"
@@ -348,7 +351,7 @@ Resources:
             - "  curl -L \"https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/${apocVersion}/apoc-${apocVersion}-all.jar\" -o \"apoc-${apocVersion}-all.jar\"\n"
             - "  cp \"apoc-${apocVersion}-all.jar\" /var/lib/neo4j/plugins\n"
             - "fi\n"
-
+              
             - "echo Configuring extensions and security in neo4j.conf...\n"
             - "sed -i s~#dbms.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~dbms.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
             - "sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=,jwt.security.*,apoc.*,gds.*,bloom.*/g /etc/neo4j/neo4j.conf\n"

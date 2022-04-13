@@ -16,8 +16,14 @@ aws cloudformation create-stack \
 --template-body ${TEMPLATE_BODY} \
 --region ${REGION} \
 --parameters \
-ParameterKey=Password,ParameterValue=${Password} \
+ParameterKey=AdminPassword,ParameterValue=${AdminPassword} \
 ParameterKey=KeyName,ParameterValue=${KeyName} \
 ParameterKey=NodeCount,ParameterValue=${NodeCount} \
-ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
-ParameterKey=LicenseKey,ParameterValue="None"
+ParameterKey=InstallGraphDataScience,ParameterValue="true" \
+ParameterKey=InstallBloom,ParameterValue="true" \
+ParameterKey=GraphDatabaseVersion,ParameterValue="4.4.5" \
+ParameterKey=GraphDataScienceLicenseKey,ParameterValue="None" \
+ParameterKey=BloomLicenseKey,ParameterValue="None" \
+ParameterKey=GraphDataScienceVersion,ParameterValue="None" \
+ParameterKey=BloomVersion,ParameterValue="None" \
+ParameterKey=ApocVersion,ParameterValue="None"

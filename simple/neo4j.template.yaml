@@ -8,6 +8,8 @@ Metadata:
         Parameters: 
           - GraphDatabaseVersion
           - GraphDataScienceVersion
+          - InstallBloom
+          - InstallGraphDataScience
           - BloomVersion
           - ApocVersion
           - Password
@@ -30,6 +32,10 @@ Metadata:
         default: Bloom Version
       ApocVersion:
         default: Apoc Version
+      InstallGraphDataScience:
+        default: Install Graph Data Science
+      InstallBloom:
+        default: Install Bloom
       Password:
         default: Password
       GraphDataScienceLicenseKey:
@@ -56,6 +62,22 @@ Parameters:
       - '4.4.4'
       - '4.3.10'
       - '4.2.14'
+
+  InstallGraphDataScience:
+    Description: Install Graph Data Science
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+
+  InstallBloom:
+    Description: Install Bloom
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
 
   GraphDataScienceVersion:
     Description: Neo4j Graph Data Science Version
@@ -191,6 +213,14 @@ Resources:
             - Ref: GraphDatabaseVersion
             - "\n"
 
+            - "installBloom="
+            - Ref: InstallBloom
+            - "\n"
+
+            - "installGraphDataScience="
+            - Ref: InstallGraphDataScience
+            - "\n"
+
             - "graphDataScienceVersion="
             - Ref: GraphDataScienceVersion
             - "\n"
@@ -219,108 +249,119 @@ Resources:
             - Ref: NodeCount
             - "\n"
 
+            - "echo \"Using the settings... \"\n"
+            - "echo \"NodeCount: ${NodeCount}\"\n"
+            - "echo \"adminPassword: ${adminPassword}\"\n"
+            - "echo \"graphDatabaseVersion: ${graphDatabaseVersion}\"\n"
+            - "echo \"installGraphDataScience: ${installGraphDataScience}\"\n"
+            - "echo \"graphDataScienceLicenseKey: ${graphDataScienceLicenseKey}\"\n"
+            - "echo \"installBloom: ${installBloom}\"\n"
+            - "echo \"bloomLicenseKey: ${bloomLicenseKey}\"\n"
+            - "echo \"apocVersion: ${apocVersion}\"\n"
+            - "echo \"bloomVersion: ${bloomVersion}\"\n"
+            - "echo \"graphDataScienceVersion: ${graphDataScienceVersion}\"\n"
+
+            - "echo Turning off firewalld\n"
+            - "systemctl stop firewalld\n"
+            - "systemctl disable firewalld\n"
+
             - "echo Adding neo4j yum repo...\n"
             - "rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
-            - "echo \""
+            - "echo \"\n"
             - "[neo4j]\n"
             - "name=Neo4j Yum Repo\n"
             - "baseurl=http://yum.neo4j.com/stable\n"
             - "enabled=1\n"
             - "gpgcheck=1\" > /etc/yum.repos.d/neo4j.repo\n"
 
-            - "echo Writing neo4j license key file...\n"
-            - "echo $licenseKey > /etc/neo4j/license/neo4j.license\n"
-
             - "echo Installing Graph Database...\n"
             - "export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
             - "yum -y install neo4j-enterprise-${graphDatabaseVersion}\n"
 
+            - "echo Installing unzip...\n"
+            - "yum -y install unzip\n"
+
             - "echo Configuring network in neo4j.conf...\n"
             - "sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
+            -
             - "publicHostname=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)\n"
+            - "echo \"publicHostname: ${publicHostname}\"\n"
             - "sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${publicHostname}/g /etc/neo4j/neo4j.conf\n"
 
-            - "if [[ \"$nodeCount\" == 1 ]]; then\n"
+            - "echo Installing on ${nodeCount} node\n"
+            - "if [[ $nodeCount == 1 ]]; then\n"
             - "  echo Running on a single node.\n"
             - "else\n"
-            - "  echo Running on multiple nodes.  Configuring membership in neo4j.conf...\n"
-            - "  region=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/.$//')\n"
-            - "  instanceId=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
-            - "  stackName=$(aws cloudformation describe-stack-resources --physical-resource-id $instanceId --query 'StackResources[0].StackName' --output text --region $region)\n"
-            - "  coreMembers=$(aws autoscaling describe-auto-scaling-instances --region $region --output text --query \"AutoScalingInstances[?AutoScalingGroupName=='Neo4jAutoScalingGroup'].InstanceId\" | xargs -n1 aws ec2 describe-instances --instance-ids $ID --region $region --query \"Reservations[].Instances[].PublicDnsName\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
-            - "  coreMembers=$(echo $coreMembers | sed 's/ /:5000,/g')\n"
-            - "  coreMembers=$(echo $coreMembers):5000\n"
+            - "  echo Running on $nodeCount nodes.\n"
+            - "  coreMembers=$(python3 parseCoreMembers.py $deployment)\n"
             - "  sed -i s/#causal_clustering.initial_discovery_members=localhost:5000,localhost:5001,localhost:5002/causal_clustering.initial_discovery_members=${coreMembers}/g /etc/neo4j/neo4j.conf\n"
             - "  sed -i s/#dbms.mode=CORE/dbms.mode=CORE/g /etc/neo4j/neo4j.conf\n"
             - "fi\n"
-            
-            - "echo Turning on SSL...\n"
-            - "sed -i 's/dbms.connector.https.enabled=false/dbms.connector.https.enabled=true/g' /etc/neo4j/neo4j.conf\n"
-            - "#sed -i 's/#dbms.connector.bolt.tls_level=DISABLED/dbms.connector.bolt.tls_level=OPTIONAL/g' /etc/neo4j/neo4j.conf\n"
 
-            - "/etc/pki/tls/certs/make-dummy-cert cert\n"
-            - "awk '/-----BEGIN PRIVATE KEY-----/,/-----END PRIVATE KEY-----/' cert > private.key\n"
-            - "awk '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/' cert > public.crt\n"
-
-            - "for service in bolt https cluster backup; do\n"
-            - "  sed -i \"s/#dbms.ssl.policy.${service}/dbms.ssl.policy.${service}/g\" /etc/neo4j/neo4j.conf\n"
-            - "  mkdir -p /var/lib/neo4j/certificates/$service/trusted\n"
-            - "  mkdir -p /var/lib/neo4j/certificates/$service/revoked\n"
-            - "  cp private.key /var/lib/neo4j/certificates/$service\n"
-            - "  cp public.crt /var/lib/neo4j/certificates/$service\n"
-            - "  cp private.key /var/lib/neo4j/certificates/$service/trusted\n"
-            - "  cp public.crt /var/lib/neo4j/certificates/$service/trusted\n"
-            - "done\n"
-
-            - "chown -R neo4j:neo4j /var/lib/neo4j/certificates\n"
-            - "chmod -R 755 /var/lib/neo4j/certificates\n"
-
-            - "mkdir -p /etc/neo4j/licenses\n"
-
-            - "if [[ \"$graphDataScienceVersion\" != None ]]; then\n"
-            - "  echo Installing Graph Data Science...\n"
-            - "  curl \"https://graphdatascience.ninja/neo4j-graph-data-science-${graphDataScienceVersion}.zip\" -o neo4j-graph-data-science-${graphDataScienceVersion}.zip\n"
-            - "  unzip neo4j-graph-data-science-${graphDataScienceVersion}.zip\n"
-            - "  mv neo4j-graph-data-science-${graphDataScienceVersion}.jar /var/lib/neo4j/plugins\n"
+            - "if [[ $installGraphDataScience == True && $nodeCount == 1 ]]; then\n"
+            - " if [[ $graphDataScienceVersion == None ]]; then\n"
+            - "     echo Installing bundled Graph Data Science...\n"
+            - "     cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
+            - "  else\n"
+            - "      echo Installing Graph Data Science $graphDataScienceVersion\n"
+            - "      curl \"https://graphdatascience.ninja/neo4j-graph-data-science-${graphDataScienceVersion}.zip\" -o \"neo4j-graph-data-science-${graphDataScienceVersion}.zip\"\n"
+            - "      unzip \"neo4j-graph-data-science-${graphDataScienceVersion}.zip\"\n"
+            - "      cp \"neo4j-graph-data-science-${graphDataScienceVersion}.jar\" /var/lib/neo4j/plugins\n"
+            - "  fi\n"
+            - "else\n"
+            - "    echo Not installing Graph Data Science\n"
             - "fi\n"
 
-            - "if [[ \"$bloomVersion\" != None ]]; then\n"
-            - "  echo Installing Bloom...\n"
-            - "  curl -L \"https://neo4j.com/artifact.php?name=neo4j-bloom-${bloomVersion}.zip\" -o neo4j-bloom-${bloomVersion}.zip\n"
-            - "  unzip neo4j-bloom-${bloomVersion}.zip\n"
-            - "  mv \"bloom-plugin-4.x-${bloomVersion}.jar\" /var/lib/neo4j/plugins\n"
+            - "if [[ $installBloom == True ]]; then\n"
+            - "  if [[ $bloomVersion == None ]]; then\n"
+            - "    echo Installing bundled Bloom\n"
+            - "    cp /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
+            - "  else\n"
+            - "   echo Installing Bloom $bloomVersion\n"
+            - "    curl -L \"https://neo4j.com/artifact.php?name=neo4j-bloom-${bloomVersion}.zip\" -o \"neo4j-bloom-${bloomVersion}.zip\"\n"
+            - "    unzip neo4j-bloom-${bloomVersion}.zip\n"
+            - "    cp \"bloom-plugin-4.x-${bloomVersion}.jar\" /var/lib/neo4j/plugins\n"
+            - " fi\n"
+            - "else\n"
+            - "    echo Not installing Bloom\n"
             - "fi\n"
 
             - "if [[ $bloomLicenseKey != None ]]; then\n"
-            - "  echo Writing Bloom license key file...\n"
+            - "  echo Writing Bloom license key...\n"
+            - "  mkdir -p /etc/neo4j/licenses\n"
             - "  echo $bloomLicenseKey > /etc/neo4j/licenses/neo4j-bloom.license\n"
-            - "  echo Configuring Bloom license in neo4j.conf...\n"
             - "  sed -i '$a neo4j.bloom.license_file=/etc/neo4j/licenses/neo4j-bloom.license' /etc/neo4j/neo4j.conf\n"
             - "fi\n"
 
             - "if [[ $graphDataScienceLicenseKey != None ]]; then\n"
-            - "  echo Writing GDS license key file...\n"
+            - "  echo Writing GDS license key...\n"
+            - "  mkdir -p /etc/neo4j/licenses\n"
             - "  echo $graphDataScienceLicenseKey > /etc/neo4j/licenses/neo4j-gds.license\n"
-            - "  echo Configuring GDS license in neo4j.conf...\n"
             - "  sed -i '$a gds.enterprise.license_file=/etc/neo4j/licenses/neo4j-gds.license' /etc/neo4j/neo4j.conf\n"
             - "fi\n"
 
-            - "if [[ $apocVersion != None ]]; then\n"
-            - "  echo Installing APOC...\n"
-            - "  curl -L https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/${apocVersion}/apoc-${apocVersion}-all.jar -o apoc-${apocVersion}-all.jar\n"
-            - "  mv apoc-${apocVersion}-all.jar /var/lib/neo4j/plugins\n"
+            - "if [[ $apocVersion == None ]]; then\n"
+            - "  echo Installing bundled Apoc\n"
+            - "  cp /var/lib/neo4j/labs/apoc-*.jar /var/lib/neo4j/plugins\n"
+            - "else\n"
+            - "  echo Installing Apoc $apocVersion\n"
+            - "  curl -L \"https://github.com/neo4j-contrib/neo4j-apoc-procedures/releases/download/${apocVersion}/apoc-${apocVersion}-all.jar\" -o \"apoc-${apocVersion}-all.jar\"\n"
+            - "  cp \"apoc-${apocVersion}-all.jar\" /var/lib/neo4j/plugins\n"
             - "fi\n"
 
-            - "echo Configuring Graph Data Science and Bloom in neo4j.conf...\n"
+            - "echo Configuring extensions and security in neo4j.conf...\n"
             - "sed -i s~#dbms.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~dbms.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
-            - "sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=gds.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
-
+            - "sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=,jwt.security.*,apoc.*,gds.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
             - "sed -i '$a dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*' /etc/neo4j/neo4j.conf\n"
             - "sed -i '$a dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*' /etc/neo4j/neo4j.conf\n"
 
+            - "echo Setting service permission bits to 644...\n"
+            - "sudo chmod 644 /usr/lib/systemd/system/neo4j.service\n"
+
             - "echo Starting Neo4j...\n"
             - "service neo4j start\n"
-            - "neo4j-admin set-initial-password ${password}\n"
+            - "echo Setting initial password...\n"
+            - "neo4j-admin set-initial-password ${adminPassword}\n"
 
   Neo4jInstanceProfile:
     Type: AWS::IAM::InstanceProfile

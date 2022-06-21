@@ -12,6 +12,7 @@ Metadata:
           - InstallBloom
           - BloomLicenseKey
           - Password
+          - SelectSSR
       - Label: 
           default: "Infrastructure Configuration"
         Parameters: 
@@ -31,6 +32,8 @@ Metadata:
         default: Install Bloom
       BloomLicenseKey: 
         default: Bloom License Key
+      SelectSSR:
+        default: Configure Server Side Routing
       Password: 
         default: Password
       NodeCount: 
@@ -43,6 +46,10 @@ Metadata:
         default: Key Name
       SSHCIDR: 
         default: SSH CIDR
+      VPCCIDR:
+        default: VPC CIDR
+      SubnetCIDR:
+        default: Subnet CIDR
 
 Parameters:
   GraphDatabaseVersion:
@@ -57,6 +64,14 @@ Parameters:
     AllowedValues:
       - 'True'
       - 'False'
+  SelectSSR:
+    Description: Install a Neo4J Cluster with Server Side Routing. Please note this will also provision a Network Load Balancer which will incur additional cost.
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+    ConstraintDescription: Specify if SSR is required
 
   GraphDataScienceLicenseKey:
     Description: License Key for Graph Data Science
@@ -125,17 +140,217 @@ Parameters:
     AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
     ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
 
+  VPCCIDR:
+    Description: VPC CIDR
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
+
+  SubnetCIDR:
+    Description: Subnet CIDR
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
+
+Conditions:
+  ConfigureSSR: !Equals
+    - !Ref SelectSSR
+    - true
+  NotConfigureSSR: !Equals
+    - !Ref SelectSSR
+    - false
+
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-0bceeac1c7f8d92c5
+      #BYOL: ami-0bceeac1c7f8d92c5
+      BYOL: ami-0eef5ac563b679bd6
 
 Resources:
+  Neo4jVPC:
+    Type: AWS::EC2::VPC
+#    Condition: ConfigureSSR
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jSubnet:
+    Type: AWS::EC2::Subnet
+#    Condition: ConfigureSSR
+    Properties:
+      CidrBlock: !Ref SubnetCIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      GatewayId: !Ref Neo4jInternetGateway
+      RouteTableId: !Ref Neo4jRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  Neo4jSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet
+
+  Neo4jInternetGateway:
+    Type: AWS::EC2::InternetGateway
+#    Condition: ConfigureSSR
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+#    Condition: ConfigureSSR
+    Properties:
+      InternetGatewayId: !Ref Neo4jInternetGateway
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jNetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: ConfigureSSR
+    Properties:
+      IpAddressType: ipv4
+      Name: !Ref 'AWS::StackName'
+      Scheme: internet-facing
+      Subnets:
+        - Ref: Neo4jSubnet
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      Type: network
+
+  Neo4jHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: ConfigureSSR
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7474
+      Protocol: TCP
+
+  Neo4jHTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: ConfigureSSR
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jHTTPSTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7473
+      Protocol: TCP
+
+
+  Neo4jHTTPTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: ConfigureSSR
+    Properties:
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'http'
+          - 'tg'
+      Port: 7474
+      Protocol: TCP
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+#      TargetGroupAttributes:
+#        - TargetGroupAttribute
+#      Targets:
+#        - TargetDescription
+#      TargetType: String
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jHTTPSTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: ConfigureSSR
+    Properties:
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'https'
+          - 'tg'
+      Port: 7473
+      Protocol: TCP
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      #      TargetGroupAttributes:
+      #        - TargetGroupAttribute
+      #      Targets:
+      #        - TargetDescription
+      #      TargetType: String
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jAutoScalingGroupSSR:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: ConfigureSSR
+    Properties:
+#      AvailabilityZones:
+#        Fn::GetAZs: ''
+      LaunchConfigurationName:
+        Ref: Neo4jLaunchConfiguration
+      MinSize: 1
+      MaxSize: 3
+      VPCZoneIdentifier:
+        - !Ref Neo4jSubnet
+      TargetGroupARNs:
+        - !Ref Neo4jHTTPTargetGroup
+        - !Ref Neo4jHTTPSTargetGroup
+      DesiredCapacity:
+        Ref: NodeCount
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+          PropagateAtLaunch: true
+
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: NotConfigureSSR
     Properties:
-      AvailabilityZones:
-        Fn::GetAZs: ''
+      #      AvailabilityZones:
+      #        Fn::GetAZs: ''
       LaunchConfigurationName:
         Ref: Neo4jLaunchConfiguration
       MinSize: 1
@@ -149,6 +364,7 @@ Resources:
         - Key: Name
           Value: !Ref 'AWS::StackName'
           PropagateAtLaunch: true
+
 
   Neo4jLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -330,6 +546,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Enable SSH and Neo4j External Ports
+      VpcId: !Ref Neo4jVPC
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: 22
@@ -348,43 +565,53 @@ Resources:
         ToPort: 7687
         CidrIp: 0.0.0.0/0
 
+
   Neo4jInternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Enable Neo4j Internal Ports
+      VpcId: !Ref Neo4jVPC
       SecurityGroupIngress:
       - IpProtocol: tcp
         FromPort: 5000
         ToPort: 5000
-        SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
       - IpProtocol: tcp
         FromPort: 6000
         ToPort: 6000
-        SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
       - IpProtocol: tcp
         FromPort: 7000
         ToPort: 7000
-        SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
       - IpProtocol: tcp
         FromPort: 7688
         ToPort: 7688
-        SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
       - IpProtocol: tcp
         FromPort: 2003
         ToPort: 2003
-        SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
       - IpProtocol: tcp
         FromPort: 2004
         ToPort: 2004
-        SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
       - IpProtocol: tcp
         FromPort: 3637
         ToPort: 3637
-        SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
       - IpProtocol: tcp
         FromPort: 5005
         ToPort: 5005
-        SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
+        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
 
 Outputs:
   Neo4jURL:

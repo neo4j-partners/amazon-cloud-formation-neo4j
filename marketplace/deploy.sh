@@ -5,14 +5,13 @@ STACK_NAME=$1
 TEMPLATE_BODY="file://neo4j.template.yaml"
 REGION=`aws configure get region`
 
-Password="password"
-#KeyName="neo4j-${REGION}"
-KeyName="harshit"
+Password="foo123"
+KeyName="neo4j-${REGION}"
 NodeCount="3"
 SSHCIDR="0.0.0.0/0"
 VPCCIDR="10.0.0.0/16"
 SubnetCIDR="10.0.1.0/24"
-SelectSSR=false
+SelectSSR=true
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \

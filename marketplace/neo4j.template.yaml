@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Neo4j Enterprise Edition
 Metadata:
-  AWS::CloudFormation::Interface: 
-    ParameterGroups: 
-      - Label: 
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
           default: "Neo4j Configuration"
         Parameters:
           - GraphDatabaseVersion
@@ -13,9 +13,9 @@ Metadata:
           - BloomLicenseKey
           - Password
           - SelectSSR
-      - Label: 
+      - Label:
           default: "Infrastructure Configuration"
-        Parameters: 
+        Parameters:
           - NodeCount
           - InstanceType
           - DiskSize
@@ -24,29 +24,29 @@ Metadata:
           - VPCCIDR
           - SubnetCIDR
     ParameterLabels:
-      GraphDatabaseVersion: 
+      GraphDatabaseVersion:
         default: Graph Database Version
-      InstallGraphDataScience: 
+      InstallGraphDataScience:
         default: Install Graph Data Science
-      GraphDataScienceLicenseKey: 
+      GraphDataScienceLicenseKey:
         default: Graph Data Science License Key
       InstallBloom:
         default: Install Bloom
-      BloomLicenseKey: 
+      BloomLicenseKey:
         default: Bloom License Key
       SelectSSR:
         default: Configure Server Side Routing
-      Password: 
+      Password:
         default: Password
-      NodeCount: 
+      NodeCount:
         default: Node Count
-      InstanceType: 
+      InstanceType:
         default: Instance Type
-      DiskSize: 
+      DiskSize:
         default: Disk Size
-      KeyName: 
+      KeyName:
         default: Key Name
-      SSHCIDR: 
+      SSHCIDR:
         default: SSH CIDR
       VPCCIDR:
         default: VPC CIDR
@@ -69,10 +69,10 @@ Parameters:
   SelectSSR:
     Description: Install a Neo4J Cluster with Server Side Routing. Please note this will also provision a Network Load Balancer which will incur additional cost.
     Type: String
-    Default: false
+    Default: 'False'
     AllowedValues:
-      - true
-      - false
+      - 'True'
+      - 'False'
     ConstraintDescription: Specify if SSR is required
 
   GraphDataScienceLicenseKey:
@@ -129,6 +129,8 @@ Parameters:
     Description: Size in GB of the EBS volume on each node
     Type: Number
     Default: 100
+    MinValue: 100
+    ConstraintDescription: "Minimum disk size should be 100"
 
   KeyName:
     Description: Name of an existing EC2 KeyPair
@@ -144,33 +146,57 @@ Parameters:
     Default: 0.0.0.0/0
 
   VPCCIDR:
-    Description: VPC CIDR (Specify an address range for the VPC. This is usually a X.X.X.X/16 range)
+    Description: VPC CIDR (Specify an address range for the VPC. This is usually a X.X.X.X/16 range. Default value 10.1.2.0/16 provided)
     Type: String
     MinLength: 9
     MaxLength: 18
     AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
     ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
+    Default: 10.1.2.0/16
 
   SubnetCIDR:
-    Description: Subnet CIDR (Specify an address range for the subnet. This is usually a X.X.X.X/24 range)
+    Description: Subnet CIDR (Specify an address range for the subnet. This is usually a X.X.X.X/24 range. Default value 10.1.2.1/24 provided)
     Type: String
     MinLength: 9
     MaxLength: 18
     AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
     ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
+    Default: 10.1.2.1/24
 
 Conditions:
   ConfigureSSR: !Equals
     - !Ref SelectSSR
-    - true
+    - 'True'
   NotConfigureSSR: !Equals
     - !Ref SelectSSR
-    - false
+    - 'False'
+
+Rules:
+  SSRCheck:
+    RuleCondition: !Equals
+      - !Ref SelectSSR
+      - 'True'
+    Assertions:
+      - Assert: !Not
+          - !Equals
+            - !Ref NodeCount
+            - '1'
+        AssertDescription: Node Count cannot be set to 1 when SSR is selected. Please set Node Count to 3 or set Server Side Routing to false.
+  GDSCheck:
+    RuleCondition: !Equals
+      - !Ref InstallGraphDataScience
+      - 'True'
+    Assertions:
+      - Assert: !Not
+          - !Equals
+            - !Ref NodeCount
+            - '3'
+        AssertDescription: Node Count cannot be set to 3 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
+
 
 Mappings:
   Neo4j:
     us-east-1:
-      #BYOL: ami-0bceeac1c7f8d92c5
       BYOL: ami-0eef5ac563b679bd6
 
 Resources:
@@ -191,9 +217,9 @@ Resources:
       CidrBlock: !Ref SubnetCIDR
       MapPublicIpOnLaunch: true
       AvailabilityZone: !Join
-          - ''
-          - - !Ref 'AWS::Region'
-            - 'a'
+        - ''
+        - - !Ref 'AWS::Region'
+          - 'a'
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -377,26 +403,26 @@ Resources:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
       ImageId: !FindInMap
-          - Neo4j
-          - !Ref 'AWS::Region'
-          - BYOL
+        - Neo4j
+        - !Ref 'AWS::Region'
+        - BYOL
       InstanceType:
         Ref: InstanceType
       SecurityGroups:
-      - Ref: Neo4jExternalSecurityGroup
-      - Ref: Neo4jInternalSecurityGroup
+        - Ref: Neo4jExternalSecurityGroup
+        - Ref: Neo4jInternalSecurityGroup
       KeyName:
         Ref: KeyName
       EbsOptimized: true
       IamInstanceProfile:
         Ref: Neo4jInstanceProfile
       BlockDeviceMappings:
-      - DeviceName: /dev/xvda
-        Ebs:
-          VolumeSize:
-            Ref: DiskSize
-          VolumeType: gp3
-          Encrypted: true
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize:
+              Ref: DiskSize
+            VolumeType: gp3
+            Encrypted: true
       UserData:
         Fn::Base64:
           !Join
@@ -475,7 +501,7 @@ Resources:
             - "sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${privateIP}/g /etc/neo4j/neo4j.conf\n"
 
             - "if [[ \"$nodeCount\" == 1 ]]; then\n"
-            - " if [[ \"$isSSREnabled\" == true ]]; then\n"
+            - " if [[ \"$isSSREnabled\" == True ]]; then\n"
             - "  echo SSR Cannot be enabled on a single node\n"
             - "  exit 1\n"
             - " else\n"
@@ -501,7 +527,7 @@ Resources:
             - "  sed -i s/#dbms.connector.http.advertised_address=:7474/dbms.connector.http.advertised_address=${privateIP}:7474/g /etc/neo4j/neo4j.conf\n"
             - "  sed -i s/#dbms.connector.https.advertised_address=:7473/dbms.connector.https.advertised_address=${privateIP}:7473/g /etc/neo4j/neo4j.conf\n"
 
-            - "  if [[ \"$isSSREnabled\" == true ]]; then\n"
+            - "  if [[ \"$isSSREnabled\" == True ]]; then\n"
             - "   sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf\n"
             - "   sed -i s/#dbms.routing.advertised_address=:7688/dbms.routing.advertised_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf\n"
             - "   sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf\n"
@@ -570,30 +596,30 @@ Resources:
     Type: AWS::IAM::InstanceProfile
     Properties:
       Roles:
-      - Ref: Neo4jRole
+        - Ref: Neo4jRole
   Neo4jRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - ec2.amazonaws.com
-          Action:
-          - sts:AssumeRole
-      Policies:
-      - PolicyName: Neo4jPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
           - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
             Action:
-            - autoscaling:DescribeAutoScalingInstances
-            - cloudformation:DescribeStack*
-            - ec2:DescribeInstances
-            Resource: "*"
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Neo4jPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:DescribeAutoScalingInstances
+                  - cloudformation:DescribeStack*
+                  - ec2:DescribeInstances
+                Resource: "*"
 
   Neo4jExternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -601,22 +627,22 @@ Resources:
       GroupDescription: Enable SSH and Neo4j External Ports
       VpcId: !Ref Neo4jVPC
       SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: 22
-        ToPort: 22
-        CidrIp: !Ref SSHCIDR
-      - IpProtocol: tcp
-        FromPort: 7473
-        ToPort: 7473
-        CidrIp: 0.0.0.0/0
-      - IpProtocol: tcp
-        FromPort: 7474
-        ToPort: 7474
-        CidrIp: 0.0.0.0/0
-      - IpProtocol: tcp
-        FromPort: 7687
-        ToPort: 7687
-        CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHCIDR
+        - IpProtocol: tcp
+          FromPort: 7473
+          ToPort: 7473
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 7474
+          ToPort: 7474
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          CidrIp: 0.0.0.0/0
 
 
   Neo4jInternalSecurityGroup:
@@ -625,51 +651,53 @@ Resources:
       GroupDescription: Enable Neo4j Internal Ports
       VpcId: !Ref Neo4jVPC
       SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: 5000
-        ToPort: 5000
-        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
-        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-      - IpProtocol: tcp
-        FromPort: 6000
-        ToPort: 6000
-        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
-        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-      - IpProtocol: tcp
-        FromPort: 7000
-        ToPort: 7000
-        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
-        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-      - IpProtocol: tcp
-        FromPort: 7688
-        ToPort: 7688
-        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
-        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-      - IpProtocol: tcp
-        FromPort: 2003
-        ToPort: 2003
-        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
-        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-      - IpProtocol: tcp
-        FromPort: 2004
-        ToPort: 2004
-        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
-        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-      - IpProtocol: tcp
-        FromPort: 3637
-        ToPort: 3637
-        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
-        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-      - IpProtocol: tcp
-        FromPort: 5005
-        ToPort: 5005
-        #SourceSecurityGroupName: !Ref Neo4jExternalSecurityGroup
-        SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 6000
+          ToPort: 6000
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 7000
+          ToPort: 7000
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 7688
+          ToPort: 7688
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 2003
+          ToPort: 2003
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 2004
+          ToPort: 2004
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 3637
+          ToPort: 3637
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 5005
+          ToPort: 5005
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
 
 Outputs:
+  Neo4jLoadBalancerURL:
+    Description: URL for Neo4j LoadBalancer
+    Value: !Join
+    - ''
+    - - 'http://'
+      - !GetAtt Neo4jNetworkLoadBalancer.DNSName
+      - ':'
+      - '7474'
+    Condition: ConfigureSSR
   Neo4jURL:
     Description: URL for Neo4j
     Value: 'You can login to Neo4j on port 7474 (http) or 7473 (https) of any node in the autoscaling group.'
+    Condition: NotConfigureSSR
   Neo4jUsername:
     Description: Username for Neo4j
     Value: 'The username is neo4j.  The password is what you provided to the template.'

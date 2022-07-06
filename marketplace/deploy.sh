@@ -6,8 +6,7 @@ TEMPLATE_BODY="file://neo4j.template.yaml"
 REGION=`aws configure get region`
 
 Password="foo123"
-#KeyName="neo4j-${REGION}"
-KeyName="harshit"
+KeyName="neo4j-${REGION}"
 NodeCount="3"
 SSHCIDR="0.0.0.0/0"
 VPCCIDR="10.0.0.0/16"

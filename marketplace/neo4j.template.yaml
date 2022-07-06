@@ -162,16 +162,6 @@ Conditions:
     - 1
 
 Rules:
-#  SSRCheck:
-#    RuleCondition: !Equals
-#      - !Ref SelectSSR
-#      - 'True'
-#    Assertions:
-#      - Assert: !Not
-#          - !Equals
-#            - !Ref NodeCount
-#            - '1'
-#        AssertDescription: Node Count cannot be set to 1 when SSR is selected. Please set Node Count to 3 or set Server Side Routing to false.
   GDSCheck:
     RuleCondition: !Equals
       - !Ref InstallGraphDataScience
@@ -182,7 +172,6 @@ Rules:
             - !Ref NodeCount
             - '3'
         AssertDescription: Node Count cannot be set to 3 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
-
 
 Mappings:
   Neo4j:

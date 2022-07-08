@@ -11,7 +11,6 @@ NodeCount="3"
 SSHCIDR="0.0.0.0/0"
 VPCCIDR="10.0.0.0/16"
 SubnetCIDR="10.0.1.0/24"
-SelectSSR='True'
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -26,5 +25,4 @@ ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=VPCCIDR,ParameterValue=${VPCCIDR} \
 ParameterKey=SubnetCIDR,ParameterValue=${SubnetCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=False \
-ParameterKey=InstallBloom,ParameterValue=False \
-ParameterKey=SelectSSR,ParameterValue=${SelectSSR}
+ParameterKey=InstallBloom,ParameterValue=False

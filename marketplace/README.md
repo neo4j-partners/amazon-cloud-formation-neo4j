@@ -8,8 +8,7 @@ If you're a Neo4j employee updating the AWS Marketplace listing, you're first go
 
 If you're setting up a publisher account for the first time, you'll need to add a role as decribed [here](https://docs.aws.amazon.com/marketplace/latest/userguide/ami-single-ami-products.html#single-ami-marketplace-ami-access).
 
-We've been using the AMI builder with the [build.sh](build.sh) script in this directory.  Marketplace has a requirement to disable password access to Marketplace VMs even though the platform images have it enabled.  The builder creates an AMI in a special builder account.  We've had to then copy that AMI to the publisher account manually because something in the Marketplace pipeline is broken.  This process seems like it's changing daily, so it's probably best to check with the AWS Marketplace operations people as you work through the process.
-
+We've been using Packer and a python script to generate AMIs, copy them across supported regions and update the CFT template accordingly with the new Mappings and Neo4j version. Please read the instructions inside internal-tools directory on how to trigger this process. 
 You'll then want to take the AMI ID from that and stuff it both into the CFT and the product load form.  In addition, login to [Marketplace Portal](https://aws.amazon.com/marketplace/management/manage-products/?#/share) and add the AMI.
 
 # Updating the Marketplace Listing

@@ -9,7 +9,7 @@ If you're a Neo4j employee updating the AWS Marketplace listing, you're first go
 If you're setting up a publisher account for the first time, you'll need to add a role as decribed [here](https://docs.aws.amazon.com/marketplace/latest/userguide/ami-single-ami-products.html#single-ami-marketplace-ami-access).
 
 We've been using Packer and a python script to generate AMIs, copy them across supported regions and update the CFT template accordingly with the new Mappings and Neo4j version. Please read the instructions inside internal-tools directory on how to trigger this process. 
-You'll then want to take the AMI ID from that and stuff it both into the CFT and the product load form.  In addition, login to [Marketplace Portal](https://aws.amazon.com/marketplace/management/manage-products/?#/share) and add the AMI.
+You'll then want to take the AMI ID from that and stuff it into the product load form.  In addition, login to [Marketplace Portal](https://aws.amazon.com/marketplace/management/manage-products/?#/share) and add the AMI.
 
 # Updating the Marketplace Listing
 CFT deploys in AWS Marketplace aren't self service.  At some point that might change.  So, next up is updating the product load form.  That's stored [here](https://docs.google.com/spreadsheets/d/1Nmpw3etZX7xj6nQgS5w3K2B-i0gJevdQ/edit?usp=sharing&ouid=115505246243451814800&rtpof=true&sd=true).  Note that AWS will almost certainly continue to rev the product load form.  So, you might periodically be forced to grab a new copy from to publisher portal.

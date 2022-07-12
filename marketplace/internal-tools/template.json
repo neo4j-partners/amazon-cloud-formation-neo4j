@@ -1,0 +1,53 @@
+{
+  "variables": {
+    "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
+    "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
+    "neo4j_version": "4.4.8",
+    "region": "us-east-1",
+    "instance_type": "t2.micro",
+    "destination_regions": "us-east-1,us-east-2,us-west-1,us-west-2,eu-west-1,eu-west-3,eu-central-1,ap-northeast-1,ap-northeast-2,ap-south-1,sa-east-1,ap-southeast-1,ap-southeast-2",
+    "base_owner": "385155106615"
+  },
+  "builders": [
+    {
+      "name": "Neo4j",
+      "ami_description": "Neo4j-{{user `neo4j_version` | clean_resource_name}}-AMI",
+      "type": "amazon-ebs",
+      "access_key": "{{user `aws_access_key`}}",
+      "secret_key": "{{user `aws_secret_key`}}",
+      "region": "{{user `region`}}",
+      "subnet_id": "{{user `subnet_id`}}",
+      "security_group_id": "{{user `security_group_id`}}",
+      "associate_public_ip_address": true,
+      "source_ami_filter": {
+        "filters": {
+          "virtualization-type": "hvm",
+          "architecture": "x86_64",
+          "name": "*amzn2-ami-hvm-*",
+          "root-device-type": "ebs"
+        },
+        "owners": "137112412989",
+        "most_recent": true
+      },
+      "instance_type": "{{ user `instance_type` }}",
+      "ssh_username": "ec2-user",
+      "ami_name": "Neo4j-{{user `neo4j_version` | clean_resource_name}}-Marketplace-Image-Public-Amzn-Linux",
+      "ami_regions": "{{user `destination_regions`}}",
+      "ami_groups": [
+        "all"
+      ],
+      "tags": {
+        "ami-creation-date": "{{isotime \"2006-01-02T03:04:05Z\"}}"
+      }
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "inline": [
+        "sudo rm -f /home/ubuntu/.ssh/authorized_keys",
+        "sudo rm -f /root/.ssh/authorized_keys"
+      ]
+    }
+  ]
+}

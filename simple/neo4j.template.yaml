@@ -18,7 +18,6 @@ Metadata:
           - NodeCount
           - InstanceType
           - DiskSize
-          - KeyName
           - ImageId
     ParameterLabels:
       GraphDatabaseVersion: 
@@ -39,8 +38,6 @@ Metadata:
         default: Instance Type
       DiskSize: 
         default: Disk Size
-      KeyName: 
-        default: Key Name
       ImageId: 
         default: AMI ID
 
@@ -113,10 +110,6 @@ Parameters:
     Type: Number
     Default: 100
 
-  KeyName:
-    Description: Name of an existing EC2 KeyPair
-    Type: AWS::EC2::KeyPair::KeyName
-
   ImageId:
     Description: AMI ID for each node
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
@@ -151,8 +144,6 @@ Resources:
       SecurityGroups:
       - Ref: Neo4jExternalSecurityGroup
       - Ref: Neo4jInternalSecurityGroup
-      KeyName:
-        Ref: KeyName
       EbsOptimized: true
       IamInstanceProfile:
         Ref: Neo4jInstanceProfile

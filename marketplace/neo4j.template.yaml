@@ -33,8 +33,6 @@ Metadata:
         default: Install Bloom
       BloomLicenseKey:
         default: Bloom License Key
-      SelectSSR:
-        default: Configure Server Side Routing
       Password:
         default: Password
       NodeCount:

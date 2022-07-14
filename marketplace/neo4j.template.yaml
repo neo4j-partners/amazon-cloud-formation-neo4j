@@ -19,8 +19,6 @@ Metadata:
           - InstanceType
           - DiskSize
           - SSHCIDR
-          - VPCCIDR
-          - SubnetCIDR
     ParameterLabels:
       GraphDatabaseVersion:
         default: Graph Database Version
@@ -42,10 +40,6 @@ Metadata:
         default: Disk Size
       SSHCIDR:
         default: SSH CIDR
-      VPCCIDR:
-        default: VPC CIDR
-      SubnetCIDR:
-        default: Subnet CIDR
 
 Parameters:
   GraphDatabaseVersion:
@@ -126,24 +120,6 @@ Parameters:
     AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
     ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
 
-  VPCCIDR:
-    Description: VPC CIDR (Specify an address range for the VPC. This is usually a X.X.X.X/16 range. Default value 10.1.2.0/16 provided)
-    Type: String
-    MinLength: 9
-    MaxLength: 18
-    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
-    ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
-    Default: 10.1.2.0/16
-
-  SubnetCIDR:
-    Description: Subnet CIDR (Specify an address range for the subnet. This is usually a X.X.X.X/24 range. Default value 10.1.2.1/24 provided)
-    Type: String
-    MinLength: 9
-    MaxLength: 18
-    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
-    ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
-    Default: 10.1.2.1/24
-
 Conditions:
   Cluster: !Equals
     - !Ref NodeCount
@@ -169,7 +145,7 @@ Resources:
     Type: AWS::EC2::VPC
     Properties:
       EnableDnsHostnames: true
-      CidrBlock: !Ref VPCCIDR
+      CidrBlock: 10.0.0.0/16
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -179,7 +155,7 @@ Resources:
   Neo4jSubnet:
     Type: AWS::EC2::Subnet
     Properties:
-      CidrBlock: !Ref SubnetCIDR
+      CidrBlock: 10.0.1.0/24
       MapPublicIpOnLaunch: true
       AvailabilityZone: !Join
         - ''

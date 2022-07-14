@@ -6,7 +6,7 @@ TEMPLATE_BODY="file://neo4j.template.yaml"
 REGION=`aws configure get region`
 
 Password="foo123"
-NodeCount="1"
+NodeCount="3"
 SSHCIDR="0.0.0.0/0"
 
 aws cloudformation create-stack \

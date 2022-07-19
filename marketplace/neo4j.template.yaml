@@ -216,6 +216,13 @@ Resources:
           Value: !Ref 'AWS::StackName'
       Type: network
 
+  Neo4jHTTPSListenerCertificate:
+    Type: AWS::ElasticLoadBalancingV2::ListenerCertificate
+    Properties:
+      Certificates:
+        - CertificateArn: arn:aws:acm:us-east-1:535893049302:certificate/83a0a39c-4ca5-41b1-afe4-ccbee7deb4d1
+      ListenerArn: !Ref Neo4jHTTPSListener
+
   Neo4jHTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -233,8 +240,24 @@ Resources:
         - TargetGroupArn: !Ref Neo4jHTTPSTargetGroup
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Certificates:
+        - CertificateArn: arn:aws:acm:us-east-1:535893049302:certificate/83a0a39c-4ca5-41b1-afe4-ccbee7deb4d1
       Port: 7473
-      Protocol: TCP
+      Protocol: TLS
+
+  Neo4jRecordSetSSLEntry:
+    Type: AWS::Route53::RecordSet
+    Properties:
+#      HostedZoneName: neo4j.ninja
+      HostedZoneId: ZXY11KLRHGLOC
+      Name: !Join
+        - '.'
+        - - !Ref 'AWS::StackName'
+          - 'neo4j.ninja'
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+        HostedZoneId: !GetAtt Neo4jNetworkLoadBalancer.CanonicalHostedZoneID
 
   Neo4jBoltListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -272,7 +295,7 @@ Resources:
           - 'https'
           - 'tg'
       Port: 7473
-      Protocol: TCP
+      Protocol: TLS
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'

@@ -17,6 +17,7 @@
       "secret_key": "{{user `aws_secret_key`}}",
       "region": "{{user `region`}}",
       "subnet_id": "{{user `subnet_id`}}",
+      "force_deregister": true,
       "security_group_id": "{{user `security_group_id`}}",
       "associate_public_ip_address": true,
       "source_ami_filter": {
@@ -45,7 +46,7 @@
     {
       "type": "shell",
       "inline": [
-        "sudo rm -f /home/ubuntu/.ssh/authorized_keys",
+        "sudo rm -f ~/.ssh/authorized_keys",
         "sudo rm -f /root/.ssh/authorized_keys"
       ]
     }

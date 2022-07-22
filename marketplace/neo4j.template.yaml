@@ -594,4 +594,4 @@ Outputs:
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-0951f7b1960e213ca
+      BYOL: ami-0129929d6c10908c8

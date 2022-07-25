@@ -5,36 +5,16 @@ This is an Amazon CloudFormation Template (CFT) that deploys Neo4j Enterprise on
 To deploy this template from the command line, follow these instructions.
 
 ## Environment Setup
-First we need to install and configure the AWS CLI.  Follow the instructions Amazon provides [here](http://docs.aws.amazon.com/cli/latest/userguide/installing.html).  Basically all you need to do is:
+The first step is to install and configure the AWS CLI.  Amazon provides instructions [here](http://docs.aws.amazon.com/cli/latest/userguide/installing.html).  
 
     pip install --upgrade --user awscli
     aws configure
 
-You can confirm the CLI is working properly by running:
+The CLI can be tested with the following command:
 
     aws ec2 describe-account-attributes
 
-If you don't have a key, you'll also need to create one.  That can be done with these commands:
-
-    REGION=`aws configure get region`
-    aws ec2 create-key-pair \
-      --region ${REGION} \
-      --key-name ${KEY_NAME} \
-      --query 'KeyMaterial' \
-      --output text > ${KEY_FILENAME}
-    chmod 600 ${KEY_FILENAME}
-    echo "Key saved to ${KEY_FILENAME}"
-
-You should check ~/.ssh/ to see that key is saved.
-
-    cd ~/.ssh
-    ls -la
-
-You shouold see a file like this:
-
-    -rw-------   1 <name> <admin> 1679 Mar 29 14:09 neo4j-us-west-1.pem
-    
-Then you'll want to clone this repo.  You can do that with the command:
+The next step is to clone this repository:
 
     git clone https://github.com/neo4j-partners/amazon-cloud-formation-neo4j.git
     cd amazon-cloud-formation-neo4j

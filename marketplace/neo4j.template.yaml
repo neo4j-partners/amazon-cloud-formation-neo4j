@@ -152,6 +152,12 @@ Rules:
               - '3'
           AssertDescription: Node Count cannot be set to 3 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
 
+Conditions:
+  CreateReadReplicas: !Not
+    - !Equals
+      - !Ref ReadReplicaCount
+      - '0'
+
 Resources:
   Neo4jVPC:
     Type: AWS::EC2::VPC
@@ -524,6 +530,7 @@ Resources:
 
   Neo4jReadReplicaAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateReadReplicas
     DependsOn: Neo4jAutoScalingGroup
     Properties:
       AvailabilityZones:

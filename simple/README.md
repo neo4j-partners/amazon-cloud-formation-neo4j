@@ -17,8 +17,6 @@ You can confirm the CLI is working properly by running:
 If you don't have a key, you'll also need to create one.  That can be done with these commands:
 
     REGION=`aws configure get region`
-    KEY_NAME="neo4j-${REGION}"
-    KEY_FILENAME=~/.ssh/${KEY_NAME}.pem
     aws ec2 create-key-pair \
       --region ${REGION} \
       --key-name ${KEY_NAME} \

@@ -327,6 +327,10 @@ Resources:
 
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    CreationPolicy:
+      ResourceSignal:
+        Count: !Ref NodeCount
+        Timeout: PT3M
     Properties:
       AvailabilityZones:
         - !Join
@@ -419,6 +423,18 @@ Resources:
             - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
             - "\n"
 
+            - "stackName="
+            - Ref: AWS::StackName
+            - "\n"
+
+            - "region="
+            - Ref: AWS::Region
+            - "\n"
+
+            - "loadBalancerDNSName="
+            - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
+            - "\n"
+
             - "echo Adding neo4j yum repo...\n"
             - "rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
             - "echo \""
@@ -431,6 +447,7 @@ Resources:
             - "echo Installing Graph Database...\n"
             - "export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
             - "yum -y install neo4j-enterprise-${graphDatabaseVersion}\n"
+            - "yum update -y aws-cfn-bootstrap\n"
 
             - "echo Installing APOC...\n"
             - "mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
@@ -530,12 +547,17 @@ Resources:
             - "echo Starting Neo4j...\n"
             - "service neo4j start\n"
             - "neo4j-admin set-initial-password ${password}\n"
+            - "/opt/aws/bin/cfn-signal -e $? --stack ${stackName} --resource Neo4jAutoScalingGroup --region ${region}\n"
 
 
   Neo4jReadReplicaAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Condition: CreateReadReplicas
     DependsOn: Neo4jAutoScalingGroup
+    CreationPolicy:
+      ResourceSignal:
+        Count: !Ref ReadReplicaCount
+        Timeout: PT3M
     Properties:
       AvailabilityZones:
         - !Join
@@ -564,6 +586,7 @@ Resources:
 
   Neo4jReadReplicaLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
+    Condition: CreateReadReplicas
     Properties:
       ImageId: !FindInMap
         - Neo4j
@@ -607,6 +630,14 @@ Resources:
             - Ref: ReadReplicaCount
             - "\n"
 
+            - "stackName="
+            - Ref: AWS::StackName
+            - "\n"
+
+            - "region="
+            - Ref: AWS::Region
+            - "\n"
+
             - "echo Adding neo4j yum repo...\n"
             - "rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
             - "echo \""
@@ -619,6 +650,7 @@ Resources:
             - "echo Installing Graph Database...\n"
             - "export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
             - "yum -y install neo4j-enterprise-${graphDatabaseVersion}\n"
+            - "yum update -y aws-cfn-bootstrap\n"
 
             - "echo Installing APOC...\n"
             - "mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
@@ -652,6 +684,7 @@ Resources:
             - "echo Starting Neo4j...\n"
             - "service neo4j start\n"
             - "neo4j-admin set-initial-password ${password}\n"
+            - "/opt/aws/bin/cfn-signal -e $? --stack ${stackName} --resource Neo4jReadReplicaAutoScalingGroup --region ${region}\n"
 
   Neo4jInstanceProfile:
     Type: AWS::IAM::InstanceProfile

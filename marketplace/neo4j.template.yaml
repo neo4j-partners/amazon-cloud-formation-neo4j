@@ -414,6 +414,10 @@ Resources:
             - Ref: ReadReplicaCount
             - "\n"
 
+            - "loadBalancerDNSName="
+            - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
+            - "\n"
+
             - "echo Adding neo4j yum repo...\n"
             - "rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
             - "echo \""
@@ -460,7 +464,7 @@ Resources:
             - "  echo Running on a single node.\n"
 
             - "  if [[ \"$readReplicaCount\" == 0 ]]; then\n"
-            - "     sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${publicHostname}/g /etc/neo4j/neo4j.conf\n"
+            - "     sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${loadBalancerDNSName}/g /etc/neo4j/neo4j.conf\n"
             - "  else\n"
             - "     sed -i s/#dbms.mode=CORE/dbms.mode=SINGLE/g /etc/neo4j/neo4j.conf\n"
             - "     sed -i '$a dbms.clustering.enable=true' /etc/neo4j/neo4j.conf\n"
@@ -483,16 +487,10 @@ Resources:
             - "echo Turning on SSL...\n"
             - "sed -i 's/dbms.connector.https.enabled=false/dbms.connector.https.enabled=true/g' /etc/neo4j/neo4j.conf\n"
 
-
-
-#            - "/etc/pki/tls/certs/make-dummy-cert cert\n"
-#            - "awk '/-----BEGIN PRIVATE KEY-----/,/-----END PRIVATE KEY-----/' cert > private.key\n"
-#            - "awk '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/' cert > public.crt\n"
-
             - "openssl req -newkey rsa:2048 -nodes -keyout privatekey.pem -x509 -days 365 -out public.pem -subj \"/C=GB/ST=London/L=London/O=Neo4j/OU=IT Department\"\n"
 
-            - "for service in bolt https cluster; do\n"
-#            - "for service in https; do\n"
+#            - "for service in bolt https cluster; do\n"
+            - "for service in https bolt cluster; do\n"
 #            - "  sed -i \"s/#dbms.ssl.policy.${service}/dbms.ssl.policy.${service}/g\" /etc/neo4j/neo4j.conf\n"
             - "  mkdir -p /var/lib/neo4j/certificates/${service}/trusted\n"
             - "  mkdir -p /var/lib/neo4j/certificates/${service}/revoked\n"
@@ -505,8 +503,10 @@ Resources:
             - " echo dbms.ssl.policy.${service}.public_certificate=public.pem >> /etc/neo4j/neo4j.conf\n"
             - " echo dbms.ssl.policy.${service}.client_auth=NONE >> /etc/neo4j/neo4j.conf\n"
             - " echo dbms.ssl.policy.${service}.enabled=true >> /etc/neo4j/neo4j.conf\n"
-#            - " echo dbms.ssl.policy.https.trust_all=true >> /etc/neo4j/neo4j.conf\n"
+            - " echo dbms.ssl.policy.${service}.trust_all=true >> /etc/neo4j/neo4j.conf\n"
             - "done\n"
+
+            - " echo dbms.connector.bolt.tls_level=OPTIONAL >> /etc/neo4j/neo4j.conf\n"
 
             - "chown -R neo4j:neo4j /var/lib/neo4j/certificates\n"
             - "chmod -R 755 /var/lib/neo4j/certificates\n"

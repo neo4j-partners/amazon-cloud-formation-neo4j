@@ -115,6 +115,7 @@ Parameters:
       - t3.medium
       - t3.large
       - t3.xlarge
+      - t3.2xlarge
       - r6i.large
       - r6i.xlarge
       - r6i.2xlarge

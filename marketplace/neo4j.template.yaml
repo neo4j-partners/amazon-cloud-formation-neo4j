@@ -415,6 +415,10 @@ Resources:
             - Ref: ReadReplicaCount
             - "\n"
 
+            - "loadBalancerDNSName="
+            - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
+            - "\n"
+
             - "echo Adding neo4j yum repo...\n"
             - "rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
             - "echo \""
@@ -441,7 +445,6 @@ Resources:
             - "sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
 
             - "privateIP=$(hostname -i | awk {'print $NF'})\n"
-            - "publicHostname=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname)\n"
 
             - "function set_cluster_configs {\n"
             - "   sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${privateIP}/g /etc/neo4j/neo4j.conf\n"
@@ -461,7 +464,7 @@ Resources:
             - "  echo Running on a single node.\n"
 
             - "  if [[ \"$readReplicaCount\" == 0 ]]; then\n"
-            - "     sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${publicHostname}/g /etc/neo4j/neo4j.conf\n"
+            - "     sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${loadBalancerDNSName}/g /etc/neo4j/neo4j.conf\n"
             - "  else\n"
             - "     sed -i s/#dbms.mode=CORE/dbms.mode=SINGLE/g /etc/neo4j/neo4j.conf\n"
             - "     sed -i '$a dbms.clustering.enable=true' /etc/neo4j/neo4j.conf\n"

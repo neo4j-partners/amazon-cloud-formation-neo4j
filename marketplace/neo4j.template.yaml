@@ -15,7 +15,7 @@ Metadata:
       - Label:
           default: "Infrastructure Configuration"
         Parameters:
-          - NodeCount
+          - CoreInstanceCount
           - ReadReplicaCount
           - InstanceType
           - DiskSize
@@ -33,8 +33,8 @@ Metadata:
         default: Bloom License Key
       Password:
         default: Password
-      NodeCount:
-        default: Node Count
+      CoreInstanceCount:
+        default: Core Instance Count
       ReadReplicaCount:
         default: Read Replica Count
       InstanceType:
@@ -82,7 +82,7 @@ Parameters:
     MinLength: 6
     NoEcho: true
 
-  NodeCount:
+  CoreInstanceCount:
     Description: Number of core nodes
     Type: Number
     Default: 3
@@ -149,7 +149,7 @@ Rules:
       Assertions:
         - Assert: !Not
             - !Equals
-              - !Ref NodeCount
+              - !Ref CoreInstanceCount
               - '3'
           AssertDescription: Node Count cannot be set to 3 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
 
@@ -354,14 +354,14 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     CreationPolicy:
       ResourceSignal:
-        Count: !Ref NodeCount
+        Count: !Ref CoreInstanceCount
         Timeout: PT3M
     Properties:
       AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ]]
       LaunchConfigurationName:
         Ref: Neo4jLaunchConfiguration
-      MinSize: !Ref NodeCount
-      MaxSize: !Ref NodeCount
+      MinSize: !Ref CoreInstanceCount
+      MaxSize: !Ref CoreInstanceCount
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet1
         - !Ref Neo4jSubnet2
@@ -370,7 +370,7 @@ Resources:
         - Ref: Neo4jHTTPSTargetGroup
         - Ref: Neo4jBoltTargetGroup
       DesiredCapacity:
-        Ref: NodeCount
+        Ref: CoreInstanceCount
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -434,7 +434,7 @@ Resources:
             - "\n"
 
             - "nodeCount="
-            - Ref: NodeCount
+            - Ref: CoreInstanceCount
             - "\n"
 
             - "readReplicaCount="
@@ -478,8 +478,8 @@ Resources:
             - "echo Configuring extensions and security in neo4j.conf...\n"
             - "sed -i s~#dbms.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~dbms.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
             - "sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
-            - "sed -i '$a dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*' /etc/neo4j/neo4j.conf\n"
-            - "sed -i '$a dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*' /etc/neo4j/neo4j.conf\n"
+            - "echo dbms.security.http_auth_allowlist=/,/browser.*,/bloom.* >> /etc/neo4j/neo4j.conf\n"
+            - "echo dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.* >> /etc/neo4j/neo4j.conf\n"
 
             - "echo Configuring network in neo4j.conf...\n"
             - "sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
@@ -507,7 +507,7 @@ Resources:
             - "     sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${loadBalancerDNSName}/g /etc/neo4j/neo4j.conf\n"
             - "  else\n"
             - "     sed -i s/#dbms.mode=CORE/dbms.mode=SINGLE/g /etc/neo4j/neo4j.conf\n"
-            - "     sed -i '$a dbms.clustering.enable=true' /etc/neo4j/neo4j.conf\n"
+            - "     echo dbms.clustering.enable=true >> /etc/neo4j/neo4j.conf\n"
             - "     set_cluster_configs\n"
             - "  fi\n"
 
@@ -523,25 +523,6 @@ Resources:
             - "  sed -i s/#dbms.mode=CORE/dbms.mode=CORE/g /etc/neo4j/neo4j.conf\n"
             - "  set_cluster_configs\n"
             - "fi\n"
-
-            - "echo Turning on SSL...\n"
-            - "sed -i 's/dbms.connector.https.enabled=false/dbms.connector.https.enabled=true/g' /etc/neo4j/neo4j.conf\n"
-
-            - "/etc/pki/tls/certs/make-dummy-cert cert\n"
-            - "awk '/-----BEGIN PRIVATE KEY-----/,/-----END PRIVATE KEY-----/' cert > private.key\n"
-            - "awk '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/' cert > public.crt\n"
-
-            - "#for service in bolt https cluster backup; do\n"
-            - "for service in https; do\n"
-            - "  sed -i \"s/#dbms.ssl.policy.${service}/dbms.ssl.policy.${service}/g\" /etc/neo4j/neo4j.conf\n"
-            - "  mkdir -p /var/lib/neo4j/certificates/${service}/trusted\n"
-            - "  mkdir -p /var/lib/neo4j/certificates/${service}/revoked\n"
-            - "  cp private.key /var/lib/neo4j/certificates/${service}\n"
-            - "  cp public.crt /var/lib/neo4j/certificates/${service}\n"
-            - "done\n"
-
-            - "chown -R neo4j:neo4j /var/lib/neo4j/certificates\n"
-            - "chmod -R 755 /var/lib/neo4j/certificates\n"
 
             - "if [[ $installGraphDataScience == True && $nodeCount == 1 ]]; then\n"
             - "  echo Installing Graph Data Science...\n"
@@ -644,7 +625,7 @@ Resources:
             - "\n"
 
             - "nodeCount="
-            - Ref: NodeCount
+            - Ref: CoreInstanceCount
             - "\n"
 
             - "readReplicaCount="
@@ -680,8 +661,8 @@ Resources:
             - "echo Configuring extensions and security in neo4j.conf...\n"
             - "sed -i s~#dbms.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~dbms.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
             - "sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
-            - "sed -i '$a dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*' /etc/neo4j/neo4j.conf\n"
-            - "sed -i '$a dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*' /etc/neo4j/neo4j.conf\n"
+            - "echo dbms.security.http_auth_allowlist=/,/browser.*,/bloom.* >> /etc/neo4j/neo4j.conf\n"
+            - "echo dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.* >> /etc/neo4j/neo4j.conf\n"
 
             - "echo Configuring network in neo4j.conf...\n"
             - "sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"

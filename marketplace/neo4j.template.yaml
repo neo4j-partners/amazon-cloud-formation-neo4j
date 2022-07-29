@@ -171,21 +171,38 @@ Resources:
         - Key: Name
           Value: !Ref 'AWS::StackName'
 
-  Neo4jSubnet:
+  Neo4jSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       CidrBlock: 10.0.1.0/24
       MapPublicIpOnLaunch: true
-      AvailabilityZone: !Join
-        - ''
-        - - !Ref 'AWS::Region'
-          - 'a'
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
+
+  Neo4jSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
 
   Neo4jRouteTable:
     Type: AWS::EC2::RouteTable
@@ -204,11 +221,18 @@ Resources:
       RouteTableId: !Ref Neo4jRouteTable
       DestinationCidrBlock: 0.0.0.0/0
 
-  Neo4jSubnetRouteTableAssociation:
+  Neo4jSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref Neo4jRouteTable
-      SubnetId: !Ref Neo4jSubnet
+      SubnetId: !Ref Neo4jSubnet1
+
+
+  Neo4jSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet2
 
   Neo4jInternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -235,7 +259,8 @@ Resources:
           - 'nlb'
       Scheme: internet-facing
       Subnets:
-        - Ref: Neo4jSubnet
+        - Ref: Neo4jSubnet1
+        - Ref: Neo4jSubnet2
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -332,17 +357,14 @@ Resources:
         Count: !Ref NodeCount
         Timeout: PT3M
     Properties:
-      AvailabilityZones:
-        - !Join
-          - ''
-          - - !Ref 'AWS::Region'
-            - 'a'
+      AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ]]
       LaunchConfigurationName:
         Ref: Neo4jLaunchConfiguration
       MinSize: !Ref NodeCount
       MaxSize: !Ref NodeCount
       VPCZoneIdentifier:
-        - !Ref Neo4jSubnet
+        - !Ref Neo4jSubnet1
+        - !Ref Neo4jSubnet2
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jHTTPSTargetGroup
@@ -560,17 +582,14 @@ Resources:
         Count: !Ref ReadReplicaCount
         Timeout: PT3M
     Properties:
-      AvailabilityZones:
-        - !Join
-          - ''
-          - - !Ref 'AWS::Region'
-            - 'a'
+      AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ]]
       LaunchConfigurationName:
         Ref: Neo4jReadReplicaLaunchConfiguration
       MinSize: !Ref ReadReplicaCount
       MaxSize: !Ref ReadReplicaCount
       VPCZoneIdentifier:
-        - !Ref Neo4jSubnet
+        - !Ref Neo4jSubnet1
+        - !Ref Neo4jSubnet2
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jHTTPSTargetGroup

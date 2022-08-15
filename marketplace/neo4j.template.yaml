@@ -480,7 +480,7 @@ Resources:
             - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
             - "\n"
 
-            - "wget https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/scripts/marketplace/core.sh\n"
+            - "wget https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/main/marketplace/core.sh\n"
             - "chmod +x core.sh\n"
             - "./core.sh ${graphDatabaseVersion} ${installGraphDataScience} ${graphDataScienceLicenseKey} ${installBloom} ${bloomLicenseKey} ${password} ${nodeCount} ${readReplicaCount} ${loadBalancerDNSName} ${stackName} ${region} ${loadBalancerDNSName}\n"
 
@@ -571,7 +571,7 @@ Resources:
             - Ref: AWS::Region
             - "\n"
 
-            - "wget https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/scripts/marketplace/readreplica.sh\n"
+            - "wget https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/main/marketplace/readreplica.sh\n"
             - "chmod +x readreplica.sh\n"
             - "./readreplica.sh ${graphDatabaseVersion} ${password} ${nodeCount} ${readReplicaCount} ${stackName} ${region}\n"
 

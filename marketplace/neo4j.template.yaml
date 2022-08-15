@@ -572,8 +572,8 @@ Resources:
             - "\n"
 
             - "wget https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/scripts/marketplace/readreplica.sh\n"
-            - "chmod +x core.sh\n"
-            - "./core.sh ${graphDatabaseVersion} ${password} ${nodeCount} ${readReplicaCount} ${stackName} ${region}\n"
+            - "chmod +x readreplica.sh\n"
+            - "./readreplica.sh ${graphDatabaseVersion} ${password} ${nodeCount} ${readReplicaCount} ${stackName} ${region}\n"
 
 
 

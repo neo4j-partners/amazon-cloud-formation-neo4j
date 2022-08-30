@@ -1,7 +1,8 @@
-# marketplace
-This template is used by the Neo4j AWS Marketplace offer. It is not intended to be used outside the marketplace. 
+# amazon-cloud-formation-neo4j
+This is the Amazon CloudFormation Templates (CFT) that deploys Neo4j Enterprise on AWS. This set up Neo4j Graph Database, Graph Data Science and Bloom.
 
-Unless you are a Neo4j employee updating the AWS Marketplace listing, you probably want to be using the [Marketplace listing](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4) itself.
+It's easiest to deploy that template directly from the AWS Marketplace [here](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4). 
+
 
 # Updating the AMI
 If you're a Neo4j employee updating the AWS Marketplace listing, you're first going to have to get a new AMI ID.  First off, make extra special sure you do this work in the AWS account associated with our publisher.  It's seems AMI sharing across accounts has bugs, so you want to avoid needing to use that. 

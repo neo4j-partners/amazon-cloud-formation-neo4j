@@ -1,18 +1,52 @@
 # amazon-cloud-formation-neo4j
-This is the Amazon CloudFormation Templates (CFT) that deploys Neo4j Enterprise on AWS. This set up Neo4j Graph Database, Graph Data Science and Bloom.
+This repository holds the Amazon CloudFormation Template (CFT) that deploys Neo4j Enterprise on the Amazon Web Services (AWS) platform (optionally including Neo4j Graph Data Science and Neo4j Bloom)   
 
-It's easiest to deploy that template directly from the AWS Marketplace [here](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4). 
+This codebase is also used (without modification) Neo4j to deploy the official Neo4j offering into the AWS Marketplace. 
+
+Therefore, the easiest method to deploy Neo4j on AWS Elastic Compute Cloud (EC2) instances, is to go directly to the [AWS Marketplace]https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4)
 
 
-# Updating the AMI
-If you're a Neo4j employee updating the AWS Marketplace listing, you're first going to have to get a new AMI ID.  First off, make extra special sure you do this work in the AWS account associated with our publisher.  It's seems AMI sharing across accounts has bugs, so you want to avoid needing to use that. 
+# Provisioned Resources
+The following resources are created by the CFT, and users will need to ensure they have the correct permissions within AWS to provision them:
+
+Users are reminded that cloud resources incur costs.
+
+## Single Instance
+- 1 VPC, with a CIDR Range of 10.0.0.0/16
+- 3 Subnets, distributed evenly across 3 Availability zones, with the following CIDR Ranges:
+  - 10.0.1.0/24
+  - 10.0.2.0/24
+  - 10.0.3.0/24
+- 1 or 3 EC2 instances (Depending on whether a single instance, or a 3 instance cluster is selected )
+- 1 Network (Layer 4) Load Balancer
+
+## Three node cluster
+- 1 VPC, with a CIDR Range of 10.0.0.0/16
+- 3 Subnets, distributed evenly across 3 Availability zones, with the following CIDR Ranges:
+  - 10.0.1.0/24
+  - 10.0.2.0/24
+  - 10.0.3.0/24
+- 3 EC2 instances (Depending on whether a single instance, or a 3 instance cluster is selected )
+- 1 Network (Layer 4) Load Balancer
+
+![image](aws-3-instance-cluster.png)
+
+## Common Considerations
+- All users are reminded that the provisioning of cloud resources will incur costs
+- Users will need to ensure that they have the correct permissions with AWS to deploy the CFT and create the associated cloud resources
+- Autoscaling groups are included as part of this topology which means that EC2 instances will be re-created if deleted.  This should be considered default and expected behaviour
+- To delete all resources, users should delete the CloudFormation template, rather than attempting to delete individual resources within AWS.
+
+# Updating the AMI (For Neo4j Employees)
+To updating the AWS Marketplace listing, a new AMI ID is required.  This should be obtained via the AWS account associated with Neo4j's publisher.  
 
 If you're setting up a publisher account for the first time, you'll need to add a role as decribed [here](https://docs.aws.amazon.com/marketplace/latest/userguide/ami-single-ami-products.html#single-ami-marketplace-ami-access).
 
-We've been using Packer and a python script to generate AMIs, copy them across supported regions and update the CFT template accordingly with the new Mappings and Neo4j version. Please read the instructions inside internal-tools directory on how to trigger this process. 
-You'll then want to take the AMI ID from that and stuff it into the product load form.  In addition, login to [Marketplace Portal](https://aws.amazon.com/marketplace/management/manage-products/?#/share) and add the AMI.
+Packer and a python script are used to generate AMIs. The AWS marketplace will ensure that AMIs are copied across regions. 
 
-# Updating the Marketplace Listing
+The ID of the new AMI should be added into the product load form before a new submission is made.  In addition, login to [Marketplace Portal](https://aws.amazon.com/marketplace/management/manage-products/?#/share) and add the AMI.
+
+## Updating the Marketplace Listing
 CFT deploys in AWS Marketplace aren't self service.  At some point that might change.  So, next up is updating the product load form.  That's stored [here](https://docs.google.com/spreadsheets/d/1Nmpw3etZX7xj6nQgS5w3K2B-i0gJevdQ/edit?usp=sharing&ouid=115505246243451814800&rtpof=true&sd=true).  Note that AWS will almost certainly continue to rev the product load form.  So, you might periodically be forced to grab a new copy from to publisher portal.
 
 You'll defintely want to update the version ID in the product load form.  You will need to update the AMI ID as well, if you built a new one.

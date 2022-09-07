@@ -203,6 +203,21 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
+  Neo4jSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
 
   Neo4jRouteTable:
     Type: AWS::EC2::RouteTable
@@ -234,6 +249,12 @@ Resources:
       RouteTableId: !Ref Neo4jRouteTable
       SubnetId: !Ref Neo4jSubnet2
 
+  Neo4jSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet3
+
   Neo4jInternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
@@ -261,6 +282,7 @@ Resources:
       Subnets:
         - Ref: Neo4jSubnet1
         - Ref: Neo4jSubnet2
+        - Ref: Neo4jSubnet3
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -357,7 +379,7 @@ Resources:
         Count: !Ref CoreInstanceCount
         Timeout: PT3M
     Properties:
-      AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ]]
+      AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]]
       LaunchConfigurationName:
         Ref: Neo4jLaunchConfiguration
       MinSize: !Ref CoreInstanceCount
@@ -365,6 +387,7 @@ Resources:
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet1
         - !Ref Neo4jSubnet2
+        - !Ref Neo4jSubnet3
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jHTTPSTargetGroup
@@ -563,7 +586,7 @@ Resources:
         Count: !Ref ReadReplicaCount
         Timeout: PT3M
     Properties:
-      AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ]]
+      AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]]
       LaunchConfigurationName:
         Ref: Neo4jReadReplicaLaunchConfiguration
       MinSize: !Ref ReadReplicaCount
@@ -571,6 +594,7 @@ Resources:
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet1
         - !Ref Neo4jSubnet2
+        - !Ref Neo4jSubnet3
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jHTTPSTargetGroup

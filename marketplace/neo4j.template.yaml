@@ -485,7 +485,7 @@ Resources:
             - "wget -O /tmp/core.sh https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/version-selection/marketplace/core.sh\n"
             - "wget -O /tmp/cluster-conf-4.sh https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/version-selection/marketplace/cluster-conf-4.sh\n"
             - "wget -O /tmp/cluster-conf-5.sh https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/version-selection/marketplace/cluster-conf-5.sh\n"
-            - "/bin/bash /tmp/core.sh ${graphDatabaseVersion} ${installGraphDataScience} ${graphDataScienceLicenseKey} ${installBloom} ${bloomLicenseKey} ${password} ${nodeCount} ${readReplicaCount} ${loadBalancerDNSName} ${stackName} ${region} ${loadBalancerDNSName}\n"
+            - "/bin/bash /tmp/core.sh ${graphDatabaseVersion} ${installGraphDataScience} ${graphDataScienceLicenseKey} ${installBloom} ${bloomLicenseKey} ${password} ${nodeCount} ${readReplicaCount} ${loadBalancerDNSName} ${stackName} ${region}\n"
         
 
   Neo4jReadReplicaAutoScalingGroup:

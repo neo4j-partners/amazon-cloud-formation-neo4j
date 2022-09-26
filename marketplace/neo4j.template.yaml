@@ -47,7 +47,7 @@ Metadata:
 Parameters:
   GraphDatabaseVersion:
     Description: Neo4j Graph Database Version
-    Type: List<String>
+    Type: String
     AllowedValues:
       - '4.4.11'
       - '5.0.0'

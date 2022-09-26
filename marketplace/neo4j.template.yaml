@@ -480,7 +480,7 @@ Resources:
             - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
             - "\n"
 
-            - "wget -O /tmp/core.sh https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/scripts/marketplace/core.sh\n"
+            - "wget -O /tmp/core.sh https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/main/marketplace/core.sh\n"
             - "/bin/bash /tmp/core.sh ${graphDatabaseVersion} ${installGraphDataScience} ${graphDataScienceLicenseKey} ${installBloom} ${bloomLicenseKey} ${password} ${nodeCount} ${readReplicaCount} ${loadBalancerDNSName} ${stackName} ${region} ${loadBalancerDNSName}\n"
         
 

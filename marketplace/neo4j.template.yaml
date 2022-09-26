@@ -47,8 +47,10 @@ Metadata:
 Parameters:
   GraphDatabaseVersion:
     Description: Neo4j Graph Database Version
-    Type: String
-    Default: '4.4.11'
+    Type: List<String>
+    AllowedValues:
+      - '4.4.11'
+      - '5.0.0'
 
   InstallGraphDataScience:
     Description: Install Graph Data Science

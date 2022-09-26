@@ -15,12 +15,13 @@ loadBalancerDNSName=${12}
 configure_yum_repo() {
     echo "Adding neo4j yum repo..."
     rpm --import https://debian.neo4j.com/neotechnology.gpg.key
-    echo "
-    [neo4j]
-    name=Neo4j Yum Repo
-    baseurl=http://yum.neo4j.com/stable
-    enabled=1
-    gpgcheck=1" > /etc/yum.repos.d/neo4j.repo
+    cat <<EOF > /etc/yum.repos.d/neo4j.repo
+[neo4j]
+name=Neo4j Yum Repo
+baseurl=http://yum.neo4j.com/stable
+enabled=1
+gpgcheck=1
+EOF
 }
 
 install_neo4j_from_yum() {

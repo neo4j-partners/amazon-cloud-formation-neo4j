@@ -18,17 +18,17 @@ extension_config() {
 
 
 set_cluster_configs() {
-   local -r privateIP="$(hostname -i | awk {'print $NF'})"
-   sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${privateIP}/g /etc/neo4j/neo4j.conf
-   sed -i s/#causal_clustering.discovery_listen_address=:5000/causal_clustering.discovery_listen_address=${privateIP}:5000/g /etc/neo4j/neo4j.conf
-   sed -i s/#causal_clustering.transaction_listen_address=:6000/causal_clustering.transaction_listen_address=${privateIP}:6000/g /etc/neo4j/neo4j.conf
-   sed -i s/#causal_clustering.raft_listen_address=:7000/causal_clustering.raft_listen_address=${privateIP}:7000/g /etc/neo4j/neo4j.conf
-   sed -i s/#dbms.connector.bolt.listen_address=:7687/dbms.connector.bolt.listen_address=${privateIP}:7687/g /etc/neo4j/neo4j.conf
-   sed -i s/#dbms.connector.http.advertised_address=:7474/dbms.connector.http.advertised_address=${privateIP}:7474/g /etc/neo4j/neo4j.conf
-   sed -i s/#dbms.connector.https.advertised_address=:7473/dbms.connector.https.advertised_address=${privateIP}:7473/g /etc/neo4j/neo4j.conf
+   local -r privateIP="$(hostname -i | awk '{print $NF}')"
+   sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address="${privateIP}"/g /etc/neo4j/neo4j.conf
+   sed -i s/#causal_clustering.discovery_listen_address=:5000/causal_clustering.discovery_listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
+   sed -i s/#causal_clustering.transaction_listen_address=:6000/causal_clustering.transaction_listen_address="${privateIP}":6000/g /etc/neo4j/neo4j.conf
+   sed -i s/#causal_clustering.raft_listen_address=:7000/causal_clustering.raft_listen_address="${privateIP}":7000/g /etc/neo4j/neo4j.conf
+   sed -i s/#dbms.connector.bolt.listen_address=:7687/dbms.connector.bolt.listen_address="${privateIP}":7687/g /etc/neo4j/neo4j.conf
+   sed -i s/#dbms.connector.http.advertised_address=:7474/dbms.connector.http.advertised_address="${privateIP}":7474/g /etc/neo4j/neo4j.conf
+   sed -i s/#dbms.connector.https.advertised_address=:7473/dbms.connector.https.advertised_address="${privateIP}":7473/g /etc/neo4j/neo4j.conf
    sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf
-   sed -i s/#dbms.routing.advertised_address=:7688/dbms.routing.advertised_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf
-   sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf
+   sed -i s/#dbms.routing.advertised_address=:7688/dbms.routing.advertised_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
+   sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
    echo "dbms.routing.default_router=SERVER" >> /etc/neo4j/neo4j.conf
 }
 

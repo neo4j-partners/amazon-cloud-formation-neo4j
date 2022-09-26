@@ -12,6 +12,8 @@ stackName=${10}
 region=${11}
 loadBalancerDNSName=${12}
 
+readonly scriptDir=$( cd ${0%/*} && pwd -P )
+
 configure_yum_repo() {
     echo "Adding neo4j yum repo..."
     rpm --import https://debian.neo4j.com/neotechnology.gpg.key
@@ -39,7 +41,7 @@ install_apoc_plugin() {
 
 select_cluster_config_from_version() {
     local -r db_version=$(echo $graphDatabaseVersion | awk -F '.' '{print $1}')
-    source cluster-conf-${db_version}.sh "${nodeCount}" "${readReplicaCount}" "${loadBalancerDNSName}"
+    source "${scriptDir}/cluster-conf-${db_version}.sh" "${nodeCount}" "${readReplicaCount}" "${loadBalancerDNSName}"
 }
 
 configure_graph_data_science() {

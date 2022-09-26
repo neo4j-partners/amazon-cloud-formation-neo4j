@@ -106,4 +106,4 @@ fi
 echo "Starting Neo4j..."
 service neo4j start
 neo4j-admin set-initial-password ${password}
-#/opt/aws/bin/cfn-signal -e $? --stack ${stackName} --resource Neo4jAutoScalingGroup --region ${region}
+/opt/aws/bin/cfn-signal -e $? --stack ${stackName} --resource Neo4jAutoScalingGroup --region ${region}

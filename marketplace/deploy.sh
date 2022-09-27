@@ -8,6 +8,9 @@ REGION=`aws configure get region`
 Password="foo123"
 NodeCount="3"
 SSHCIDR="0.0.0.0/0"
+GraphDatabaseVersion=5.0.0
+S3AccessKeyId=$1
+S3SecretAccessKey=$2
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -16,6 +19,9 @@ aws cloudformation create-stack \
 --region ${REGION} \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
+ParameterKey=S3AccessKeyId,ParameterValue=${S3AccessKeyId} \
+ParameterKey=S3SecretAccessKey,ParameterValue=${S3SecretAccessKey} \
+ParameterKey=GraphDatabaseVersion,ParameterValue=${GraphDatabaseVersion} \
 ParameterKey=NodeCount,ParameterValue=${NodeCount} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=False \

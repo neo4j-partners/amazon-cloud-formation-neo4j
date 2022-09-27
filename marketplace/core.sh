@@ -11,6 +11,9 @@ readReplicaCount=$8
 loadBalancerDNSName=$9
 stackName=${10}
 region=${11}
+s3AccessKeyId=${12}
+s3SecretAccessKey=${13}
+
 
 readonly scriptDir=$( cd "${0%/*}" && pwd -P )
 
@@ -32,6 +35,18 @@ install_neo4j_from_yum() {
     yum -y install "neo4j-enterprise-${graphDatabaseVersion}"
     yum update -y aws-cfn-bootstrap
     systemctl enable neo4j
+}
+
+install_neo4j_from_s3() {
+    export AWS_ACCESS_KEY_ID=${s3AccessKeyId}
+    export AWS_SECRET_ACCESS_KEY=${s3SecretAccessKey}
+    echo "Installing Graph Database..."
+    export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+    aws s3 cp s3://clouders-neo4j5-rpm/neo4j-enterprise-5.0.0-0.drop09.0.1.noarch.rpm .
+    yum -y install neo4j-enterprise-5.0.0-0.drop09.0.1.noarch.rpm
+    yum update -y aws-cfn-bootstrap
+    systemctl enable neo4j
+
 }
 
 install_apoc_plugin() {
@@ -80,8 +95,9 @@ start_neo4j() {
   /opt/aws/bin/cfn-signal -e $? --stack "${stackName}" --resource Neo4jAutoScalingGroup --region "${region}"
 }
 
-configure_yum_repo
-install_neo4j_from_yum
+#configure_yum_repo
+#install_neo4j_from_yum
+install_neo4j_from_s3
 install_apoc_plugin
 select_cluster_config_from_version
 extension_config

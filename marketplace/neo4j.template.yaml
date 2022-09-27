@@ -143,6 +143,14 @@ Parameters:
     AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
     ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
 
+  S3AccessKeyId:
+    Description: S3AccessKeyId
+    Type: String
+
+  S3SecretAccessKey:
+    Description: S3SecretAccessKey
+    Type: String
+
 Rules:
     GDSCheck:
       RuleCondition: !Equals
@@ -482,10 +490,18 @@ Resources:
             - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
             - "\n"
 
+            - "s3AccessKeyId="
+            - Ref: S3AccessKeyId
+            - "\n"
+            -
+            - "s3SecretAccessKey="
+            - Ref: S3SecretAccessKey
+            - "\n"
+
             - "wget -O /tmp/core.sh https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/version-selection/marketplace/core.sh\n"
             - "wget -O /tmp/cluster-conf-4.sh https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/version-selection/marketplace/cluster-conf-4.sh\n"
             - "wget -O /tmp/cluster-conf-5.sh https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/feature/version-selection/marketplace/cluster-conf-5.sh\n"
-            - "/bin/bash /tmp/core.sh ${graphDatabaseVersion} ${installGraphDataScience} ${graphDataScienceLicenseKey} ${installBloom} ${bloomLicenseKey} ${password} ${nodeCount} ${readReplicaCount} ${loadBalancerDNSName} ${stackName} ${region}\n"
+            - "/bin/bash /tmp/core.sh ${graphDatabaseVersion} ${installGraphDataScience} ${graphDataScienceLicenseKey} ${installBloom} ${bloomLicenseKey} ${password} ${nodeCount} ${readReplicaCount} ${loadBalancerDNSName} ${stackName} ${region} ${s3AccessKeyId} ${s3SecretAccessKey}\n"
         
 
   Neo4jReadReplicaAutoScalingGroup:

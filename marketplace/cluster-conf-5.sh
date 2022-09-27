@@ -24,9 +24,9 @@ set_cluster_configs() {
     sed -i s/#server.bolt.listen_address==:7687/server.bolt.listen_address="${privateIP}":7687/g /etc/neo4j/neo4j.conf
     sed -i s/#server.http.advertised_address=:7474/server.http.advertised_address="${privateIP}":7474/g /etc/neo4j/neo4j.conf
     sed -i s/#server.https.advertised_address=:7473/server.https.advertised_address="${privateIP}":7473/g /etc/neo4j/neo4j.conf
-    sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf
-    sed -i s/#dbms.routing.advertised_address=:7688/dbms.routing.advertised_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
-    sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
+#    sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
 }
 
 configure_clustering() {

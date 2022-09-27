@@ -50,7 +50,7 @@ configure_clustering() {
     instanceId=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
     stackName=$(aws cloudformation describe-stack-resources --physical-resource-id $instanceId --query 'StackResources[0].StackName' --output text --region $region)
     coreMembers=$(aws autoscaling describe-auto-scaling-instances --region $region --output text --query "AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query "Reservations[].Instances[].PrivateIpAddress" --output text --filter "Name=tag:aws:cloudformation:stack-name,Values=$stackName")
-    coreMembers=$(echo "${coreMembers}" | sed 's/ /:5000,/g')
+    coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')
     coreMembers=$(echo "${coreMembers}"):5000
     sed -i s/#causal_clustering.initial_discovery_members=localhost:5000,localhost:5001,localhost:5002/causal_clustering.initial_discovery_members=${coreMembers}/g /etc/neo4j/neo4j.conf
     sed -i s/#dbms.mode=CORE/dbms.mode=CORE/g /etc/neo4j/neo4j.conf

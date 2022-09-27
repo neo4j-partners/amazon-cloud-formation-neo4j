@@ -387,7 +387,7 @@ Resources:
     CreationPolicy:
       ResourceSignal:
         Count: !Ref CoreInstanceCount
-        Timeout: PT3M
+        Timeout: PT5M
     Properties:
       AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]]
       LaunchConfigurationName:

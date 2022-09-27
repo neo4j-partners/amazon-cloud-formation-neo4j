@@ -19,12 +19,13 @@ set_cluster_configs() {
     local -r privateIP="$(hostname -i | awk '{print $NF}')"
     sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address="${privateIP}"/g /etc/neo4j/neo4j.conf
     sed -i s/#server.discovery.listen_address==:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.discovery.listen_address==:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
     sed -i s/#server.cluster.listen_address=:6000/server.cluster.listen_address="${privateIP}":6000/g /etc/neo4j/neo4j.conf
     sed -i s/#server.cluster.raft.listen_address=:7000/server.cluster.raft.listen_address="${privateIP}":7000/g /etc/neo4j/neo4j.conf
     sed -i s/#server.bolt.listen_address==:7687/server.bolt.listen_address="${privateIP}":7687/g /etc/neo4j/neo4j.conf
     sed -i s/#server.http.advertised_address=:7474/server.http.advertised_address="${privateIP}":7474/g /etc/neo4j/neo4j.conf
     sed -i s/#server.https.advertised_address=:7473/server.https.advertised_address="${privateIP}":7473/g /etc/neo4j/neo4j.conf
-#    sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf
+    sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf
     sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
     sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
 }

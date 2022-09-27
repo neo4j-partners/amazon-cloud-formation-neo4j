@@ -17,6 +17,7 @@ aws cloudformation create-stack \
 --stack-name ${STACK_NAME} \
 --template-body ${TEMPLATE_BODY} \
 --region ${REGION} \
+--disable-rollback \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=S3AccessKeyId,ParameterValue=${S3AccessKeyId} \

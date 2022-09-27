@@ -42,8 +42,9 @@ install_neo4j_from_s3() {
     export AWS_SECRET_ACCESS_KEY=${s3SecretAccessKey}
     echo "Installing Graph Database..."
     export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+    aws s3 cp s3://clouders-neo4j5-rpm/cypher-shell-5.0.0-0.drop09.0.1.noarch.rpm .
     aws s3 cp s3://clouders-neo4j5-rpm/neo4j-enterprise-5.0.0-0.drop09.0.1.noarch.rpm .
-    yum -y install neo4j-enterprise-5.0.0-0.drop09.0.1.noarch.rpm
+    yum -y install cypher-shell-5.0.0-0.drop09.0.1.noarch.rpm neo4j-enterprise-5.0.0-0.drop09.0.1.noarch.rpm
     yum update -y aws-cfn-bootstrap
     systemctl enable neo4j
 

@@ -493,7 +493,7 @@ Resources:
             - "s3AccessKeyId="
             - Ref: S3AccessKeyId
             - "\n"
-            -
+
             - "s3SecretAccessKey="
             - Ref: S3SecretAccessKey
             - "\n"

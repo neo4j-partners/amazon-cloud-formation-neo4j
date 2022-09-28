@@ -310,16 +310,6 @@ Resources:
       Port: 7474
       Protocol: TCP
 
-  Neo4jHTTPSListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - TargetGroupArn: !Ref Neo4jHTTPSTargetGroup
-          Type: forward
-      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
-      Port: 7473
-      Protocol: TCP
-
   Neo4jBoltListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
@@ -339,23 +329,6 @@ Resources:
           - 'http'
           - 'tg'
       Port: 7474
-      Protocol: TCP
-      Tags:
-        - Key: StackID
-          Value: !Ref 'AWS::StackId'
-        - Key: Name
-          Value: !Ref 'AWS::StackName'
-      VpcId: !Ref Neo4jVPC
-
-  Neo4jHTTPSTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: !Join
-        - '-'
-        - - !Ref 'AWS::StackName'
-          - 'https'
-          - 'tg'
-      Port: 7473
       Protocol: TCP
       Tags:
         - Key: StackID
@@ -400,7 +373,6 @@ Resources:
         - !Ref Neo4jSubnet3
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
-        - Ref: Neo4jHTTPSTargetGroup
         - Ref: Neo4jBoltTargetGroup
       DesiredCapacity:
         Ref: CoreInstanceCount
@@ -525,7 +497,6 @@ Resources:
         - !Ref Neo4jSubnet3
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
-        - Ref: Neo4jHTTPSTargetGroup
         - Ref: Neo4jBoltTargetGroup
       DesiredCapacity:
         Ref: ReadReplicaCount
@@ -636,10 +607,6 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: !Ref SSHCIDR
-        - IpProtocol: tcp
-          FromPort: 7473
-          ToPort: 7473
-          CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: 7474
           ToPort: 7474

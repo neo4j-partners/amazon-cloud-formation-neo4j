@@ -62,6 +62,6 @@ configure_clustering() {
         coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')
         coreMembers=$(echo "${coreMembers}"):5000
         sed -i s/#dbms.cluster.discovery.endpoints=localhost:5000,localhost:5001,localhost:5002/dbms.cluster.discovery.endpoints=${coreMembers}/g /etc/neo4j/neo4j.conf
-        set_cluster_configs
+#        set_cluster_configs
     fi
 }

@@ -33,16 +33,18 @@ set_cluster_configs() {
 }
 
 configure_clustering() {
+
+    sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address="${LOAD_BALANCER_DNS_NAME}"/g /etc/neo4j/neo4j.conf
+    local -r privateIP="$(hostname -i | awk '{print $NF}')"
+    sed -i s/#server.discovery.advertised_address=:5000/server.discovery.advertised_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.cluster.advertised_address=:6000/server.cluster.advertised_address="${privateIP}":6000/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.cluster.raft.advertised_address=:7000/server.cluster.raft.advertised_address="${privateIP}":7000/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.https.advertised_address=:7473/server.https.advertised_address="${privateIP}":7473/g /etc/neo4j/neo4j.conf
+
     if [[ $NODE_COUNT == 1 ]]; then
         echo "Running on a single node."
-        if [[ $READ_REPLICA_COUNT == 0 ]]; then
-            sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address="${LOAD_BALANCER_DNS_NAME}"/g /etc/neo4j/neo4j.conf
-            local -r privateIP="$(hostname -i | awk '{print $NF}')"
-            sed -i s/#server.discovery.advertised_address=:5000/server.discovery.advertised_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
-            sed -i s/#server.cluster.advertised_address=:6000/server.cluster.advertised_address="${privateIP}":6000/g /etc/neo4j/neo4j.conf
-            sed -i s/#server.cluster.raft.advertised_address=:7000/server.cluster.raft.advertised_address="${privateIP}":7000/g /etc/neo4j/neo4j.conf
-            sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
-        else
+        if [[ $READ_REPLICA_COUNT != 0 ]]; then
             echo "server.cluster.system_database_mode=PRIMARY" >>/etc/neo4j/neo4j.conf
             echo "server.cluster.initial_mode_constraint=PRIMARY" >>/etc/neo4j/neo4j.conf
             echo "dbms.cluster.num_primaries=1" >>/etc/neo4j/neo4j.conf

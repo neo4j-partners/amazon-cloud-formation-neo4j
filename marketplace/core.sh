@@ -97,7 +97,7 @@ start_neo4j() {
     do echo "Waiting for cluster to start"
     sleep 5
   done
-  /opt/aws/bin/cfn-signal -e $? --stack "${stackName}" --resource Neo4j AutoScalingGroup --region "${region}"
+  /opt/aws/bin/cfn-signal -e $? --stack "${stackName}" --resource Neo4jAutoScalingGroup --region "${region}"
 }
 
 #configure_yum_repo

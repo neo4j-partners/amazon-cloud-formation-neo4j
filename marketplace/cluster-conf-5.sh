@@ -15,22 +15,6 @@ extension_config() {
     sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf
 }
 
-set_cluster_configs() {
-    local -r privateIP="$(hostname -i | awk '{print $NF}')"
-
-    sed -i s/#server.discovery.listen_address=:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
-    sed -i s/#server.discovery.advertised_address=:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
-
-    sed -i s/#server.cluster.listen_address=:6000/server.cluster.listen_address="${privateIP}":6000/g /etc/neo4j/neo4j.conf
-    sed -i s/#server.cluster.raft.listen_address=:7000/server.cluster.raft.listen_address="${privateIP}":7000/g /etc/neo4j/neo4j.conf
-    sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address="${privateIP}":7687/g /etc/neo4j/neo4j.conf
-    sed -i s/#server.http.advertised_address=:7474/server.http.advertised_address="${privateIP}":7474/g /etc/neo4j/neo4j.conf
-    sed -i s/#server.https.advertised_address=:7473/server.https.advertised_address="${privateIP}":7473/g /etc/neo4j/neo4j.conf
-    sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf
-    sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
-    sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
-}
-
 configure_clustering() {
 
     sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address="${LOAD_BALANCER_DNS_NAME}"/g /etc/neo4j/neo4j.conf
@@ -41,6 +25,12 @@ configure_clustering() {
     sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
     sed -i s/#server.https.advertised_address=:7473/server.https.advertised_address="${privateIP}":7473/g /etc/neo4j/neo4j.conf
 
+    sed -i s/#server.discovery.listen_address=:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.cluster.listen_address=:6000/server.cluster.listen_address="${privateIP}":6000/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.cluster.raft.listen_address=:7000/server.cluster.raft.listen_address="${privateIP}":7000/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address="${privateIP}":7687/g /etc/neo4j/neo4j.conf
+
     if [[ $NODE_COUNT == 1 ]]; then
         echo "Running on a single node."
         if [[ $READ_REPLICA_COUNT != 0 ]]; then
@@ -48,7 +38,6 @@ configure_clustering() {
             echo "server.cluster.initial_mode_constraint=PRIMARY" >>/etc/neo4j/neo4j.conf
             echo "dbms.cluster.num_primaries=1" >>/etc/neo4j/neo4j.conf
             echo "dbms.cluster.num_secondaries=${READ_REPLICA_COUNT}" >>/etc/neo4j/neo4j.conf
-            set_cluster_configs
         fi
     else
         echo "Running on multiple nodes.  Configuring membership in neo4j.conf..."
@@ -62,6 +51,5 @@ configure_clustering() {
         coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')
         coreMembers=$(echo "${coreMembers}"):5000
         sed -i s/#dbms.cluster.discovery.endpoints=localhost:5000,localhost:5001,localhost:5002/dbms.cluster.discovery.endpoints=${coreMembers}/g /etc/neo4j/neo4j.conf
-#        set_cluster_configs
     fi
 }

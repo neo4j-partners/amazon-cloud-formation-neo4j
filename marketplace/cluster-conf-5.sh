@@ -17,7 +17,6 @@ extension_config() {
 
 set_cluster_configs() {
     local -r privateIP="$(hostname -i | awk '{print $NF}')"
-    sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address="${privateIP}"/g /etc/neo4j/neo4j.conf
 
     sed -i s/#server.discovery.listen_address=:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
     sed -i s/#server.discovery.advertised_address=:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf

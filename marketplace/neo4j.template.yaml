@@ -330,6 +330,7 @@ Resources:
           - 'tg'
       Port: 7474
       Protocol: TCP
+      HealthCheckIntervalSeconds: 10
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -347,6 +348,7 @@ Resources:
           - 'tg'
       Port: 7687
       Protocol: TCP
+      HealthCheckIntervalSeconds: 10
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'

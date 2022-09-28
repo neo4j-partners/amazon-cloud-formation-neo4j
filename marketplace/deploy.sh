@@ -6,7 +6,7 @@ TEMPLATE_BODY="file://neo4j.template.yaml"
 REGION=`aws configure get region`
 
 Password="foo123"
-CoreInstanceCount="1"
+CoreInstanceCount="3"
 SSHCIDR="0.0.0.0/0"
 GraphDatabaseVersion=5.0.0
 S3AccessKeyId=$2

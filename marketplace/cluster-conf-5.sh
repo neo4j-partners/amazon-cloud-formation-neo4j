@@ -18,7 +18,10 @@ extension_config() {
 set_cluster_configs() {
     local -r privateIP="$(hostname -i | awk '{print $NF}')"
     sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address="${privateIP}"/g /etc/neo4j/neo4j.conf
+
     sed -i s/#server.discovery.listen_address=:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
+    sed -i s/#server.discovery.advertised_address=:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
+
     sed -i s/#server.cluster.listen_address=:6000/server.cluster.listen_address="${privateIP}":6000/g /etc/neo4j/neo4j.conf
     sed -i s/#server.cluster.raft.listen_address=:7000/server.cluster.raft.listen_address="${privateIP}":7000/g /etc/neo4j/neo4j.conf
     sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address="${privateIP}":7687/g /etc/neo4j/neo4j.conf
@@ -34,6 +37,11 @@ configure_clustering() {
         echo "Running on a single node."
         if [[ $READ_REPLICA_COUNT == 0 ]]; then
             sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address="${LOAD_BALANCER_DNS_NAME}"/g /etc/neo4j/neo4j.conf
+            local -r privateIP="$(hostname -i | awk '{print $NF}')"
+            sed -i s/#server.discovery.advertised_address=:5000/server.discovery.listen_address="${privateIP}":5000/g /etc/neo4j/neo4j.conf
+            sed -i s/#server.cluster.advertised_address=:6000/server.cluster.advertised_address="${privateIP}":6000/g /etc/neo4j/neo4j.conf
+            sed -i s/#server.cluster.raft.advertised_address=:7000/server.cluster.raft.advertised_address="${privateIP}":7000/g /etc/neo4j/neo4j.conf
+            sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address="${privateIP}":7688/g /etc/neo4j/neo4j.conf
         else
             echo "server.cluster.system_database_mode=PRIMARY" >>/etc/neo4j/neo4j.conf
             echo "server.cluster.initial_mode_constraint=PRIMARY" >>/etc/neo4j/neo4j.conf

@@ -1,14 +1,14 @@
 #!/bin/bash
 set -euo pipefail
-graphDatabaseVersion=$1
-installGraphDataScience=$2
-graphDataScienceLicenseKey=$3
-installBloom=$4
-bloomLicenseKey=$5
-password=$6
-nodeCount=$7
-readReplicaCount=$8
-loadBalancerDNSName=$9
+graphDatabaseVersion=${1}
+installGraphDataScience=${2}
+graphDataScienceLicenseKey=${3}
+installBloom=${4}
+bloomLicenseKey=${5}
+password=${6}
+nodeCount=${7}
+readReplicaCount=${8}
+loadBalancerDNSName=${9}
 stackName=${10}
 region=${11}
 s3AccessKeyId=${12}

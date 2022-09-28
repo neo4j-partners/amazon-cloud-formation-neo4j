@@ -93,7 +93,11 @@ start_neo4j() {
   echo "Starting Neo4j..."
   service neo4j start
   neo4j-admin dbms set-initial-password "${password}"
-#  /opt/aws/bin/cfn-signal -e $? --stack "${stackName}" --resource Neo4jAutoScalingGroup --region "${region}"
+  while [[ "$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )" != "200" ]];
+    do echo "Waiting for cluster to start"
+    sleep 5
+  done
+  /opt/aws/bin/cfn-signal -e $? --stack "${stackName}" --resource Neo4j AutoScalingGroup --region "${region}"
 }
 
 #configure_yum_repo

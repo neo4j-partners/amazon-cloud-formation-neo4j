@@ -695,7 +695,7 @@ Resources:
             - "    do echo \"Waiting for cluster to start\"\n"
             - "    sleep 5\n"
             - "  done\n"
-            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
+            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jReadReplicaAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
             - "extension_config() {\n"

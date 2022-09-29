@@ -15,8 +15,7 @@ Metadata:
       - Label:
           default: "Infrastructure Configuration"
         Parameters:
-          - CoreInstanceCount
-          - ReadReplicaCount
+          - NumberOfServers
           - InstanceType
           - DiskSize
           - SSHCIDR
@@ -33,10 +32,8 @@ Metadata:
         default: Bloom License Key
       Password:
         default: Password
-      CoreInstanceCount:
-        default: Core Instance Count
-      ReadReplicaCount:
-        default: Read Replica Count
+      NumberOfServers:
+        default: Number of Servers
       InstanceType:
         default: Instance Type
       DiskSize:
@@ -82,22 +79,12 @@ Parameters:
     MinLength: 6
     NoEcho: true
 
-  CoreInstanceCount:
-    Description: Number of core nodes
+  NumberOfServers:
+    Description: Must be 3 or greater to form a cluster
     Type: Number
     Default: 3
     AllowedValues:
       - 1
-      - 3
-
-  ReadReplicaCount:
-    Description: Number of read replicas
-    Type: Number
-    Default: 0
-    AllowedValues:
-      - 0
-      - 1
-      - 2
       - 3
       - 4
       - 5
@@ -141,6 +128,14 @@ Parameters:
     AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
     ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
 
+  S3AccessKeyId:
+    Description: S3AccessKeyId
+    Type: String
+
+  S3SecretAccessKey:
+    Description: S3SecretAccessKey
+    Type: String
+
 Rules:
     GDSCheck:
       RuleCondition: !Equals
@@ -149,18 +144,14 @@ Rules:
       Assertions:
         - Assert: !Not
             - !Equals
-              - !Ref CoreInstanceCount
+              - !Ref NumberOfServers
               - '3'
           AssertDescription: Node Count cannot be set to 3 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
 
 Conditions:
-  CreateReadReplicas: !Not
-    - !Equals
-      - !Ref ReadReplicaCount
-      - '0'
   CreateCluster: !Not
     - !Equals
-      - !Ref CoreInstanceCount
+      - !Ref NumberOfServers
       - '1'
 
 Resources:
@@ -351,25 +342,24 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
-
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     CreationPolicy:
       ResourceSignal:
-        Count: !Ref CoreInstanceCount
+        Count: !Ref NumberOfServers
         Timeout: PT8M
     Properties:
       AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchConfigurationName:
         Ref: Neo4jLaunchConfiguration
-      MinSize: !Ref CoreInstanceCount
-      MaxSize: !Ref CoreInstanceCount
+      MinSize: !Ref NumberOfServers
+      MaxSize: !Ref NumberOfServers
       VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
       DesiredCapacity:
-        Ref: CoreInstanceCount
+        !Ref NumberOfServers
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -434,11 +424,7 @@ Resources:
             - "\n"
 
             - "nodeCount="
-            - Ref: CoreInstanceCount
-            - "\n"
-
-            - "readReplicaCount="
-            - Ref: ReadReplicaCount
+            - Ref: NumberOfServers
             - "\n"
 
             - "loadBalancerDNSName="
@@ -451,6 +437,14 @@ Resources:
 
             - "region="
             - Ref: AWS::Region
+            - "\n"
+
+            - "s3AccessKeyId="
+            - Ref: S3AccessKeyId
+            - "\n"
+
+            - "s3SecretAccessKey="
+            - Ref: S3SecretAccessKey
             - "\n"
 
             - "configure_yum_repo() {\n"
@@ -466,9 +460,13 @@ Resources:
             - "}\n"
 
             - "install_neo4j_from_yum() {\n"
+            - "  export AWS_ACCESS_KEY_ID=${s3AccessKeyId}\n"
+            - "  export AWS_SECRET_ACCESS_KEY=${s3SecretAccessKey}\n"
             - "  echo \"Installing Graph Database...\"\n"
             - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
-            - "  yum -y install \"neo4j-enterprise-${graphDatabaseVersion}\"\n"
+            - "  aws s3 cp s3://clouders-neo4j5-rpm/cypher-shell-5.0.0-0.drop09.0.1.noarch.rpm .\n"
+            - "  aws s3 cp s3://clouders-neo4j5-rpm/neo4j-enterprise-5.0.0-0.drop09.0.1.noarch.rpm .\n"
+            - "  yum -y install cypher-shell-5.0.0-0.drop09.0.1.noarch.rpm neo4j-enterprise-5.0.0-0.drop09.0.1.noarch.rpm\n"
             - "  yum update -y aws-cfn-bootstrap\n"
             - "  systemctl enable neo4j\n"
             - "}\n"
@@ -481,13 +479,14 @@ Resources:
             - "configure_graph_data_science() {\n"
             - "  if [[ \"${installGraphDataScience}\" == True && \"${nodeCount}\" == 1 ]]; then\n"
             - "    echo \"Installing Graph Data Science...\"\n"
-            - "    cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
+            - "    curl -sS https://auralytics.neo4j.ninja/neo4j-graph-data-science-2.1.13-aurads.jar -o /var/lib/neo4j/plugins/neo4j-graph-data-science-2.1.13-aurads.jar \n"
             - "  fi\n"
             - "  if [[ $graphDataScienceLicenseKey != None ]]; then\n"
             - "    echo \"Writing GDS license key...\"\n"
             - "    mkdir -p /etc/neo4j/licenses\n"
             - "    echo \"${graphDataScienceLicenseKey}\" > /etc/neo4j/licenses/neo4j-gds.license\n"
             - "    sed -i '$a gds.enterprise.license_file=/etc/neo4j/licenses/neo4j-gds.license' /etc/neo4j/neo4j.conf\n"
+            - "    echo \"server.config.strict_validation.enabled=false\" >> /etc/neo4j/neo4j.conf\n"
             - "  fi\n"
             - "}\n"
 
@@ -504,17 +503,6 @@ Resources:
             - "  fi\n"
             - "}\n"
 
-            - "start_neo4j() {\n"
-            - "  echo \"Starting Neo4j...\"\n"
-            - "  service neo4j start\n"
-            - "  neo4j-admin set-initial-password \"${password}\"\n"
-            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
-            - "    do echo \"Waiting for cluster to start\"\n"
-            - "    sleep 5\n"
-            - "  done\n"
-            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
-            - "}\n"
-
             - "extension_config() {\n"
             - "  echo Configuring extensions and security in neo4j.conf...\n"
             - "  sed -i s~#dbms.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~dbms.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
@@ -523,47 +511,55 @@ Resources:
             - "  echo \"dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*\" >> /etc/neo4j/neo4j.conf\n"
             - "}\n"
 
-            - "set_cluster_configs() {\n"
-            - "  local -r privateIP=\"$(hostname -i | awk {'print $NF'})\"\n"
-            - "  sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=\"${privateIP}\"/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#causal_clustering.discovery_listen_address=:5000/causal_clustering.discovery_listen_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#causal_clustering.transaction_listen_address=:6000/causal_clustering.transaction_listen_address=\"${privateIP}\":6000/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#causal_clustering.raft_listen_address=:7000/causal_clustering.raft_listen_address=\"${privateIP}\":7000/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.connector.bolt.listen_address=:7687/dbms.connector.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.connector.http.advertised_address=:7474/dbms.connector.http.advertised_address=\"${privateIP}\":7474/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.connector.https.advertised_address=:7473/dbms.connector.https.advertised_address=\"${privateIP}\":7473/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.routing.advertised_address=:7688/dbms.routing.advertised_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
-            - "  echo \"dbms.routing.default_router=SERVER\" >> /etc/neo4j/neo4j.conf\n"
-            - "}\n"
-
             - "build_neo4j_conf_file() {\n"
+            - "  local -r privateIP=\"$(hostname -i | awk '{print $NF}')\"\n"
             - "  echo \"Configuring network in neo4j.conf...\"\n"
-            - "  sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
-            - "  echo \"Configuring memory settings in neo4j.conf...\"\n"
-            - "  neo4j-admin memrec >> /etc/neo4j/neo4j.conf\n"
-            - "  if [[ $nodeCount == 1 ]]; then\n"
+            - "  sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address=\"${loadBalancerDNSName}\"/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.discovery.advertised_address=:5000/server.discovery.advertised_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.cluster.advertised_address=:6000/server.cluster.advertised_address=\"${privateIP}\":6000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.cluster.raft.advertised_address=:7000/server.cluster.raft.advertised_address=\"${privateIP}\":7000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.discovery.listen_address=:5000/server.discovery.listen_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.cluster.listen_address=:6000/server.cluster.listen_address=\"${privateIP}\":6000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.cluster.raft.listen_address=:7000/server.cluster.raft.listen_address=\"${privateIP}\":7000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "  neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"server.metrics.enabled=true\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"server.metrics.jmx.enabled=true\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"server.metrics.prefix=neo4j\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"server.metrics.filter=*\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"server.metrics.csv.interval=5s\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.routing.default_router=SERVER\" >> /etc/neo4j/neo4j.conf\n"
+
+            - "  if [[ ${nodeCount} == 1 ]]; then\n"
             - "    echo \"Running on a single node.\"\n"
-            - "  if [[ $readReplicaCount == 0 ]]; then\n"
-            - "    sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=\"${loadBalancerDNSName}\"/g /etc/neo4j/neo4j.conf\n"
-            - "  else\n"
-            - "     sed -i s/#dbms.mode=CORE/dbms.mode=SINGLE/g /etc/neo4j/neo4j.conf\n"
-            - "     echo \"dbms.clustering.enable=true\" >> /etc/neo4j/neo4j.conf\n"
-            - "     set_cluster_configs\n"
-            - "  fi\n"
             - "  else\n"
             - "    echo \"Running on multiple nodes.  Configuring membership in neo4j.conf...\"\n"
+            - "    sed -i s/#initial.dbms.default_primaries_count=1/initial.dbms.default_primaries_count=3/g /etc/neo4j/neo4j.conf\n"
+            - "    sed -i s/#initial.dbms.default_secondaries_count=0/initial.dbms.default_secondaries_count=$(expr ${nodeCount} - 3)/g /etc/neo4j/neo4j.conf\n"
+            - "    sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "    echo \"dbms.cluster.minimum_initial_system_primaries_count=${nodeCount}\" >> /etc/neo4j/neo4j.conf\n"
             - "    region=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/.$//')\n"
             - "    instanceId=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
             - "    stackName=$(aws cloudformation describe-stack-resources --physical-resource-id $instanceId --query 'StackResources[0].StackName' --output text --region $region)\n"
-            - "    coreMembers=$(aws autoscaling describe-auto-scaling-instances \ --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
+            - "    coreMembers=$(aws autoscaling describe-auto-scaling-instances --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
             - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')\n"
             - "    coreMembers=$(echo \"${coreMembers}\"):5000\n"
-            - "    sed -i s/#causal_clustering.initial_discovery_members=localhost:5000,localhost:5001,localhost:5002/causal_clustering.initial_discovery_members=${coreMembers}/g /etc/neo4j/neo4j.conf\n"
-            - "    sed -i s/#dbms.mode=CORE/dbms.mode=CORE/g /etc/neo4j/neo4j.conf\n"
-            - "    set_cluster_configs\n"
+            - "    sed -i s/#dbms.cluster.discovery.endpoints=localhost:5000,localhost:5001,localhost:5002/dbms.cluster.discovery.endpoints=${coreMembers}/g /etc/neo4j/neo4j.conf\n"
             - "  fi\n"
+            - "}\n"
+
+            - "start_neo4j() {\n"
+            - "  echo \"Starting Neo4j...\"\n"
+            - "  service neo4j start\n"
+            - "  neo4j-admin dbms set-initial-password \"${password}\"\n"
+            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
+            - "    do echo \"Waiting for cluster to start\"\n"
+            - "    sleep 5\n"
+            - "  done\n"
+            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
             - "configure_yum_repo\n"
@@ -573,162 +569,6 @@ Resources:
             - "build_neo4j_conf_file\n"
             - "configure_graph_data_science\n"
             - "configure_bloom\n"
-            - "start_neo4j\n"
-
-  Neo4jReadReplicaAutoScalingGroup:
-    Type: AWS::AutoScaling::AutoScalingGroup
-    Condition: CreateReadReplicas
-    DependsOn: Neo4jAutoScalingGroup
-    CreationPolicy:
-      ResourceSignal:
-        Count: !Ref ReadReplicaCount
-        Timeout: PT3M
-    Properties:
-      AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
-      LaunchConfigurationName:
-        Ref: Neo4jReadReplicaLaunchConfiguration
-      MinSize: !Ref ReadReplicaCount
-      MaxSize: !Ref ReadReplicaCount
-      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
-      TargetGroupARNs:
-        - Ref: Neo4jHTTPTargetGroup
-        - Ref: Neo4jBoltTargetGroup
-      DesiredCapacity:
-        Ref: ReadReplicaCount
-      Tags:
-        - Key: StackID
-          Value: !Ref 'AWS::StackId'
-          PropagateAtLaunch: true
-        - Key: Name
-          Value: !Ref 'AWS::StackName'
-          PropagateAtLaunch: true
-
-  Neo4jReadReplicaLaunchConfiguration:
-    Type: AWS::AutoScaling::LaunchConfiguration
-    Condition: CreateReadReplicas
-    DependsOn: Neo4jAutoScalingGroup
-    Properties:
-      ImageId: !FindInMap
-        - Neo4j
-        - !Ref 'AWS::Region'
-        - BYOL
-      InstanceType:
-        Ref: InstanceType
-      SecurityGroups:
-        - Ref: Neo4jExternalSecurityGroup
-        - Ref: Neo4jInternalSecurityGroup
-      EbsOptimized: true
-      IamInstanceProfile:
-        Ref: Neo4jInstanceProfile
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeSize:
-              Ref: DiskSize
-            VolumeType: gp3
-            Encrypted: true
-      UserData:
-        Fn::Base64:
-          !Join
-          - ''
-          - - "#!/bin/bash\n"
-            - "echo Running startup script...\n"
-
-            - "graphDatabaseVersion="
-            - Ref: GraphDatabaseVersion
-            - "\n"
-
-            - "password="
-            - Ref: Password
-            - "\n"
-
-            - "nodeCount="
-            - Ref: CoreInstanceCount
-            - "\n"
-
-            - "readReplicaCount="
-            - Ref: ReadReplicaCount
-            - "\n"
-
-            - "stackName="
-            - Ref: AWS::StackName
-            - "\n"
-
-            - "region="
-            - Ref: AWS::Region
-            - "\n"
-            - "configure_yum_repo() {\n"
-            - "  echo \"Adding neo4j yum repo...\"\n"
-            - "  rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
-            - "  cat <<EOF > /etc/yum.repos.d/neo4j.repo\n"
-            - "[neo4j]\n"
-            - "name=Neo4j Yum Repo\n"
-            - "baseurl=http://yum.neo4j.com/stable\n"
-            - "enabled=1\n"
-            - "gpgcheck=1\n"
-            - "EOF\n"
-            - "}\n"
-
-            - "install_neo4j_from_yum() {\n"
-            - "  echo \"Installing Graph Database...\"\n"
-            - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
-            - "  yum -y install \"neo4j-enterprise-${graphDatabaseVersion}\"\n"
-            - "  yum update -y aws-cfn-bootstrap\n"
-            - "  systemctl enable neo4j\n"
-            - "}\n"
-
-            - "install_apoc_plugin() {\n"
-            - "  echo \"Installing APOC...\"\n"
-            - "  mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
-            - "}\n"
-
-            - "start_neo4j() {\n"
-            - "  echo \"Starting Neo4j...\"\n"
-            - "  service neo4j start\n"
-            - "  neo4j-admin set-initial-password \"${password}\"\n"
-            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
-            - "    do echo \"Waiting for cluster to start\"\n"
-            - "    sleep 5\n"
-            - "  done\n"
-            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jReadReplicaAutoScalingGroup --region \"${region}\"\n"
-            - "}\n"
-
-            - "extension_config() {\n"
-            - "  echo Configuring extensions and security in neo4j.conf...\n"
-            - "  sed -i s~#dbms.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~dbms.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
-            - "  echo \"dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*\" >> /etc/neo4j/neo4j.conf\n"
-            - "  echo \"dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*\" >> /etc/neo4j/neo4j.conf\n"
-            - "}\n"
-
-            - "build_neo4j_conf_file() {\n"
-            - "  local -r privateIP=\"$(hostname -i | awk {'print $NF'})\"\n"
-            - "  echo \"Configuring network in neo4j.conf...\"\n"
-            - "  sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
-            - "  echo \"Configuring memory settings in neo4j.conf...\"\n"
-            - "  neo4j-admin memrec >> /etc/neo4j/neo4j.conf\n"
-
-            - "  echo \"Configuring read replica in neo4j.conf...\"\n"
-            - "  sed -i s/#dbms.mode=CORE/dbms.mode=READ_REPLICA/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${privateIP}/g /etc/neo4j/neo4j.conf"
-            - "  region=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/.$//')\n"
-            - "  instanceId=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
-            - "  stackName=$(aws cloudformation describe-stack-resources --physical-resource-id $instanceId --query 'StackResources[0].StackName' --output text --region $region)\n"
-            - "  coreMembers=$(aws autoscaling describe-auto-scaling-instances \ --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
-            - "  coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')\n"
-            - "  coreMembers=$(echo \"${coreMembers}\"):5000\n"
-            - "  sed -i s/#causal_clustering.initial_discovery_members=localhost:5000,localhost:5001,localhost:5002/causal_clustering.initial_discovery_members=${coreMembers}/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.routing.advertised_address=:7688/dbms.routing.advertised_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf\n"
-            - "  echo \"dbms.routing.default_router=SERVER\" >> /etc/neo4j/neo4j.conf\n"
-            - "}\n"
-
-            - "configure_yum_repo\n"
-            - "install_neo4j_from_yum\n"
-            - "install_apoc_plugin\n"
-            - "extension_config\n"
-            - "build_neo4j_conf_file\n"
             - "start_neo4j\n"
 
   Neo4jInstanceProfile:

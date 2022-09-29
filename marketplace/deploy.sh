@@ -6,10 +6,11 @@ TEMPLATE_BODY="file://neo4j.template.yaml"
 REGION=`aws configure get region`
 
 Password="foo123"
-CoreInstanceCount="3"
-ReadReplicaCount="2"
+NumberOfServers="1"
 SSHCIDR="0.0.0.0/0"
-GraphDatabaseVersion=4.4.11
+GraphDatabaseVersion=5.0.0
+S3AccessKeyId=$2
+S3SecretAccessKey=$3
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -19,9 +20,10 @@ aws cloudformation create-stack \
 --disable-rollback \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
+ParameterKey=S3AccessKeyId,ParameterValue=${S3AccessKeyId} \
+ParameterKey=S3SecretAccessKey,ParameterValue=${S3SecretAccessKey} \
 ParameterKey=GraphDatabaseVersion,ParameterValue=${GraphDatabaseVersion} \
-ParameterKey=CoreInstanceCount,ParameterValue=${CoreInstanceCount} \
+ParameterKey=NumberOfServers,ParameterValue=${NumberOfServers} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=False \
-ParameterKey=InstallBloom,ParameterValue=False \
-ParameterKey=ReadReplicaCount,ParameterValue=${ReadReplicaCount}
+ParameterKey=InstallBloom,ParameterValue=False

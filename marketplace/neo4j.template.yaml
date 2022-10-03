@@ -166,6 +166,10 @@ Conditions:
     - !Equals
       - !Ref ReadReplicaCount
       - '0'
+  CreateCluster: !Not
+    - !Equals
+      - !Ref CoreInstanceCount
+      - '1'
 
 Resources:
   Neo4jVPC:
@@ -197,6 +201,7 @@ Resources:
 
   Neo4jSubnet2:
     Type: AWS::EC2::Subnet
+    Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.2.0/24
       MapPublicIpOnLaunch: true
@@ -213,6 +218,7 @@ Resources:
 
   Neo4jSubnet3:
     Type: AWS::EC2::Subnet
+    Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.3.0/24
       MapPublicIpOnLaunch: true
@@ -253,12 +259,14 @@ Resources:
 
   Neo4jSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
     Properties:
       RouteTableId: !Ref Neo4jRouteTable
       SubnetId: !Ref Neo4jSubnet2
 
   Neo4jSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
     Properties:
       RouteTableId: !Ref Neo4jRouteTable
       SubnetId: !Ref Neo4jSubnet3
@@ -280,6 +288,7 @@ Resources:
 
   Neo4jNetworkLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: CreateCluster
     Properties:
       IpAddressType: ipv4
       Name: !Join
@@ -300,6 +309,7 @@ Resources:
 
   Neo4jHTTPListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: CreateCluster
     Properties:
       DefaultActions:
         - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
@@ -310,6 +320,7 @@ Resources:
 
   Neo4jBoltListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: CreateCluster
     Properties:
       DefaultActions:
         - TargetGroupArn: !Ref Neo4jBoltTargetGroup
@@ -320,6 +331,7 @@ Resources:
 
   Neo4jHTTPTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: CreateCluster
     Properties:
       Name: !Join
         - '-'
@@ -338,6 +350,7 @@ Resources:
 
   Neo4jBoltTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: CreateCluster
     Properties:
       Name: !Join
         - '-'
@@ -367,10 +380,10 @@ Resources:
         Ref: Neo4jLaunchConfiguration
       MinSize: !Ref CoreInstanceCount
       MaxSize: !Ref CoreInstanceCount
-      VPCZoneIdentifier:
-        - !Ref Neo4jSubnet1
-        - !Ref Neo4jSubnet2
-        - !Ref Neo4jSubnet3
+      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
+#        - !Ref Neo4jSubnet1
+#        - !Ref Neo4jSubnet2
+#        - !Ref Neo4jSubnet3
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup

@@ -158,6 +158,10 @@ Conditions:
     - !Equals
       - !Ref ReadReplicaCount
       - '0'
+  CreateCluster: !Not
+    - !Equals
+      - !Ref CoreInstanceCount
+      - '1'
 
 Resources:
   Neo4jVPC:
@@ -189,6 +193,7 @@ Resources:
 
   Neo4jSubnet2:
     Type: AWS::EC2::Subnet
+    Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.2.0/24
       MapPublicIpOnLaunch: true
@@ -205,6 +210,7 @@ Resources:
 
   Neo4jSubnet3:
     Type: AWS::EC2::Subnet
+    Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.3.0/24
       MapPublicIpOnLaunch: true
@@ -245,12 +251,14 @@ Resources:
 
   Neo4jSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
     Properties:
       RouteTableId: !Ref Neo4jRouteTable
       SubnetId: !Ref Neo4jSubnet2
 
   Neo4jSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
     Properties:
       RouteTableId: !Ref Neo4jRouteTable
       SubnetId: !Ref Neo4jSubnet3
@@ -279,10 +287,7 @@ Resources:
         - - !Ref 'AWS::StackName'
           - 'nlb'
       Scheme: internet-facing
-      Subnets:
-        - Ref: Neo4jSubnet1
-        - Ref: Neo4jSubnet2
-        - Ref: Neo4jSubnet3
+      Subnets: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -354,15 +359,12 @@ Resources:
         Count: !Ref CoreInstanceCount
         Timeout: PT8M
     Properties:
-      AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]]
+      AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchConfigurationName:
         Ref: Neo4jLaunchConfiguration
       MinSize: !Ref CoreInstanceCount
       MaxSize: !Ref CoreInstanceCount
-      VPCZoneIdentifier:
-        - !Ref Neo4jSubnet1
-        - !Ref Neo4jSubnet2
-        - !Ref Neo4jSubnet3
+      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
@@ -449,10 +451,6 @@ Resources:
 
             - "region="
             - Ref: AWS::Region
-            - "\n"
-
-            - "loadBalancerDNSName="
-            - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
             - "\n"
 
             - "configure_yum_repo() {\n"
@@ -586,15 +584,12 @@ Resources:
         Count: !Ref ReadReplicaCount
         Timeout: PT3M
     Properties:
-      AvailabilityZones: [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]]
+      AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchConfigurationName:
         Ref: Neo4jReadReplicaLaunchConfiguration
       MinSize: !Ref ReadReplicaCount
       MaxSize: !Ref ReadReplicaCount
-      VPCZoneIdentifier:
-        - !Ref Neo4jSubnet1
-        - !Ref Neo4jSubnet2
-        - !Ref Neo4jSubnet3
+      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
@@ -735,10 +730,6 @@ Resources:
             - "extension_config\n"
             - "build_neo4j_conf_file\n"
             - "start_neo4j\n"
-
-
-
-
 
   Neo4jInstanceProfile:
     Type: AWS::IAM::InstanceProfile

@@ -654,10 +654,6 @@ Resources:
           ToPort: 7000
           SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
         - IpProtocol: tcp
-          FromPort: 7687
-          ToPort: 7687
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
           FromPort: 7688
           ToPort: 7688
           SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId

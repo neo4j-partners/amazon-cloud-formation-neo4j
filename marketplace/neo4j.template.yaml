@@ -93,6 +93,21 @@ Parameters:
       - 8
       - 9
       - 10
+#
+#  DefaultSecondaries:
+#    Description: Must be 3 or greater to form a cluster
+#    Type: Number
+#    Default: 3
+#    AllowedValues:
+#      - 1
+#      - 3
+#      - 4
+#      - 5
+#      - 6
+#      - 7
+#      - 8
+#      - 9
+#      - 10
 
   InstanceType:
     Description: EC2 instance type
@@ -525,6 +540,7 @@ Resources:
             - "  sed -i s/#server.cluster.listen_address=:6000/server.cluster.listen_address=\"${privateIP}\":6000/g /etc/neo4j/neo4j.conf\n"
             - "  sed -i s/#server.cluster.raft.listen_address=:7000/server.cluster.raft.listen_address=\"${privateIP}\":7000/g /etc/neo4j/neo4j.conf\n"
             - "  sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
             - "  neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf\n"
             - "  echo \"server.metrics.enabled=true\" >> /etc/neo4j/neo4j.conf\n"
             - "  echo \"server.metrics.jmx.enabled=true\" >> /etc/neo4j/neo4j.conf\n"
@@ -636,6 +652,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 7000
           ToPort: 7000
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
           SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
         - IpProtocol: tcp
           FromPort: 7688

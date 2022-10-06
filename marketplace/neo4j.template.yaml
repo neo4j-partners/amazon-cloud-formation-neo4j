@@ -93,21 +93,6 @@ Parameters:
       - 8
       - 9
       - 10
-#
-#  DefaultSecondaries:
-#    Description: Must be 3 or greater to form a cluster
-#    Type: Number
-#    Default: 3
-#    AllowedValues:
-#      - 1
-#      - 3
-#      - 4
-#      - 5
-#      - 6
-#      - 7
-#      - 8
-#      - 9
-#      - 10
 
   InstanceType:
     Description: EC2 instance type

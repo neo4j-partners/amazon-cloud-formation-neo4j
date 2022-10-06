@@ -53,7 +53,8 @@
         "echo  name=Neo4j Yum Repo >> /etc/yum.repos.d/neo4j.repo",
         "echo  baseurl=http://yum.neo4j.com/stable >> /etc/yum.repos.d/neo4j.repo",
         "echo  enabled=1 >> /etc/yum.repos.d/neo4j.repo",
-        "echo  gpgcheck=1 >> /etc/yum.repos.d/neo4j.repo"
+        "echo  gpgcheck=1 >> /etc/yum.repos.d/neo4j.repo",
+        "yum install --downloadonly neo4j-enterprise"
       ]
     }
   ]

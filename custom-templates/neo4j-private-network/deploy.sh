@@ -7,9 +7,10 @@ REGION=`aws configure get region`
 
 Password="foo123"
 CoreInstanceCount="3"
-ReadReplicaCount="2"
+ReadReplicaCount="0"
 SSHCIDR="0.0.0.0/0"
-GraphDatabaseVersion=4.4.11
+GraphDatabaseVersion=4.4.12
+KeyName="harshit"
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -24,4 +25,5 @@ ParameterKey=CoreInstanceCount,ParameterValue=${CoreInstanceCount} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=False \
 ParameterKey=InstallBloom,ParameterValue=False \
-ParameterKey=ReadReplicaCount,ParameterValue=${ReadReplicaCount}
+ParameterKey=ReadReplicaCount,ParameterValue=${ReadReplicaCount} \
+ParameterKey=KeyName,ParameterValue=${KeyName}

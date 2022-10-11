@@ -232,7 +232,24 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
-  Neo4jRouteTable:
+  Neo4jSubnet4:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.4.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jPublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       Tags:
@@ -242,33 +259,41 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
-  Neo4jRoute:
+  Neo4jPublicRoute:
     Type: AWS::EC2::Route
     Properties:
       GatewayId: !Ref Neo4jInternetGateway
-      RouteTableId: !Ref Neo4jRouteTable
+      RouteTableId: !Ref Neo4jPublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
 
-  Neo4jSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref Neo4jRouteTable
-      SubnetId: !Ref Neo4jSubnet1
+#  Neo4jSubnet1RouteTableAssociation:
+#    Type: AWS::EC2::SubnetRouteTableAssociation
+#    Properties:
+#      RouteTableId: !Ref Neo4jRouteTable
+#      SubnetId: !Ref Neo4jSubnet1
+#
+#
+#  Neo4jSubnet2RouteTableAssociation:
+#    Type: AWS::EC2::SubnetRouteTableAssociation
+#    Condition: CreateCluster
+#    Properties:
+#      RouteTableId: !Ref Neo4jRouteTable
+#      SubnetId: !Ref Neo4jSubnet2
+#
+#  Neo4jSubnet3RouteTableAssociation:
+#    Type: AWS::EC2::SubnetRouteTableAssociation
+#    Condition: CreateCluster
+#    Properties:
+#      RouteTableId: !Ref Neo4jRouteTable
+#      SubnetId: !Ref Neo4jSubnet3
 
 
-  Neo4jSubnet2RouteTableAssociation:
+  Neo4jSubnet4PublicRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Condition: CreateCluster
     Properties:
-      RouteTableId: !Ref Neo4jRouteTable
-      SubnetId: !Ref Neo4jSubnet2
-
-  Neo4jSubnet3RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: CreateCluster
-    Properties:
-      RouteTableId: !Ref Neo4jRouteTable
-      SubnetId: !Ref Neo4jSubnet3
+      RouteTableId: !Ref Neo4jPublicRouteTable
+      SubnetId: !Ref Neo4jSubnet4
 
   Neo4jInternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -285,6 +310,68 @@ Resources:
       InternetGatewayId: !Ref Neo4jInternetGateway
       VpcId: !Ref Neo4jVPC
 
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref Neo4jSubnet4
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jRouteTablePrivate:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+
+  Neo4jPrivateRoute:
+    DependsOn: NATGateway
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway
+
+
+  Neo4jSubnet1PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      SubnetId: !Ref Neo4jSubnet1
+
+
+  Neo4jSubnet2PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      SubnetId: !Ref Neo4jSubnet2
+
+  Neo4jSubnet3PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      SubnetId: !Ref Neo4jSubnet3
+
   Neo4jNetworkLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -293,7 +380,7 @@ Resources:
         - '-'
         - - !Ref 'AWS::StackName'
           - 'nlb'
-      Scheme: internal
+      Scheme: internet-facing
       Subnets: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
       Tags:
         - Key: StackID
@@ -358,13 +445,36 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
+  Neo4jBastianHost:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      IamInstanceProfile:
+        Ref: Neo4jInstanceProfile
+      ImageId: !FindInMap
+        - Neo4j
+        - !Ref 'AWS::Region'
+        - BYOL
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref Neo4jSubnet4
+      SecurityGroups: !Ref Neo4jBastianSecurityGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
 
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
-#    CreationPolicy:
-#      ResourceSignal:
-#        Count: !Ref CoreInstanceCount
-#        Timeout: PT8M
+    CreationPolicy:
+      ResourceSignal:
+        Count: !Ref CoreInstanceCount
+        Timeout: PT8M
     Properties:
       AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchConfigurationName:
@@ -521,7 +631,7 @@ Resources:
             - "    do echo \"Waiting for cluster to start\"\n"
             - "    sleep 5\n"
             - "  done\n"
-#            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
+            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
             - "extension_config() {\n"
@@ -587,10 +697,10 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Condition: CreateReadReplicas
     DependsOn: Neo4jAutoScalingGroup
-#    CreationPolicy:
-#      ResourceSignal:
-#        Count: !Ref ReadReplicaCount
-#        Timeout: PT3M
+    CreationPolicy:
+      ResourceSignal:
+        Count: !Ref ReadReplicaCount
+        Timeout: PT3M
     Properties:
       AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchConfigurationName:
@@ -698,7 +808,7 @@ Resources:
             - "    do echo \"Waiting for cluster to start\"\n"
             - "    sleep 5\n"
             - "  done\n"
-#            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jReadReplicaAutoScalingGroup --region \"${region}\"\n"
+            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jReadReplicaAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
             - "extension_config() {\n"
@@ -766,6 +876,17 @@ Resources:
                   - cloudformation:DescribeStack*
                   - ec2:DescribeInstances
                 Resource: "*"
+
+  Neo4jBastianSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and Neo4j External Ports
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHCIDR
 
   Neo4jExternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -849,4 +970,4 @@ Outputs:
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-0f19b54977f807022
+      BYOL: ami-0f26ab7914fc9bc20

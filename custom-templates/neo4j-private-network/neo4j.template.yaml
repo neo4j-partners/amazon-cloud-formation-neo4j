@@ -927,7 +927,7 @@ Resources:
 
 Outputs:
   SSHTunnelURL:
-    Description: URL for accessing Internal Neo4j Browser via ssh tunnel. Copy and fire this url from your local terminal and access Neo4j on your browser via http://localhost:7474
+    Description: SSH Command for establishing a ssh tunnel to the bastion. Execute this command from your local terminal and access Neo4j on your browser via http://localhost:7474
     Value: !Join
       - ''
       - - 'ssh -L 7474:'

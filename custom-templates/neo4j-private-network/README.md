@@ -27,6 +27,8 @@ GraphDatabaseVersion=4.4.12
 KeyName="name-of-ssh-key"
 ```
 
+Note that the ```CoreInstanceCount``` must retain the value of 3.  This template has not been tested with a single instance.
+
 4) Run the ```deploy.sh``` script.  It takes a single argument which is the desired CloudFormation Stack name:
 ```./deploy.sh my-test-stack-name```
 

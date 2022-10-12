@@ -34,7 +34,7 @@ Note that the ```CoreInstanceCount``` must retain the value of 3.  This template
 
 5) Log into the AWS console to check the build status of the CloudFormation Template.  The template provides a single output, the command needed to create an SSH tunnel to test the Neo4j cluster via the bastion instance.
 
-### Testing with an SSH Tunnel
+## Testing (with an SSH Tunnel)
 Neither the Network Load Balancer, nor the databases instances are internet routable.  Therefore, the easiest way to test that the neo4j cluster is operational is to create an SSH tunnel to forward the database ports (7474 & 7686) from the database instances back to localhost.
 
 The CloudFormation template provides an output showing the command needed to establish the tunnel.  In order for this work, it is recommended that ssh-agent is running on the local workstation and the relevant key is added:
@@ -51,7 +51,7 @@ Establish the SSH tunnel (example only, see the template output for actual comma
 
 Once the tunnel has been established, neo4j can be accessed via a web browser at [http://localhost:7474].  The database username will be ```neo4j``` and the password can be found in the ```deploy.sh``` script 
 
-### AWS Diagram
+## AWS Diagram
 
 The following diagram depicts the environment which is created by this cloudformation template:
 

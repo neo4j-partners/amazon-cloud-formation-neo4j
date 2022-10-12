@@ -48,7 +48,7 @@ Start SSH agent
 Add the ssh key to ssh-agent
 ```ssh-add *ssh-key-name*```
 
-Establish the SSH tunnel (example only, see the template output for actual command):
+Establish the SSH tunnel (example only, see the CloudFormation template output for actual command):
 
 ```
 ssh -L 7474:test-121022-nlb-a741fcfff76a03.elb.us-east-1.amazonaws.com:7474 -L 7687:test-121022-nlb-a741fcfff76a03.elb.us-east-1.amazonaws.com:7687 -A ec2-user@public_ip_of_bastion

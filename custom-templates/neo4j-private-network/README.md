@@ -29,8 +29,11 @@ KeyName="name-of-ssh-key"
 
 Note that the ```CoreInstanceCount``` must retain the value of 3.  This template has not been tested with a single instance.
 
-4) Run the ```deploy.sh``` script.  It takes a single argument which is the desired CloudFormation Stack name:
-```./deploy.sh my-test-stack-name```
+4) Ensure that the ```deploy.sh``` script is executable and run it.  (It takes a single argument which is the desired CloudFormation Stack name):
+```
+chmod 755 ./deploy.sh
+./deploy.sh test-cloudformation-stack-name
+```
 
 5) Log into the AWS console to check the build status of the CloudFormation Template.  The template provides a single output, the command needed to create an SSH tunnel to test the Neo4j cluster via the bastion instance.
 

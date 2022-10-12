@@ -423,7 +423,7 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
-  Neo4jBastianHost:
+  Neo4jBastionHost:
     Type: AWS::EC2::Instance
     Properties:
       AvailabilityZone:
@@ -440,7 +440,7 @@ Resources:
       KeyName: !Ref KeyName
       SubnetId: !Ref Neo4jSubnet4
       SecurityGroupIds:
-        - Fn::GetAtt: [Neo4jBastianSecurityGroup,GroupId]
+        - Fn::GetAtt: [Neo4jBastionSecurityGroup,GroupId]
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -856,7 +856,7 @@ Resources:
                   - ec2:DescribeInstances
                 Resource: "*"
 
-  Neo4jBastianSecurityGroup:
+  Neo4jBastionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Enable SSH and Neo4j External Ports
@@ -935,7 +935,7 @@ Outputs:
         - ':7474 -L 7687:'
         - !GetAtt Neo4jNetworkLoadBalancer.DNSName
         - ':7687 -A ec2-user@'
-        - !GetAtt Neo4jBastianHost.PublicIp
+        - !GetAtt Neo4jBastionHost.PublicIp
   Neo4jUsername:
     Description: Username for Neo4j
     Value: 'The username is neo4j.  The password is what you provided to the template.'

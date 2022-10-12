@@ -60,7 +60,7 @@ ssh -L 7474:test-121022-nlb-a741fcfff76a03.elb.us-east-1.amazonaws.com:7474 -L 7
 Once the tunnel has been established, neo4j can be accessed via a web browser at [http://localhost:7474].  The database username will be ```neo4j``` and the password can be found in the ```deploy.sh``` script 
 
 Once the neo4j browser page has loaded, the connection URL must be changed to reflect "localhost", in line with the image below:
-![](images/neo4j-aws-3-node-private.png?raw=true)
+![](images/localhost.jpg?raw=true)
 
 
 ## AWS Diagram

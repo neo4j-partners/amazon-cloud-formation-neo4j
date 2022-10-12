@@ -12,14 +12,16 @@ To deploy this cloudformation stack, the following steps must be undertaken:
 https://github.com/neo4j-partners/amazon-cloud-formation-neo4j) to a local workstation.  
 
 
-3) Change to the directory "custome-templates/neo4j-private-netowrk" and edit the file "deploy.sh" and update the variables containted within it:
+3) Change to the directory ```custom-templates/neo4j-private-netowork``` and edit the file ```deploy.sh``` and update the variables containted within it:
 
+```
 Password="set-neo4j-password-here"
 CoreInstanceCount="3"
 ReadReplicaCount="0"
 SSHCIDR="0.0.0.0/0"
 GraphDatabaseVersion=4.4.12
 KeyName="name-of-ssh-key"
+```
 
 4) Run the deploy.sh script.  It takes a single argument which is the desired CloudFormation Stack name:
 ./deploy.sh my-test-stack

@@ -6,9 +6,7 @@ The "neo4j-private-network" Cloud Formation template delivers an AWS environment
 
 To deploy this cloudformation stack, the following steps must be undertaken:
 
-1) Ensure that the AWS CLI properly installed and configured for the target AWS account.  Details on how to do this can be found in the AWS documentation.  https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html
-
-[AWS CLI Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
+1) Ensure that the AWS CLI properly installed and configured for the target AWS account.  Details on how to do this can be found in the [AWS CLI Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
 
 2) Clone the official neo4j AWS CloudFormation repository to a local workstation.  
 

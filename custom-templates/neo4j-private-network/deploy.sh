@@ -3,14 +3,16 @@
 STACK_NAME=$1
 
 TEMPLATE_BODY="file://neo4j.template.yaml"
-REGION=`aws configure get region`
+#REGION=`aws configure get region`
 
+REGION=us-west-1
 Password="foo123"
 CoreInstanceCount="1"
 ReadReplicaCount="0"
 SSHCIDR="0.0.0.0/0"
 GraphDatabaseVersion=4.4.12
-KeyName="harshit"
+KeyName="edr-us-west-1-key"
+#KeyName="edr-test-121022"
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \

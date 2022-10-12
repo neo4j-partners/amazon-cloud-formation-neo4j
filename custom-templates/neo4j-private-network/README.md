@@ -12,7 +12,7 @@ To deploy this cloudformation stack, the following steps must be undertaken:
 https://github.com/neo4j-partners/amazon-cloud-formation-neo4j) to a local workstation.  
 
 
-3) Change to the directory ```custom-templates/neo4j-private-netowork``` and edit the file ```deploy.sh``` and update the variables containted within it:
+3) Change to the directory ```custom-templates/neo4j-private-network``` and edit the file ```deploy.sh``` and update the variables containted within it:
 
 ```
 Password="set-neo4j-password-here"
@@ -23,9 +23,13 @@ GraphDatabaseVersion=4.4.12
 KeyName="name-of-ssh-key"
 ```
 
-4) Run the deploy.sh script.  It takes a single argument which is the desired CloudFormation Stack name:
-./deploy.sh my-test-stack
+4) Run the ```deploy.sh`` script.  It takes a single argument which is the desired CloudFormation Stack name:
+```./deploy.sh my-test-stack-name```
 
 5) Log into the AWS console to check the build status of the CloudFormation Template.  The template provides a single output, the command needed to create an SSH tunnel to test the Neo4j cluster via the bastion instance.
+
+### AWS Diagram
+
+The following diagram depicts the environment which is created by this cloudformation template:
 
 ![](neo4j-aws-3-node-private.png?raw=true)

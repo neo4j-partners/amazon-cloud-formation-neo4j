@@ -4,6 +4,9 @@
 
 *This "neo4j-private-network" Cloud Formation template delivers an AWS environment running neo4j, with database instances which are not (inbound) internet routable.*
 
+ - 3 node cluster
+ - Neo4j v4.4.12
+
 ## Deployment Steps
 
 To deploy this cloudformation stack, the following steps must be undertaken:
@@ -13,7 +16,7 @@ To deploy this cloudformation stack, the following steps must be undertaken:
 2) Clone the [Neo4j AWS CloudFormation repository](
 https://github.com/neo4j-partners/amazon-cloud-formation-neo4j) to a local workstation.  
 
-3) Change to the directory ```custom-templates/neo4j-private-network``` and edit the file ```deploy.sh``` and update the variables containted within it:
+3) Change to the directory ```custom-templates/neo4j-private-network``` and edit the file ```deploy.sh``` and update the variables containted therein:
 
 ```
 Password="set-neo4j-password-here"
@@ -24,10 +27,23 @@ GraphDatabaseVersion=4.4.12
 KeyName="name-of-ssh-key"
 ```
 
-4) Run the ```deploy.sh`` script.  It takes a single argument which is the desired CloudFormation Stack name:
+4) Run the ```deploy.sh``` script.  It takes a single argument which is the desired CloudFormation Stack name:
 ```./deploy.sh my-test-stack-name```
 
 5) Log into the AWS console to check the build status of the CloudFormation Template.  The template provides a single output, the command needed to create an SSH tunnel to test the Neo4j cluster via the bastion instance.
+
+### Testing with an SSH Tunnel
+Neither the Network Load Balancer, nor the databases instances are internet routable.  Therefore, the easiest way to test that the neo4j cluster is by creating an SSH tunnel to forward the database ports (7474 & 7686) from the database instances back to a local workstation.
+
+The cloudformation template provides an output showing the command needed to establish the tunnel.  In order for this work, it is recommended that ssh-agent is running on the local workstation and the relevant key is added:
+
+Start SSH agent
+```$(eval ssh-agent)```
+
+Add the ssh key to ssh-agent
+```ssh-add *ssh-key-name*```
+
+Once the tunnel has been established, neo4j can be accessed at [http://localhost:7474].  The database username will be ```neo4j``` and the password can be found in the ```deploy.sh``` script 
 
 ### AWS Diagram
 

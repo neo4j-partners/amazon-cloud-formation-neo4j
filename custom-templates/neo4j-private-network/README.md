@@ -61,7 +61,7 @@ Once the tunnel has been established, neo4j can be accessed via a web browser at
 
 Once the neo4j browser page has loaded, the connection URL must be changed to reflect "localhost", in line with the image below:
 
-<img src="https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/main/custom-templates/neo4j-private-network/images/localhost.jpg" height="50%" width="50%">
+<img src="https://raw.githubusercontent.com/neo4j-partners/amazon-cloud-formation-neo4j/main/custom-templates/neo4j-private-network/images/localhost.jpg" height="50%" width="50%" align="center">
 
 ## AWS Diagram
 

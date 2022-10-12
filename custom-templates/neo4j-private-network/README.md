@@ -2,11 +2,13 @@
 
 ## Deploying a 3-node Neo4j cluster using AWS CloudFormation in Private [Non-Internet Routable] Subnets
 
-The "neo4j-private-network" Cloud Formation template delivers an AWS environment running neo4j, with database instances which are not internet routable.
+The "neo4j-private-network" Cloud Formation template delivers an AWS environment running neo4j, with database instances which are *not* (inbound) internet routable.
 
 To deploy this cloudformation stack, the following steps must be undertaken:
 
 1) Ensure that the AWS CLI properly installed and configured for the target AWS account.  Details on how to do this can be found in the AWS documentation.  https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html
+
+[AWS CLI Documentation]([https://www.google.com](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html))
 
 2) Clone the official neo4j AWS CloudFormation repository to a local workstation.  
 

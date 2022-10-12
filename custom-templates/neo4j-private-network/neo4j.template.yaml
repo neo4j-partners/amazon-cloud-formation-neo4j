@@ -19,6 +19,7 @@ Metadata:
           - ReadReplicaCount
           - InstanceType
           - DiskSize
+          - KeyName
           - SSHCIDR
     ParameterLabels:
       GraphDatabaseVersion:
@@ -41,6 +42,8 @@ Metadata:
         default: Instance Type
       DiskSize:
         default: Disk Size
+      KeyName:
+        default: Key Name
       SSHCIDR:
         default: SSH CIDR
 
@@ -133,6 +136,10 @@ Parameters:
     MinValue: 100
     ConstraintDescription: "Minimum disk size should be 100"
 
+  KeyName:
+    Description: Name of an existing EC2 KeyPair
+    Type: AWS::EC2::KeyPair::KeyName
+
   SSHCIDR:
     Description: SSH CIDR (Specify an address range from which ec2 instances are accessible on port 22. You can use 0.0.0.0/0 to allow access from any IP address)
     Type: String
@@ -179,7 +186,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       CidrBlock: 10.0.1.0/24
-      MapPublicIpOnLaunch: true
+      MapPublicIpOnLaunch: false
       AvailabilityZone:
         Fn::Select:
           - 0
@@ -196,7 +203,7 @@ Resources:
     Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.2.0/24
-      MapPublicIpOnLaunch: true
+      MapPublicIpOnLaunch: false
       AvailabilityZone:
         Fn::Select:
           - 1
@@ -213,6 +220,23 @@ Resources:
     Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jSubnet4:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.4.0/24
       MapPublicIpOnLaunch: true
       AvailabilityZone:
         Fn::Select:
@@ -225,7 +249,7 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
-  Neo4jRouteTable:
+  Neo4jPublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       Tags:
@@ -235,33 +259,19 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
-  Neo4jRoute:
+  Neo4jPublicRoute:
     Type: AWS::EC2::Route
     Properties:
       GatewayId: !Ref Neo4jInternetGateway
-      RouteTableId: !Ref Neo4jRouteTable
+      RouteTableId: !Ref Neo4jPublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
 
-  Neo4jSubnet1RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref Neo4jRouteTable
-      SubnetId: !Ref Neo4jSubnet1
-
-
-  Neo4jSubnet2RouteTableAssociation:
+  Neo4jSubnet4PublicRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Condition: CreateCluster
     Properties:
-      RouteTableId: !Ref Neo4jRouteTable
-      SubnetId: !Ref Neo4jSubnet2
-
-  Neo4jSubnet3RouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: CreateCluster
-    Properties:
-      RouteTableId: !Ref Neo4jRouteTable
-      SubnetId: !Ref Neo4jSubnet3
+      RouteTableId: !Ref Neo4jPublicRouteTable
+      SubnetId: !Ref Neo4jSubnet4
 
   Neo4jInternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -278,6 +288,68 @@ Resources:
       InternetGatewayId: !Ref Neo4jInternetGateway
       VpcId: !Ref Neo4jVPC
 
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref Neo4jSubnet4
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jRouteTablePrivate:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+
+  Neo4jPrivateRoute:
+    DependsOn: NATGateway
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway
+
+
+  Neo4jSubnet1PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      SubnetId: !Ref Neo4jSubnet1
+
+
+  Neo4jSubnet2PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      SubnetId: !Ref Neo4jSubnet2
+
+  Neo4jSubnet3PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      SubnetId: !Ref Neo4jSubnet3
+
   Neo4jNetworkLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -286,7 +358,7 @@ Resources:
         - '-'
         - - !Ref 'AWS::StackName'
           - 'nlb'
-      Scheme: internet-facing
+      Scheme: internal
       Subnets: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
       Tags:
         - Key: StackID
@@ -351,6 +423,30 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
+  Neo4jBastionHost:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      IamInstanceProfile:
+        Ref: Neo4jInstanceProfile
+      ImageId: !FindInMap
+        - Neo4j
+        - !Ref 'AWS::Region'
+        - BYOL
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref Neo4jSubnet4
+      SecurityGroupIds:
+        - Fn::GetAtt: [Neo4jBastionSecurityGroup,GroupId]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
 
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -391,6 +487,8 @@ Resources:
       SecurityGroups:
         - Ref: Neo4jExternalSecurityGroup
         - Ref: Neo4jInternalSecurityGroup
+      KeyName:
+        Ref: KeyName
       EbsOptimized: true
       IamInstanceProfile:
         Ref: Neo4jInstanceProfile
@@ -565,7 +663,6 @@ Resources:
             - "    set_cluster_configs\n"
             - "  fi\n"
             - "}\n"
-
             - "configure_yum_repo\n"
             - "install_neo4j_from_yum\n"
             - "install_apoc_plugin\n"
@@ -723,7 +820,6 @@ Resources:
             - "  sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf\n"
             - "  echo \"dbms.routing.default_router=SERVER\" >> /etc/neo4j/neo4j.conf\n"
             - "}\n"
-
             - "configure_yum_repo\n"
             - "install_neo4j_from_yum\n"
             - "install_apoc_plugin\n"
@@ -759,6 +855,17 @@ Resources:
                   - cloudformation:DescribeStack*
                   - ec2:DescribeInstances
                 Resource: "*"
+
+  Neo4jBastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and Neo4j External Ports
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHCIDR
 
   Neo4jExternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -819,22 +926,16 @@ Resources:
           SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
 
 Outputs:
-  Neo4jBrowserURL:
-    Description: URL for Neo4j Browser
+  SSHTunnelURL:
+    Description: SSH Command for establishing a ssh tunnel to the bastion. Execute this command from your local terminal and access Neo4j on your browser via http://localhost:7474
     Value: !Join
       - ''
-      - - 'http://'
+      - - 'ssh -L 7474:'
         - !GetAtt Neo4jNetworkLoadBalancer.DNSName
-        - ':'
-        - '7474'
-  Neo4jURI:
-    Description: Neo4j URI Scheme
-    Value: !Join
-      - ''
-      - - 'neo4j://'
+        - ':7474 -L 7687:'
         - !GetAtt Neo4jNetworkLoadBalancer.DNSName
-        - ':'
-        - '7687'
+        - ':7687 -A ec2-user@'
+        - !GetAtt Neo4jBastionHost.PublicIp
   Neo4jUsername:
     Description: Username for Neo4j
     Value: 'The username is neo4j.  The password is what you provided to the template.'

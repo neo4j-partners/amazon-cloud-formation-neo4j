@@ -8,9 +8,9 @@ To deploy this cloudformation stack, the following steps must be undertaken:
 
 1) Ensure that the AWS CLI properly installed and configured for the target AWS account.  Details on how to do this can be found in the [AWS CLI Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
 
-2) Clone the official neo4j AWS CloudFormation repository to a local workstation.  
+2) Clone the [Neo4j AWS CloudFormation repository](
+https://github.com/neo4j-partners/amazon-cloud-formation-neo4j) to a local workstation.  
 
-https://github.com/neo4j-partners/amazon-cloud-formation-neo4j
 
 3) Change to the directory "custome-templates/neo4j-private-netowrk" and edit the file "deploy.sh" and update the variables containted within it:
 

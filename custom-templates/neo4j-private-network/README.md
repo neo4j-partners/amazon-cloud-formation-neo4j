@@ -5,7 +5,7 @@
 
 *This "neo4j-private-network" Cloud Formation template delivers an AWS environment running neo4j, with database instances and a network load balancer which are not (inbound) internet routable:*
 
- - 3 node cluster
+ - Single node *or* 3 node cluster
  - Neo4j v4.4.12
  
  

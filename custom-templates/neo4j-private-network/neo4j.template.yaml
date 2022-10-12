@@ -234,7 +234,6 @@ Resources:
 
   Neo4jSubnet4:
     Type: AWS::EC2::Subnet
-    Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.4.0/24
       MapPublicIpOnLaunch: true
@@ -268,7 +267,6 @@ Resources:
 
   Neo4jSubnet4PublicRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: CreateCluster
     Properties:
       RouteTableId: !Ref Neo4jPublicRouteTable
       SubnetId: !Ref Neo4jSubnet4
@@ -644,7 +642,8 @@ Resources:
             - "  if [[ $nodeCount == 1 ]]; then\n"
             - "    echo \"Running on a single node.\"\n"
             - "  if [[ $readReplicaCount == 0 ]]; then\n"
-            - "    sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=\"${loadBalancerDNSName}\"/g /etc/neo4j/neo4j.conf\n"
+            - "    privateIPHost=\"$(hostname -i | awk {'print $NF'})\"\n"
+            - "    sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=\"${privateIPHost}\"/g /etc/neo4j/neo4j.conf\n"
             - "  else\n"
             - "     sed -i s/#dbms.mode=CORE/dbms.mode=SINGLE/g /etc/neo4j/neo4j.conf\n"
             - "     echo \"dbms.clustering.enable=true\" >> /etc/neo4j/neo4j.conf\n"
@@ -943,4 +942,50 @@ Outputs:
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-0f26ab7914fc9bc20
+      BYOL: ami-0e7b912e5d7cd877f
+    us-gov-east-1:
+      BYOL: ami-01e36c162d3e6e48c
+    us-gov-west-1:
+      BYOL: ami-012f3d7ff34943896
+    us-east-2:
+      BYOL: ami-02b97853356744249
+    us-west-1:
+      BYOL: ami-02abdbe39b20c97bb
+    us-west-2:
+      BYOL: ami-0ea880de9586016d2
+    ca-central-1:
+      BYOL: ami-06ffe1d496264779d
+    eu-central-1:
+      BYOL: ami-02e0fc20a72e8119e
+    eu-west-1:
+      BYOL: ami-0732a06a6cd21a81d
+    eu-west-2:
+      BYOL: ami-09bc04f556296a022
+    eu-west-3:
+      BYOL: ami-0c8a3438f446a01f2
+    eu-north-1:
+      BYOL: ami-00a8465daba1a6875
+    eu-south-1:
+      BYOL: ami-03af48c17a9db8e48
+    ap-east-1:
+      BYOL: ami-0d2023ccc040fe257
+    ap-northeast-1:
+      BYOL: ami-0e993975fd0950c43
+    ap-northeast-2:
+      BYOL: ami-0b21df8742f2dd5de
+    ap-northeast-3:
+      BYOL: ami-08ec836a02f89351e
+    ap-southeast-1:
+      BYOL: ami-03e5f0a51e00838b6
+    ap-southeast-2:
+      BYOL: ami-072ac4bfea8f9ee35
+    ap-southeast-3:
+      BYOL: ami-0548122e1d4f223c8
+    ap-south-1:
+      BYOL: ami-0bd233e4eb337ea43
+    sa-east-1:
+      BYOL: ami-0a78c7cc00b899124
+    af-south-1:
+      BYOL: ami-08a8cd8d53a9358c0
+    me-south-1:
+      BYOL: ami-02ce29a685c6d0a3f

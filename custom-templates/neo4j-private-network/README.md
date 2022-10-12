@@ -64,4 +64,8 @@ Once the tunnel has been established, neo4j can be accessed via a web browser at
 
 The following diagram depicts the environment which is created by this cloudformation template:
 
+### Single [Neo4j] Instance Configuration
+![](neo4j-aws-1-node-private.png?raw=true)
+
+### Three [Neo4j] Instance Configuration
 ![](neo4j-aws-3-node-private.png?raw=true)

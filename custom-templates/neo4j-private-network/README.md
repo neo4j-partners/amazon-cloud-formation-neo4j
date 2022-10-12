@@ -22,5 +22,4 @@ KeyName="name-of-ssh-key"
 
 5) Log into the AWS console to check the build status of the CloudFormation Template.  The template provides a single output, the command needed to create an SSH tunnel to test the Neo4j cluster via the bastion instance.
 
-
-Diagram....
+![](neo4j-aws-3-node-private.png?raw=true)

@@ -1,11 +1,13 @@
 # Neo4j Private Network CloudFormation Template
 
+
 ## Deploying a 3-node Neo4j cluster using AWS CloudFormation in Private [Non-Internet Routable] Subnets
 
 *This "neo4j-private-network" Cloud Formation template delivers an AWS environment running neo4j, with database instances and a network load balancer which are not (inbound) internet routable:*
 
  - 3 node cluster
  - Neo4j v4.4.12
+ 
  
 ## Deployment Steps
 
@@ -26,9 +28,10 @@ SSHCIDR="0.0.0.0/0"
 GraphDatabaseVersion=4.4.12
 KeyName="name-of-ssh-key"
 ```
-
-Note that the ```CoreInstanceCount``` must retain the value of 3.  This template has not been tested with a single instance.
-
+Important Notes:
+ - The ```CoreInstanceCount``` variable must retain the value of 3.  This template has not been tested with a single instance.
+ - The KeyName variable must match the name of the keypair which is stored in AWS.  Therefore it must refer to a key name and and not a file name.
+ 
 4) Ensure that the ```deploy.sh``` script is executable and run it.  (It takes a single argument which is the desired CloudFormation Stack name):
 ```
 chmod 755 ./deploy.sh
@@ -55,6 +58,7 @@ ssh -L 7474:test-121022-nlb-a741fcfff76a03.elb.us-east-1.amazonaws.com:7474 -L 7
 ```
 
 Once the tunnel has been established, neo4j can be accessed via a web browser at [http://localhost:7474].  The database username will be ```neo4j``` and the password can be found in the ```deploy.sh``` script 
+
 
 ## AWS Diagram
 

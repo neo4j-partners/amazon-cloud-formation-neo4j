@@ -29,7 +29,7 @@ GraphDatabaseVersion=4.4.12
 KeyName="name-of-ssh-key"
 ```
 Important Notes:
- - The ```CoreInstanceCount``` variable must retain the value of 3.  This template has not been tested with a single instance.
+ - The ```CoreInstanceCount``` can be set to either 1 or 3.  This template can deploy either a three-node or single-node neo4j environment.
  - The KeyName variable must match the name of the keypair which is stored in AWS.  Therefore it must refer to a key name and and not a file name.
  
 4) Ensure that the ```deploy.sh``` script is executable and run it.  (It takes a single argument which is the desired CloudFormation Stack name):

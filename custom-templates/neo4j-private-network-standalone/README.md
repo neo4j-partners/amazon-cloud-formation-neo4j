@@ -1,11 +1,11 @@
 # Neo4j Private Network CloudFormation Template
 
 
-## Deploying a Single-node OR 3-node Neo4j cluster using AWS CloudFormation in Private [Non-Internet Routable] Subnets
+## Deploying a single Neo4j cluster using AWS CloudFormation in Private [Non-Internet Routable] Subnet
 
-*This "neo4j-private-network" Cloud Formation template delivers an AWS environment running neo4j, with database instances and a network load balancer which are not (inbound) internet routable:*
+*This "neo4j-private-network-standalone" Cloud Formation template delivers an AWS environment running neo4j, with database instance and a network load balancer which are not (inbound) internet routable:*
 
- - Single node *or* 3 node cluster
+ - Single node
  - Neo4j v4.4.12
  
  
@@ -22,14 +22,14 @@ https://github.com/neo4j-partners/amazon-cloud-formation-neo4j) to a local works
 
 ```
 Password="set-neo4j-password-here"
-CoreInstanceCount="3"
+CoreInstanceCount="1"
 ReadReplicaCount="0"
 SSHCIDR="0.0.0.0/0"
 GraphDatabaseVersion=4.4.12
 KeyName="name-of-ssh-key"
 ```
 Important Notes:
- - The ```CoreInstanceCount``` can be set to either 1 or 3.  This template can deploy either a three-node or single-node neo4j environment.
+ - The ```CoreInstanceCount``` should be set to 1.  This template can deploy a single-node neo4j environment.
  - The KeyName variable must match the name of the keypair which is stored in AWS.  Therefore it must refer to a key name and and not a file name.
  
 4) Ensure that the ```deploy.sh``` script is executable and run it.  (It takes a single argument which is the desired CloudFormation Stack name):
@@ -69,6 +69,3 @@ The following diagram depicts the environment which is created by this cloudform
 
 ### Single [Neo4j] Instance Configuration
 ![](images/neo4j-aws-1-node-private.png?raw=true)
-
-### Three [Neo4j] Instance Configuration
-![](images/neo4j-aws-3-node-private.png?raw=true)

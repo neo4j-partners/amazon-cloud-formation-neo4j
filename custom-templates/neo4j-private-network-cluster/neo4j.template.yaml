@@ -1,0 +1,994 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Neo4j Enterprise Edition
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Neo4j Configuration"
+        Parameters:
+          - GraphDatabaseVersion
+          - InstallGraphDataScience
+          - GraphDataScienceLicenseKey
+          - InstallBloom
+          - BloomLicenseKey
+          - Password
+      - Label:
+          default: "Infrastructure Configuration"
+        Parameters:
+          - CoreInstanceCount
+          - ReadReplicaCount
+          - InstanceType
+          - DiskSize
+          - KeyName
+          - SSHCIDR
+    ParameterLabels:
+      GraphDatabaseVersion:
+        default: Graph Database Version
+      InstallGraphDataScience:
+        default: Install Graph Data Science
+      GraphDataScienceLicenseKey:
+        default: Graph Data Science License Key
+      InstallBloom:
+        default: Install Bloom
+      BloomLicenseKey:
+        default: Bloom License Key
+      Password:
+        default: Password
+      CoreInstanceCount:
+        default: Core Instance Count
+      ReadReplicaCount:
+        default: Read Replica Count
+      InstanceType:
+        default: Instance Type
+      DiskSize:
+        default: Disk Size
+      KeyName:
+        default: Key Name
+      SSHCIDR:
+        default: SSH CIDR
+
+Parameters:
+  GraphDatabaseVersion:
+    Description: Neo4j Graph Database Version
+    Type: String
+    Default: '4.4.11'
+
+  InstallGraphDataScience:
+    Description: Install Graph Data Science
+    Type: String
+    Default: 'False'
+    AllowedValues:
+      - 'True'
+      - 'False'
+
+  GraphDataScienceLicenseKey:
+    Description: License Key for Graph Data Science (License keys will be sent to and stored by Neo4j. This information will only be used for the purposes of product activation.)
+    Type: String
+    Default: 'None'
+
+  InstallBloom:
+    Description: Install Bloom
+    Type: String
+    Default: 'False'
+    AllowedValues:
+      - 'True'
+      - 'False'
+
+  BloomLicenseKey:
+    Description: License Key for Bloom (License keys will be sent to and stored by Neo4j. This information will only be used for the purposes of product activation.)
+    Type: String
+    Default: 'None'
+
+  Password:
+    Description: Password for Neo4j
+    Type: String
+    MinLength: 6
+    NoEcho: true
+
+  CoreInstanceCount:
+    Description: Number of core nodes
+    Type: Number
+    Default: 3
+    AllowedValues:
+      - 1
+      - 3
+
+  ReadReplicaCount:
+    Description: Number of read replicas
+    Type: Number
+    Default: 0
+    AllowedValues:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - r6i.large
+      - r6i.xlarge
+      - r6i.2xlarge
+      - r6i.4xlarge
+      - r6i.8xlarge
+      - r6i.12xlarge
+      - r6i.16xlarge
+      - r6i.24xlarge
+      - r6i.32xlarge
+
+  DiskSize:
+    Description: Size in GB of the EBS volume on each node
+    Type: Number
+    Default: 100
+    MinValue: 100
+    ConstraintDescription: "Minimum disk size should be 100"
+
+  KeyName:
+    Description: Name of an existing EC2 KeyPair
+    Type: AWS::EC2::KeyPair::KeyName
+
+  SSHCIDR:
+    Description: SSH CIDR (Specify an address range from which ec2 instances are accessible on port 22. You can use 0.0.0.0/0 to allow access from any IP address)
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
+
+Rules:
+  GDSCheck:
+    RuleCondition: !Equals
+      - !Ref InstallGraphDataScience
+      - 'True'
+    Assertions:
+      - Assert: !Not
+          - !Equals
+            - !Ref CoreInstanceCount
+            - '3'
+        AssertDescription: Node Count cannot be set to 3 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
+
+Conditions:
+  CreateReadReplicas: !Not
+    - !Equals
+      - !Ref ReadReplicaCount
+      - '0'
+  CreateCluster: !Not
+    - !Equals
+      - !Ref CoreInstanceCount
+      - '1'
+
+Resources:
+  Neo4jVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jSubnet1:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jSubnet3:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jSubnet4:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.4.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jPublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      GatewayId: !Ref Neo4jInternetGateway
+      RouteTableId: !Ref Neo4jPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  Neo4jSubnet4PublicRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jPublicRouteTable
+      SubnetId: !Ref Neo4jSubnet4
+
+  Neo4jInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref Neo4jInternetGateway
+      VpcId: !Ref Neo4jVPC
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref Neo4jSubnet4
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jRouteTablePrivate:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+
+  Neo4jPrivateRoute:
+    DependsOn: NATGateway
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway
+
+
+  Neo4jSubnet1PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      SubnetId: !Ref Neo4jSubnet1
+
+
+  Neo4jSubnet2PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      SubnetId: !Ref Neo4jSubnet2
+
+  Neo4jSubnet3PrivateRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      SubnetId: !Ref Neo4jSubnet3
+
+  Neo4jNetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'nlb'
+      Scheme: internal
+      Subnets: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      Type: network
+
+  Neo4jHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7474
+      Protocol: TCP
+
+  Neo4jBoltListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jBoltTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7687
+      Protocol: TCP
+
+  Neo4jHTTPTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'http'
+          - 'tg'
+      Port: 7474
+      Protocol: TCP
+      HealthCheckIntervalSeconds: 10
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jBoltTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'bolt'
+          - 'tg'
+      Port: 7687
+      Protocol: TCP
+      HealthCheckIntervalSeconds: 10
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jBastionHost:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      IamInstanceProfile:
+        Ref: Neo4jInstanceProfile
+      ImageId: !FindInMap
+        - Neo4j
+        - !Ref 'AWS::Region'
+        - BYOL
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      SubnetId: !Ref Neo4jSubnet4
+      SecurityGroupIds:
+        - Fn::GetAtt: [Neo4jBastionSecurityGroup,GroupId]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+
+  Neo4jAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    CreationPolicy:
+      ResourceSignal:
+        Count: !Ref CoreInstanceCount
+        Timeout: PT8M
+    Properties:
+      AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ], !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
+      LaunchConfigurationName:
+        Ref: Neo4jLaunchConfiguration
+      MinSize: !Ref CoreInstanceCount
+      MaxSize: !Ref CoreInstanceCount
+      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      DesiredCapacity:
+        Ref: CoreInstanceCount
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+          PropagateAtLaunch: true
+
+
+  Neo4jLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !FindInMap
+        - Neo4j
+        - !Ref 'AWS::Region'
+        - BYOL
+      InstanceType:
+        Ref: InstanceType
+      SecurityGroups:
+        - Ref: Neo4jExternalSecurityGroup
+        - Ref: Neo4jInternalSecurityGroup
+      KeyName:
+        Ref: KeyName
+      EbsOptimized: true
+      IamInstanceProfile:
+        Ref: Neo4jInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize:
+              Ref: DiskSize
+            VolumeType: gp3
+            Encrypted: true
+      UserData:
+        Fn::Base64:
+          !Join
+          - ''
+          - - "#!/bin/bash\n"
+            - "set -euo pipefail\n"
+            - "echo Running startup script...\n"
+
+            - "graphDatabaseVersion="
+            - Ref: GraphDatabaseVersion
+            - "\n"
+
+            - "installGraphDataScience="
+            - Ref: InstallGraphDataScience
+            - "\n"
+
+            - "graphDataScienceLicenseKey="
+            - Ref: GraphDataScienceLicenseKey
+            - "\n"
+
+            - "installBloom="
+            - Ref: InstallBloom
+            - "\n"
+
+            - "bloomLicenseKey="
+            - Ref: BloomLicenseKey
+            - "\n"
+
+            - "password="
+            - Ref: Password
+            - "\n"
+
+            - "nodeCount="
+            - Ref: CoreInstanceCount
+            - "\n"
+
+            - "readReplicaCount="
+            - Ref: ReadReplicaCount
+            - "\n"
+
+            - "loadBalancerDNSName="
+            - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
+            - "\n"
+
+            - "stackName="
+            - Ref: AWS::StackName
+            - "\n"
+
+            - "region="
+            - Ref: AWS::Region
+            - "\n"
+
+            - "configure_yum_repo() {\n"
+            - "  echo \"Adding neo4j yum repo...\"\n"
+            - "  rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
+            - "  cat <<EOF > /etc/yum.repos.d/neo4j.repo\n"
+            - "[neo4j]\n"
+            - "name=Neo4j Yum Repo\n"
+            - "baseurl=http://yum.neo4j.com/stable\n"
+            - "enabled=1\n"
+            - "gpgcheck=1\n"
+            - "EOF\n"
+            - "}\n"
+
+            - "install_neo4j_from_yum() {\n"
+            - "  echo \"Installing Graph Database...\"\n"
+            - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
+            - "  yum -y install \"neo4j-enterprise-${graphDatabaseVersion}\"\n"
+            - "  yum update -y aws-cfn-bootstrap\n"
+            - "  systemctl enable neo4j\n"
+            - "}\n"
+
+            - "install_apoc_plugin() {\n"
+            - "  echo \"Installing APOC...\"\n"
+            - "  mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
+            - "}\n"
+
+            - "configure_graph_data_science() {\n"
+            - "  if [[ \"${installGraphDataScience}\" == True && \"${nodeCount}\" == 1 ]]; then\n"
+            - "    echo \"Installing Graph Data Science...\"\n"
+            - "    cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
+            - "  fi\n"
+            - "  if [[ $graphDataScienceLicenseKey != None ]]; then\n"
+            - "    echo \"Writing GDS license key...\"\n"
+            - "    mkdir -p /etc/neo4j/licenses\n"
+            - "    echo \"${graphDataScienceLicenseKey}\" > /etc/neo4j/licenses/neo4j-gds.license\n"
+            - "    sed -i '$a gds.enterprise.license_file=/etc/neo4j/licenses/neo4j-gds.license' /etc/neo4j/neo4j.conf\n"
+            - "  fi\n"
+            - "}\n"
+
+            - "configure_bloom() {\n"
+            - "  if [[ $installBloom == True ]]; then\n"
+            - "    echo \"Installing Bloom...\"\n"
+            - "    cp /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
+            - "  fi\n"
+            - "  if [[ $bloomLicenseKey != None ]]; then\n"
+            - "    echo \"Writing Bloom license key...\"\n"
+            - "    mkdir -p /etc/neo4j/licenses\n"
+            - "    echo \"${bloomLicenseKey}\" > /etc/neo4j/licenses/neo4j-bloom.license\n"
+            - "    sed -i '$a neo4j.bloom.license_file=/etc/neo4j/licenses/neo4j-bloom.license' /etc/neo4j/neo4j.conf\n"
+            - "  fi\n"
+            - "}\n"
+
+            - "start_neo4j() {\n"
+            - "  echo \"Starting Neo4j...\"\n"
+            - "  service neo4j start\n"
+            - "  neo4j-admin set-initial-password \"${password}\"\n"
+            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
+            - "    do echo \"Waiting for cluster to start\"\n"
+            - "    sleep 5\n"
+            - "  done\n"
+            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
+            - "}\n"
+
+            - "extension_config() {\n"
+            - "  echo Configuring extensions and security in neo4j.conf...\n"
+            - "  sed -i s~#dbms.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~dbms.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*\" >> /etc/neo4j/neo4j.conf\n"
+            - "}\n"
+
+            - "set_cluster_configs() {\n"
+            - "  local -r privateIP=\"$(hostname -i | awk {'print $NF'})\"\n"
+            - "  sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=\"${privateIP}\"/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#causal_clustering.discovery_listen_address=:5000/causal_clustering.discovery_listen_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#causal_clustering.transaction_listen_address=:6000/causal_clustering.transaction_listen_address=\"${privateIP}\":6000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#causal_clustering.raft_listen_address=:7000/causal_clustering.raft_listen_address=\"${privateIP}\":7000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.connector.bolt.listen_address=:7687/dbms.connector.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.connector.http.advertised_address=:7474/dbms.connector.http.advertised_address=\"${privateIP}\":7474/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.connector.https.advertised_address=:7473/dbms.connector.https.advertised_address=\"${privateIP}\":7473/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.routing.advertised_address=:7688/dbms.routing.advertised_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.routing.default_router=SERVER\" >> /etc/neo4j/neo4j.conf\n"
+            - "}\n"
+
+            - "build_neo4j_conf_file() {\n"
+            - "  echo \"Configuring network in neo4j.conf...\"\n"
+            - "  sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
+            - "  echo \"Configuring memory settings in neo4j.conf...\"\n"
+            - "  neo4j-admin memrec >> /etc/neo4j/neo4j.conf\n"
+            - "  if [[ $nodeCount == 1 ]]; then\n"
+            - "    echo \"Running on a single node.\"\n"
+            - "  if [[ $readReplicaCount == 0 ]]; then\n"
+            - "    privateIPHost=\"$(hostname -i | awk {'print $NF'})\"\n"
+            - "    sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=\"${privateIPHost}\"/g /etc/neo4j/neo4j.conf\n"
+            - "  else\n"
+            - "     sed -i s/#dbms.mode=CORE/dbms.mode=SINGLE/g /etc/neo4j/neo4j.conf\n"
+            - "     echo \"dbms.clustering.enable=true\" >> /etc/neo4j/neo4j.conf\n"
+            - "     set_cluster_configs\n"
+            - "  fi\n"
+            - "  else\n"
+            - "    echo \"Running on multiple nodes.  Configuring membership in neo4j.conf...\"\n"
+            - "    region=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/.$//')\n"
+            - "    instanceId=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
+            - "    stackName=$(aws cloudformation describe-stack-resources --physical-resource-id $instanceId --query 'StackResources[0].StackName' --output text --region $region)\n"
+            - "    coreMembers=$(aws autoscaling describe-auto-scaling-instances \ --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
+            - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')\n"
+            - "    coreMembers=$(echo \"${coreMembers}\"):5000\n"
+            - "    sed -i s/#causal_clustering.initial_discovery_members=localhost:5000,localhost:5001,localhost:5002/causal_clustering.initial_discovery_members=${coreMembers}/g /etc/neo4j/neo4j.conf\n"
+            - "    sed -i s/#dbms.mode=CORE/dbms.mode=CORE/g /etc/neo4j/neo4j.conf\n"
+            - "    set_cluster_configs\n"
+            - "  fi\n"
+            - "}\n"
+            - "configure_yum_repo\n"
+            - "install_neo4j_from_yum\n"
+            - "install_apoc_plugin\n"
+            - "extension_config\n"
+            - "build_neo4j_conf_file\n"
+            - "configure_graph_data_science\n"
+            - "configure_bloom\n"
+            - "start_neo4j\n"
+
+  Neo4jReadReplicaAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateReadReplicas
+    DependsOn: Neo4jAutoScalingGroup
+    CreationPolicy:
+      ResourceSignal:
+        Count: !Ref ReadReplicaCount
+        Timeout: PT3M
+    Properties:
+      AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ], !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
+      LaunchConfigurationName:
+        Ref: Neo4jReadReplicaLaunchConfiguration
+      MinSize: !Ref ReadReplicaCount
+      MaxSize: !Ref ReadReplicaCount
+      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      DesiredCapacity:
+        Ref: ReadReplicaCount
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+          PropagateAtLaunch: true
+
+  Neo4jReadReplicaLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Condition: CreateReadReplicas
+    DependsOn: Neo4jAutoScalingGroup
+    Properties:
+      ImageId: !FindInMap
+        - Neo4j
+        - !Ref 'AWS::Region'
+        - BYOL
+      InstanceType:
+        Ref: InstanceType
+      SecurityGroups:
+        - Ref: Neo4jExternalSecurityGroup
+        - Ref: Neo4jInternalSecurityGroup
+      EbsOptimized: true
+      IamInstanceProfile:
+        Ref: Neo4jInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize:
+              Ref: DiskSize
+            VolumeType: gp3
+            Encrypted: true
+      UserData:
+        Fn::Base64:
+          !Join
+          - ''
+          - - "#!/bin/bash\n"
+            - "echo Running startup script...\n"
+
+            - "graphDatabaseVersion="
+            - Ref: GraphDatabaseVersion
+            - "\n"
+
+            - "password="
+            - Ref: Password
+            - "\n"
+
+            - "nodeCount="
+            - Ref: CoreInstanceCount
+            - "\n"
+
+            - "readReplicaCount="
+            - Ref: ReadReplicaCount
+            - "\n"
+
+            - "stackName="
+            - Ref: AWS::StackName
+            - "\n"
+
+            - "region="
+            - Ref: AWS::Region
+            - "\n"
+            - "configure_yum_repo() {\n"
+            - "  echo \"Adding neo4j yum repo...\"\n"
+            - "  rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
+            - "  cat <<EOF > /etc/yum.repos.d/neo4j.repo\n"
+            - "[neo4j]\n"
+            - "name=Neo4j Yum Repo\n"
+            - "baseurl=http://yum.neo4j.com/stable\n"
+            - "enabled=1\n"
+            - "gpgcheck=1\n"
+            - "EOF\n"
+            - "}\n"
+
+            - "install_neo4j_from_yum() {\n"
+            - "  echo \"Installing Graph Database...\"\n"
+            - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
+            - "  yum -y install \"neo4j-enterprise-${graphDatabaseVersion}\"\n"
+            - "  yum update -y aws-cfn-bootstrap\n"
+            - "  systemctl enable neo4j\n"
+            - "}\n"
+
+            - "install_apoc_plugin() {\n"
+            - "  echo \"Installing APOC...\"\n"
+            - "  mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
+            - "}\n"
+
+            - "start_neo4j() {\n"
+            - "  echo \"Starting Neo4j...\"\n"
+            - "  service neo4j start\n"
+            - "  neo4j-admin set-initial-password \"${password}\"\n"
+            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
+            - "    do echo \"Waiting for cluster to start\"\n"
+            - "    sleep 5\n"
+            - "  done\n"
+            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jReadReplicaAutoScalingGroup --region \"${region}\"\n"
+            - "}\n"
+
+            - "extension_config() {\n"
+            - "  echo Configuring extensions and security in neo4j.conf...\n"
+            - "  sed -i s~#dbms.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~dbms.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*\" >> /etc/neo4j/neo4j.conf\n"
+            - "}\n"
+
+            - "build_neo4j_conf_file() {\n"
+            - "  local -r privateIP=\"$(hostname -i | awk {'print $NF'})\"\n"
+            - "  echo \"Configuring network in neo4j.conf...\"\n"
+            - "  sed -i 's/#dbms.default_listen_address=0.0.0.0/dbms.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
+            - "  echo \"Configuring memory settings in neo4j.conf...\"\n"
+            - "  neo4j-admin memrec >> /etc/neo4j/neo4j.conf\n"
+
+            - "  echo \"Configuring read replica in neo4j.conf...\"\n"
+            - "  sed -i s/#dbms.mode=CORE/dbms.mode=READ_REPLICA/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${privateIP}/g /etc/neo4j/neo4j.conf"
+            - "  region=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/.$//')\n"
+            - "  instanceId=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
+            - "  stackName=$(aws cloudformation describe-stack-resources --physical-resource-id $instanceId --query 'StackResources[0].StackName' --output text --region $region)\n"
+            - "  coreMembers=$(aws autoscaling describe-auto-scaling-instances \ --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
+            - "  coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')\n"
+            - "  coreMembers=$(echo \"${coreMembers}\"):5000\n"
+            - "  sed -i s/#causal_clustering.initial_discovery_members=localhost:5000,localhost:5001,localhost:5002/causal_clustering.initial_discovery_members=${coreMembers}/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.routing.enabled=false/dbms.routing.enabled=true/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.routing.advertised_address=:7688/dbms.routing.advertised_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.routing.default_router=SERVER\" >> /etc/neo4j/neo4j.conf\n"
+            - "}\n"
+            - "configure_yum_repo\n"
+            - "install_neo4j_from_yum\n"
+            - "install_apoc_plugin\n"
+            - "extension_config\n"
+            - "build_neo4j_conf_file\n"
+            - "start_neo4j\n"
+
+  Neo4jInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: Neo4jRole
+  Neo4jRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Neo4jPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:DescribeAutoScalingInstances
+                  - cloudformation:DescribeStack*
+                  - ec2:DescribeInstances
+                Resource: "*"
+
+  Neo4jBastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and Neo4j External Ports
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHCIDR
+
+  Neo4jExternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and Neo4j External Ports
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHCIDR
+        - IpProtocol: tcp
+          FromPort: 7474
+          ToPort: 7474
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          CidrIp: 0.0.0.0/0
+
+  Neo4jInternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Neo4j Internal Ports
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 6000
+          ToPort: 6000
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 7000
+          ToPort: 7000
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 7688
+          ToPort: 7688
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 2003
+          ToPort: 2003
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 2004
+          ToPort: 2004
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 3637
+          ToPort: 3637
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 5005
+          ToPort: 5005
+          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+
+Outputs:
+  SSHTunnelURL:
+    Description: SSH Command for establishing a ssh tunnel to the bastion. Execute this command from your local terminal and access Neo4j on your browser via http://localhost:7474
+    Value: !Join
+      - ''
+      - - 'ssh -L 7474:'
+        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
+        - ':7474 -L 7687:'
+        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
+        - ':7687 -A ec2-user@'
+        - !GetAtt Neo4jBastionHost.PublicIp
+  Neo4jUsername:
+    Description: Username for Neo4j
+    Value: 'The username is neo4j.  The password is what you provided to the template.'
+
+Mappings:
+  Neo4j:
+    us-east-1:
+      BYOL: ami-0e7b912e5d7cd877f
+    us-gov-east-1:
+      BYOL: ami-01e36c162d3e6e48c
+    us-gov-west-1:
+      BYOL: ami-012f3d7ff34943896
+    us-east-2:
+      BYOL: ami-02b97853356744249
+    #commenting us-west-1 as it has only two AZ's and this template works with regions having three AZ's
+#    us-west-1:
+#      BYOL: ami-02abdbe39b20c97bb
+    us-west-2:
+      BYOL: ami-0ea880de9586016d2
+    ca-central-1:
+      BYOL: ami-06ffe1d496264779d
+    eu-central-1:
+      BYOL: ami-02e0fc20a72e8119e
+    eu-west-1:
+      BYOL: ami-0732a06a6cd21a81d
+    eu-west-2:
+      BYOL: ami-09bc04f556296a022
+    eu-west-3:
+      BYOL: ami-0c8a3438f446a01f2
+    eu-north-1:
+      BYOL: ami-00a8465daba1a6875
+    eu-south-1:
+      BYOL: ami-03af48c17a9db8e48
+    ap-east-1:
+      BYOL: ami-0d2023ccc040fe257
+    ap-northeast-1:
+      BYOL: ami-0e993975fd0950c43
+    ap-northeast-2:
+      BYOL: ami-0b21df8742f2dd5de
+    ap-northeast-3:
+      BYOL: ami-08ec836a02f89351e
+    ap-southeast-1:
+      BYOL: ami-03e5f0a51e00838b6
+    ap-southeast-2:
+      BYOL: ami-072ac4bfea8f9ee35
+    ap-southeast-3:
+      BYOL: ami-0548122e1d4f223c8
+    ap-south-1:
+      BYOL: ami-0bd233e4eb337ea43
+    sa-east-1:
+      BYOL: ami-0a78c7cc00b899124
+    af-south-1:
+      BYOL: ami-08a8cd8d53a9358c0
+    me-south-1:
+      BYOL: ami-02ce29a685c6d0a3f

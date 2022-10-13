@@ -3,9 +3,9 @@
 
 ## Deploying a 3-node Neo4j cluster using AWS CloudFormation in Private [Non-Internet Routable] Subnets
 
-*This "neo4j-private-network" Cloud Formation template delivers an AWS environment running neo4j, with database instances and a network load balancer which are not (inbound) internet routable:*
+*This "neo4j-private-network-cluster" Cloud Formation template delivers an AWS environment running neo4j, with database instances and a network load balancer which are not (inbound) internet routable:*
 
- - Single node *or* 3 node cluster
+ - 3 node cluster
  - Neo4j v4.4.12
  
  
@@ -18,7 +18,7 @@ To deploy this CloudFormation stack, the following steps must be undertaken:
 2) Clone the [Neo4j AWS CloudFormation repository](
 https://github.com/neo4j-partners/amazon-cloud-formation-neo4j) to a local workstation.  
 
-3) Change to the directory ```amazon-cloud-formation-neo4j/custom-templates/neo4j-private-network``` and edit the file ```deploy.sh``` and update the variables containted therein:
+3) Change to the directory ```amazon-cloud-formation-neo4j/custom-templates/neo4j-private-network``` and edit the file ```deploy.sh``` and update the variables contained therein:
 
 ```
 Password="set-neo4j-password-here"
@@ -29,7 +29,7 @@ GraphDatabaseVersion=4.4.12
 KeyName="name-of-ssh-key"
 ```
 Important Notes:
- - The ```CoreInstanceCount``` can be set to either 1 or 3.  This template can deploy either a three-node or single-node neo4j environment.
+ - The ```CoreInstanceCount``` should be set to 3.  This template can deploy a three-node neo4j environment.
  - The KeyName variable must match the name of the keypair which is stored in AWS.  Therefore it must refer to a key name and and not a file name.
  
 4) Ensure that the ```deploy.sh``` script is executable and run it.  (It takes a single argument which is the desired CloudFormation Stack name):
@@ -66,9 +66,6 @@ Once the neo4j browser page has loaded, the connection URL must be changed to re
 ## AWS Diagram
 
 The following diagram depicts the environment which is created by this cloudformation template:
-
-### Single [Neo4j] Instance Configuration
-![](images/neo4j-aws-1-node-private.png?raw=true)
 
 ### Three [Neo4j] Instance Configuration
 ![](images/neo4j-aws-3-node-private.png?raw=true)

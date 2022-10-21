@@ -45,7 +45,7 @@ Parameters:
   GraphDatabaseVersion:
     Description: Neo4j Graph Database Version
     Type: String
-    Default: '4.4.11'
+    Default: '5.1.0'
 
   InstallGraphDataScience:
     Description: Install Graph Data Science
@@ -683,4 +683,4 @@ Outputs:
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-0f26ab7914fc9bc20
+      BYOL: ami-0553904ea77e9273a

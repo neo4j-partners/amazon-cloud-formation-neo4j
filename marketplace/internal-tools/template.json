@@ -45,17 +45,7 @@
   "provisioners": [
     {
       "type": "shell",
-      "inline": [
-        "sudo rm -f ~/.ssh/authorized_keys",
-        "sudo rm -f /root/.ssh/authorized_keys",
-        "sudo rpm --import https://debian.neo4j.com/neotechnology.gpg.key",
-        "echo '[neo4j]' | sudo tee /etc/yum.repos.d/neo4j.repo",
-        "echo 'name=Neo4j Yum Repo' | sudo tee -a /etc/yum.repos.d/neo4j.repo",
-        "echo 'baseurl=http://yum.neo4j.com/stable' | sudo tee -a /etc/yum.repos.d/neo4j.repo",
-        "echo 'enabled=1' | sudo tee -a /etc/yum.repos.d/neo4j.repo",
-        "echo 'gpgcheck=1' | sudo tee -a /etc/yum.repos.d/neo4j.repo",
-        "sudo yum install --downloadonly neo4j-enterprise"
-      ]
+      "script": "packer-script.sh"
     }
   ]
 }

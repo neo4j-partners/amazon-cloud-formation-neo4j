@@ -11,3 +11,5 @@ baseurl=http://yum.neo4j.com/stable/5
 enabled=1
 gpgcheck=1
 EOF
+
+sudo yum install --downloadonly neo4j-enterprise

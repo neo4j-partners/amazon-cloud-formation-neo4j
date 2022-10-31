@@ -65,3 +65,13 @@ updated_template.close()
 updated_template = open("../neo4j.template.yaml", "w")
 updated_template.write(final_template[0]+"\n"+output)
 updated_template.close()
+
+#Bump Neo4j version in deploy.sh
+graph_database_version = f'GraphDatabaseVersion={neo4j_version}'
+deploy_script_file = open('../deploy.sh', 'r')
+script = deploy_script_file.read()
+script_updated = re.sub("GraphDatabaseVersion=\d{1,2}\.\d{1,2}\.\d{1,2}", graph_database_version, script, flags = re.M)
+deploy_script_file.close()
+deploy_script_file = open('../deploy.sh', 'w')
+deploy_script_file.write(script_updated)
+deploy_script_file.close()

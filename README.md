@@ -20,8 +20,12 @@ Users are reminded that cloud resources incur costs.
 - 1 Network (Layer 4) Load Balancer
 
 
-The following diagram is shown by way of an example, it depicts a 3 node cluster.
+The following diagram is shown by way of an example, the first depicts a single instance and the second depicts a 3-node cluster:
 
+# Single Neo4j Instance on AWS
+![image](aws-single-instance.png)
+
+# Three Node Neo4j Cluster on AWS
 ![image](aws-3-instance-cluster.png)
 
 ## Common Considerations

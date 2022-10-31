@@ -3,7 +3,7 @@ This repository holds the Amazon CloudFormation Template (CFT) that deploys Neo4
 
 These CloudFormation Templates are also used to Neo4j to deploy the official Neo4j offering into the AWS Marketplace. 
 
-Therefore, the easiest method to deploy Neo4j on AWS Elastic Compute Cloud (EC2) instances, is to go directly to the [AWS Marketplace]https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4
+Therefore, the easiest method to deploy Neo4j on AWS Elastic Compute Cloud (EC2) instances, is to go directly to the [AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4)
 
 # Provisioned Resources
 The following resources are created by the CFT, and users will need to ensure they have the correct permissions within AWS to provision them:

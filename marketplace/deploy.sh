@@ -8,9 +8,7 @@ REGION=`aws configure get region`
 Password="foo123"
 NumberOfServers="6"
 SSHCIDR="0.0.0.0/0"
-GraphDatabaseVersion=5.0.0
-S3AccessKeyId=$2
-S3SecretAccessKey=$3
+GraphDatabaseVersion=5.1.0
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -20,8 +18,6 @@ aws cloudformation create-stack \
 --disable-rollback \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
-ParameterKey=S3AccessKeyId,ParameterValue=${S3AccessKeyId} \
-ParameterKey=S3SecretAccessKey,ParameterValue=${S3SecretAccessKey} \
 ParameterKey=GraphDatabaseVersion,ParameterValue=${GraphDatabaseVersion} \
 ParameterKey=NumberOfServers,ParameterValue=${NumberOfServers} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \

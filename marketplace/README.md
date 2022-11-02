@@ -1,21 +1,35 @@
-# marketplace
-This template is used by the Neo4j AWS Marketplace offer. It is not intended to be used outside the marketplace. 
+# amazon-cloud-formation-neo4j
+This repository holds the Amazon CloudFormation Template (CFT) that deploys Neo4j Enterprise (version 4.4 or 5) on the Amazon Web Services (AWS) platform (optionally including Neo4j Graph Data Science and Neo4j Bloom)  
 
-Unless you are a Neo4j employee updating the AWS Marketplace listing, you probably want to be using either the [Marketplace listing](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4) itself or [simple](../simple).
+These CloudFormation Templates are also used to Neo4j to deploy the official Neo4j offering into the AWS Marketplace. 
 
-# Updating the AMI
-If you're a Neo4j employee updating the AWS Marketplace listing, you're first going to have to get a new AMI ID.  First off, make extra special sure you do this work in the AWS account associated with our publisher.  It's seems AMI sharing across accounts has bugs, so you want to avoid needing to use that. 
+Therefore, the easiest method to deploy Neo4j on AWS Elastic Compute Cloud (EC2) instances, is to go directly to the [Neo4j Listing in the AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4)
 
-If you're setting up a publisher account for the first time, you'll need to add a role as decribed [here](https://docs.aws.amazon.com/marketplace/latest/userguide/ami-single-ami-products.html#single-ami-marketplace-ami-access).
+# Provisioned Resources
+The following resources are created by the CFT, and users will need to ensure they have the correct permissions within AWS to provision them:
 
-We've been using Packer and a python script to generate AMIs, copy them across supported regions and update the CFT template accordingly with the new Mappings and Neo4j version. Please read the instructions inside internal-tools directory on how to trigger this process. 
-You'll then want to take the AMI ID from that and stuff it into the product load form.  In addition, login to [Marketplace Portal](https://aws.amazon.com/marketplace/management/manage-products/?#/share) and add the AMI.
+_Users are reminded that the deployment of cloud resources will incur costs._
 
-# Updating the Marketplace Listing
-CFT deploys in AWS Marketplace aren't self service.  At some point that might change.  So, next up is updating the product load form.  That's stored [here](https://docs.google.com/spreadsheets/d/1Nmpw3etZX7xj6nQgS5w3K2B-i0gJevdQ/edit?usp=sharing&ouid=115505246243451814800&rtpof=true&sd=true).  Note that AWS will almost certainly continue to rev the product load form.  So, you might periodically be forced to grab a new copy from to publisher portal.
+- 1 VPC, with a CIDR Range of 10.0.0.0/16
+- 3 Subnets, distributed evenly across 3 Availability zones, with the following CIDR Ranges:
+  - 10.0.1.0/24
+  - 10.0.2.0/24
+  - 10.0.3.0/24
+- 1, or between 3 and 10 EC2 instances (Depending on whether a single instance, or an autonomous cluster is selected)
+- 1 Network (Layer 4) Load Balancer
 
-You'll defintely want to update the version ID in the product load form.  You will need to update the AMI ID as well, if you built a new one.
+The following diagram is shown by way of an example, the first depicts a single instance and the second depicts a 3-node cluster:
 
-Once the product load form is all up to date, you'll just need to resubmit it in the portal [here](https://aws.amazon.com/marketplace/management/offers).
+# Diagram: Single Neo4j Instance on AWS
+![image](aws-1-instance.png)
 
-There is currently no API for any of this, so the process has to be manual.  If we didn't have a CFT we could automate.
+# Diagram: Three Node Neo4j Cluster on AWS
+![image](aws-3-instance-cluster.png)
+
+## Common Considerations
+- The simplest way to deploy Neo4j on an IaaS environment is to use the [Neo4j Listing in the AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4)
+- Users are reminded that the provisioning of cloud resources will incur costs
+- Users will need to ensure that they have the correct permissions with AWS to deploy the CFT and create the associated cloud resources
+- Autoscaling groups are included as part of this topology which means that EC2 instances will be re-created if deleted.  This should be considered default and expected behaviour.
+- To delete all resources, users should delete the CloudFormation template, rather than attempting to delete individual resources within AWS.
+

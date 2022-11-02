@@ -26,10 +26,9 @@ The following diagram is shown by way of an example, the first depicts a single 
 # Diagram: Three Node Neo4j Cluster on AWS
 ![image](aws-3-instance-cluster.png)
 
-## Common Considerations
+# Common Considerations
 - The simplest way to deploy Neo4j on an IaaS environment is to use the [Neo4j Listing in the AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4)
 - Users are reminded that the provisioning of cloud resources will incur costs
 - Users will need to ensure that they have the correct permissions with AWS to deploy the CFT and create the associated cloud resources
 - Autoscaling groups are included as part of this topology which means that EC2 instances will be re-created if deleted.  This should be considered default and expected behaviour.
 - To delete all resources, users should delete the CloudFormation template, rather than attempting to delete individual resources within AWS.
-

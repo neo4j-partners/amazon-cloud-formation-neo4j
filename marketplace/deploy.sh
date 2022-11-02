@@ -1,25 +1,38 @@
 #!/bin/bash
 
-STACK_NAME=$1
+#
+# Script:  deploy.sh
+# Purpose: This script can be used to deploy the Neo4j CloudFormation template if the aws cli
+#          is correctly installed and configured
+#
 
-TEMPLATE_BODY="file://neo4j.template.yaml"
-REGION=`aws configure get region`
-
+# User configurable variables
 Password="foo123"
-NumberOfServers="6"
+NodeCount="3"
 SSHCIDR="0.0.0.0/0"
-GraphDatabaseVersion=5.1.0
 
-aws cloudformation create-stack \
+# Other Variables (changes not normally required)
+AWS=$(which aws) ||  { echo "Please ensure that the AWS cli client is installed." && exit 1; };
+STACK_NAME=$1
+TEMPLATE_BODY="file://neo4j.template.yaml"
+REGION=$(aws configure get region)
+
+function usage {
+  echo "This script takes a single argument, the desired name of the target cloudformation stack."
+  echo "Usage: { $0 [stack-name] }"
+  exit 1
+}
+
+[ "$1" != 1 ] && usage 
+
+$AWS cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
 --stack-name ${STACK_NAME} \
 --template-body ${TEMPLATE_BODY} \
 --region ${REGION} \
---disable-rollback \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
-ParameterKey=GraphDatabaseVersion,ParameterValue=${GraphDatabaseVersion} \
-ParameterKey=NumberOfServers,ParameterValue=${NumberOfServers} \
+ParameterKey=NodeCount,ParameterValue=${NodeCount} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=False \
 ParameterKey=InstallBloom,ParameterValue=False

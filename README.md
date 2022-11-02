@@ -21,7 +21,7 @@ _Users are reminded that the deployment of cloud resources will incur costs._
 The following diagram is shown by way of an example, the first depicts a single instance and the second depicts a 3-node cluster:
 
 # Diagram: Single Neo4j Instance on AWS
-![image](aws-single-instance.png)
+![image](aws-1-instance.png)
 
 # Diagram: Three Node Neo4j Cluster on AWS
 ![image](aws-3-instance-cluster.png)

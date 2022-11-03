@@ -1,5 +1,5 @@
 # amazon-cloud-formation-neo4j
-These are Amazon CloudFormation Templates (CFT) that deploy Neo4j Enterprise on AWS. They set up Neo4j Graph Database, Graph Data Science and Bloom.
 
-* [simple](simple) is probably the best place to start. It's a simple CFT template that is a good starting point for CLI deployments or customization.
-* [marketplace](marketplace) is the template used in the Neo4j AWS Marketplace listing. It's easiest to deploy that template directly from the AWS Marketplace [here](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4).
+This repository contains a number of AWS CloudFormation Templates (CFTs).  Most significantly, this repository hosts the CFT for the Neo4j Enterprise listing on the AWS Marketplace.  This CFT can be found in the [marketplace](/marketplace/) folder.
+
+The custom-templates [custom-templates](/custom-templates/) folder contains some additional CFTs which have been created to incorporate specific changes to offer functionality beyond what is contained within the 'marketplace' CFT.

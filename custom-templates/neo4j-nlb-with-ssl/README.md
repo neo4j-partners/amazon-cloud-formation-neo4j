@@ -35,9 +35,14 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
 #### 6) After a few minutes (could take longer depending on DNS propogation speeds) your new certificate should change status to "Issued"
 ![](images/cert-issued.png?raw=true)
 
+
+### Stage 2 - CloudFormation Template Installation
+
+#### 1) - Deploy the CloudFormation template in the usual way, providing all the required information, including the following 2 parameters.  Further information on deploying the standard CloudFormation template can be found in the [Marketplace](../../marketplace/) folder
+![](images/crt-config.png?raw=true)
 ---
 
-![](images/crt-config.png?raw=true)
+
 ![](images/create-cns-for-nlb.png?raw=true)
 ![](images/neo4j-behind-ssl?raw=true)
 ![](images/outputs.png?raw=true)

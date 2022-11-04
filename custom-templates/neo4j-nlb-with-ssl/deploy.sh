@@ -9,7 +9,7 @@ NumberOfServers="6"
 SSHCIDR="0.0.0.0/0"
 GraphDatabaseVersion=5.1.0
 KeyName="edr-us-east-1"
-SSLDomain="neo4j.aws-cloud.uk"
+SSLDomain="neo4j.edrandall.uk"
 CertificateARN="arn:aws:acm:us-east-1:540622579701:certificate/5b82a00f-791c-4a35-8e09-8d9fd55bf4f6"
 
 aws cloudformation create-stack \

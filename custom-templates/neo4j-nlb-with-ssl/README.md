@@ -16,7 +16,16 @@ There are two vital prerequisites which must be met prior to deploying this temp
 
 _These steps assume that the prerequisites listed above are met.  In this example, the domain edrandall.uk will be used._
 
+### 1) Request a public TLS certificate from Amazon Certificate Manager
+Go to AWS Certificate Manager and select a new public certificate
+![](images/request-public-certificate.png?raw=true)
+
+### 2) Enter your SSLDomain and leave the "DNS Validation" box selected.
+![](images/request-certificate.png?raw=true)
+
+
 ![](images/cert-issued.png?raw=true)
+
 ![](images/cert-pending-validation.png?raw=true)
 ![](images/crt-config?raw=true)
 ![](images/cname-dns-ownership?raw=true)
@@ -24,8 +33,8 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
 ![](images/neo4j-behind-ssl?raw=true)
 ![](images/no-certificates.png?raw=true)
 ![](images/outputs.png?raw=true)
-![](images/request-certificate.png?raw=true)
-![](images/request-public-certificate.png?raw=true)
+
+
 
 
 

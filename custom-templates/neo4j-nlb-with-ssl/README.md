@@ -38,10 +38,20 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
 
 ### Stage 2 - CloudFormation Template Installation
 
-1) Deploy the CloudFormation template in the usual way, providing all the required information, including the following 2 parameters.  Further information on deploying the standard CloudFormation template can be found in the [Marketplace](../../marketplace/) folder
+1) Deploy the CloudFormation template in the usual way, either by uploading the CFT to the CloudFormation section of the AWS console, or by running the deploy.sh script:
+
+```
+./deploy.sh nlb-with-ssl
+{
+    "StackId": "arn:aws:cloudformation:us-east-1:540622579701:stack/nlb-with-ssl/535f3180-5c50-11ed-a315-1260d77cfdf9"
+}
+```
+
+Note the following additional values which are required to configure SSL and are therefore not included in the standard Neo4j [AWS Markplace Template](../../marketplace/) 
+
 ![](images/cft-config.png?raw=true)
 
-2) Once the CloudFormation template has deployed, you will need to review the outputs and take note of the values contained therein.
+2) Once the CloudFormation template has deployed, you will need to review the outputs and take note of the values shown.
 ![](images/outputs.png?raw=true)
 
 3) Create a another CNAME to point from your desired SSLDomain to the FQDN of the Network Load Balancer

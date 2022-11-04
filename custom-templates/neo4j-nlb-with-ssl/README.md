@@ -44,11 +44,11 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
 2) Once the CloudFormation template has deployed, you will need to review the outputs and take note of the values contained therein.
 ![](images/outputs.png?raw=true)
 
-3) Create a another CN![](images/create-cname-for-nlb.png?raw=true)
+3) Create a another CNAME to point from your desired SSLDomain to the FQDN of the Network Load Balancer
+![](images/create-cname-for-nlb.png?raw=true)
 
+4) Once the DNS records have propogated, your neo4j deployment can be accessed using your SSL domain (https://YOURSSLDOMAIN:7474/browser/)
 ![](images/neo4j-behind-ssl?raw=true)
-
-
 
 
 

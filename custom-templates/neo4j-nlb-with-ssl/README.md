@@ -16,19 +16,27 @@ There are two vital prerequisites which must be met prior to deploying this temp
 
 _These steps assume that the prerequisites listed above are met.  In this example, the domain edrandall.uk will be used._
 
-### 1) Request a public TLS certificate from Amazon Certificate Manager
-Go to AWS Certificate Manager and select a new public certificate
-![](images/request-public-certificate.png?raw=true)
+### Stage 1 - SSL Certificate and DNS Configuration
 
-### 2) Enter your SSLDomain and leave the "DNS Validation" box selected.
+#### 1) Request a public TLS certificate from Amazon Certificate Manager
 ![](images/request-certificate.png?raw=true)
 
+#### 2) Enter your SSLDomain and leave the "DNS Validation" box selected.
+![](images/request-public-certificate.png?raw=true)
 
+#### 3) Your new certificate will be created and show as "pending validation"
+![](images/cert-pending-validation.png?raw=true)
+
+#### 4) In your own provider's console, create a CNAME to 'prove' to AWS that you own and control this domain
+![](images/create-cname-dns-ownership?raw=true)
+
+#### 5) After a few minutes (could take longer depending on DNS propogation speeds) your new certificate should change status to "Issued"
 ![](images/cert-issued.png?raw=true)
 
-![](images/cert-pending-validation.png?raw=true)
+
+---
+
 ![](images/crt-config?raw=true)
-![](images/cname-dns-ownership?raw=true)
 ![](images/create-cns-for-nlb.png?raw=true)
 ![](images/neo4j-behind-ssl?raw=true)
 ![](images/no-certificates.png?raw=true)

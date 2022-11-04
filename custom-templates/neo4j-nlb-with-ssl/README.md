@@ -29,17 +29,17 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
 
 #### 4) Click the Certificate ID and take note of the CNAME which will need to be created in your own DNS to 'prove' to AWS that you own and control this domain.
 
-#### 4) In your own provider's console, create the CNAME.
+#### 5) In your own provider's console, create the CNAME.
 ![](images/cname-dns-ownership.png?raw=true)
 
-#### 5) After a few minutes (could take longer depending on DNS propogation speeds) your new certificate should change status to "Issued"
+#### 6) After a few minutes (could take longer depending on DNS propogation speeds) your new certificate should change status to "Issued"
 ![](images/cert-issued.png?raw=true)
 
 
 
 ---
 
-![](images/crt-config?raw=true)
+![](images/crt-config.png?raw=true)
 ![](images/create-cns-for-nlb.png?raw=true)
 ![](images/neo4j-behind-ssl?raw=true)
 ![](images/no-certificates.png?raw=true)

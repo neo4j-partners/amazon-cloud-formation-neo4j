@@ -55,10 +55,10 @@ Note the following additional values which are required to configure SSL and are
 3) Create a another CNAME to point from your desired SSLDomain to the FQDN of the Network Load Balancer
 ![](images/create-cname-for-nlb.png?raw=true)
 
-4) Once the DNS records have propogated, your neo4j deployment can be accessed using your SSL domain (https://YOURSSLDOMAIN:7474/browser/)
+4) Once the DNS records have propogated, your neo4j deployment can be accessed using your SSL domain (https://SSLDOMAIN:7474/browser/)
 ![](images/neo4j-behind-ssl?raw=true)
 
-
+Note:  It is necessary to enter the complete URL as referenced above (including the trailing '/')
 
 
 

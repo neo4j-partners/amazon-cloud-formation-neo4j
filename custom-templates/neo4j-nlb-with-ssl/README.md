@@ -12,12 +12,11 @@ There are two vital prerequisites which must be met prior to deploying this temp
 
 2) You have created (or are able to create) a TLS Certificate in AWS Certificate Manager, pointing to SSLDomain
 
-
 ## Installation Instructions
 
 _These steps assume that the prerequisites listed above are met.  In this example, the domain edrandall.uk will be used._
 
-
+![](images/cert-issued.png?raw=true)
 
 
 

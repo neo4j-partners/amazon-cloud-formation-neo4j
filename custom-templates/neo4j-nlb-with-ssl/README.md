@@ -46,9 +46,7 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
     "StackId": "arn:aws:cloudformation:us-east-1:540622579701:stack/nlb-with-ssl/535f3180-5c50-11ed-a315-1260d77cfdf9"
 }
 ```
-
-Note the following additional values which are required to configure SSL and are therefore not included in the standard Neo4j [AWS Markplace Template](../../marketplace/) 
-
+Note the following additional values which are required to configure SSL and are therefore not included in the standard Neo4j [AWS Markplace Template](../../marketplace/).  You will need to provide these values, either in the ./deploy.sh script or in the CloudFormation GUI. 
 ![](images/cft-config.png?raw=true)
 
 2) Once the CloudFormation template has deployed, you will need to review the outputs and take note of the values shown.

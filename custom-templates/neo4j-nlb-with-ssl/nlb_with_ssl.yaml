@@ -649,14 +649,10 @@ Outputs:
     Description: URL for Neo4j Browser
     Value: !Join
       - ''
-      - - 'http://'
+      - - 'https://'
         - !Ref SSLDomain
-        - ':'
-        - '7474'
-        - '/'
-        - 'browser'
-        - '/'
-
+        - ':7474/browser/'
+        
   Neo4jNLBfqdn:
     Description: URL for Neo4j Browser (for CNAME)
     Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName

@@ -12,6 +12,10 @@ There are two vital prerequisites which must be met prior to deploying this temp
 
 2) You have created (or are able to create) a TLS Certificate in AWS Certificate Manager, pointing to SSLDomain
 
+## Cloud Topology
+AWS Resources will be deployed as per the following diagram:
+![](images/nlb-ssl-diagram.png?raw=true)
+
 ## Installation Instructions
 
 _These steps assume that the prerequisites listed above are met.  In this example, the domain edrandall.uk will be used._

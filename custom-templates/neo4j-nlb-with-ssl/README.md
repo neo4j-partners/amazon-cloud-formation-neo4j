@@ -17,9 +17,15 @@ There are two vital prerequisites which must be met prior to deploying this temp
 _These steps assume that the prerequisites listed above are met.  In this example, the domain edrandall.uk will be used._
 
 ![](images/cert-issued.png?raw=true)
-
-
-
+![](images/cert-pending-validation.png?raw=true)
+![](images/crt-config?raw=true)
+![](images/cname-dns-ownership?raw=true)
+![](images/create-cns-for-nlb.png?raw=true)
+![](images/neo4j-behind-ssl?raw=true)
+![](images/no-certificates.png?raw=true)
+![](images/outputs.png?raw=true)
+![](images/request-certificate.png?raw=true)
+![](images/request-public-certificate.png?raw=true)
 
 
 

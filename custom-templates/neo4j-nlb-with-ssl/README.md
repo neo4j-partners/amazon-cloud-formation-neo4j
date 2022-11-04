@@ -35,14 +35,11 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
 #### 6) After a few minutes (could take longer depending on DNS propogation speeds) your new certificate should change status to "Issued"
 ![](images/cert-issued.png?raw=true)
 
-
-
 ---
 
 ![](images/crt-config.png?raw=true)
 ![](images/create-cns-for-nlb.png?raw=true)
 ![](images/neo4j-behind-ssl?raw=true)
-![](images/no-certificates.png?raw=true)
 ![](images/outputs.png?raw=true)
 
 

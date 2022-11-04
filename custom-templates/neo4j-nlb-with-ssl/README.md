@@ -13,7 +13,7 @@ There are two vital prerequisites which must be met prior to deploying this temp
 2) You have created (or are able to create) a TLS Certificate in AWS Certificate Manager, pointing to SSLDomain
 
 ## Cloud Topology
-AWS Resources will be deployed as per the following diagram:
+AWS Resources will be deployed as per the following diagram (this example depicts a 3 node Neo4j cluster):
 ![](images/nlb-ssl-diagram.png?raw=true)
 
 ## Installation Instructions

@@ -18,35 +18,35 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
 
 ### Stage 1 - SSL Certificate and DNS Configuration
 
-###### 1) Request a public TLS certificate from Amazon Certificate Manager
+1) Request a public TLS certificate from Amazon Certificate Manager
 ![](images/request-certificate.png?raw=true)
 
-###### 2) Enter your SSLDomain and leave the "DNS Validation" box selected.
+2) Enter your SSLDomain and leave the "DNS Validation" box selected.
 ![](images/request-public-certificate.png?raw=true)
 
-###### 3) Your new certificate will be created and show as "pending validation"
+3) Your new certificate will be created and show as "pending validation"
 ![](images/cert-pending-validation.png?raw=true)
 
-###### 4) Click the Certificate ID and take note of the CNAME which will need to be created in your own DNS to 'prove' to AWS that you own and control this domain.
+4) Click the Certificate ID and take note of the CNAME which will need to be created in your own DNS to 'prove' to AWS that you own and control this domain.
 
-###### 5) In your own provider's console, create the CNAME.
+5) In your own provider's console, create the CNAME.
 ![](images/cname-dns-ownership.png?raw=true)
 
-###### 6) After a few minutes (could take longer depending on DNS propogation speeds) your new certificate should change status to "Issued"
+6) After a few minutes (could take longer depending on DNS propogation speeds) your new certificate should change status to "Issued"
 ![](images/cert-issued.png?raw=true)
 
 
 ### Stage 2 - CloudFormation Template Installation
 
-###### 1) - Deploy the CloudFormation template in the usual way, providing all the required information, including the following 2 parameters.  Further information on deploying the standard CloudFormation template can be found in the [Marketplace](../../marketplace/) folder
-![](images/crt-config.png?raw=true)
+1) Deploy the CloudFormation template in the usual way, providing all the required information, including the following 2 parameters.  Further information on deploying the standard CloudFormation template can be found in the [Marketplace](../../marketplace/) folder
+![](images/cft-config.png?raw=true)
 
-
-
-
-![](images/create-cns-for-nlb.png?raw=true)
-![](images/neo4j-behind-ssl?raw=true)
+2) Once the CloudFormation template has deployed, you will need to review the outputs and take note of the values contained therein.
 ![](images/outputs.png?raw=true)
+
+3) Create a another CN![](images/create-cname-for-nlb.png?raw=true)
+
+![](images/neo4j-behind-ssl?raw=true)
 
 
 

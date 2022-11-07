@@ -16,7 +16,7 @@ There are two vital prerequisites which must be met prior to deploying this temp
 2) You have created (or are able to create) a TLS Certificate in AWS Certificate Manager, pointing to SSLDomain
 
 If you attempt to run this CloudFormation Template without observing the pre-requisite steps, the CloudFormation template will fail and you will experience the following error:
-![](images/create-failed.png?raw=true)
+![](images/create-failed.png?raw=true =100x100)
 
 
 ## Installation Instructions

@@ -222,6 +222,23 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
+  Neo4jSubnet4:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.4.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
   NATGateway:
     Type: AWS::EC2::NatGateway
     Properties:
@@ -243,7 +260,7 @@ Resources:
         - Key: Name
           Value: !Ref 'AWS::StackName'
 
-  Neo4jRouteTable:
+  Neo4jPublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       Tags:
@@ -253,32 +270,57 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
-  Neo4jRoute:
+  Neo4jPublicRoute:
     Type: AWS::EC2::Route
     Properties:
       GatewayId: !Ref Neo4jInternetGateway
-      RouteTableId: !Ref Neo4jRouteTable
+      RouteTableId: !Ref Neo4jPublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
 
-  Neo4jSubnet1RouteTableAssociation:
+  Neo4jPrivateRoute:
+    DependsOn: NATGateway
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTablePrivate
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway
+
+  Neo4jSubnet1PrivateRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref Neo4jRouteTable
+      RouteTableId: !Ref Neo4jRouteTablePrivate
       SubnetId: !Ref Neo4jSubnet1
 
-  Neo4jSubnet2RouteTableAssociation:
+  Neo4jSubnet2PrivateRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Condition: CreateCluster
     Properties:
-      RouteTableId: !Ref Neo4jRouteTable
+      RouteTableId: !Ref Neo4jRouteTablePrivate
       SubnetId: !Ref Neo4jSubnet2
 
-  Neo4jSubnet3RouteTableAssociation:
+  Neo4jSubnet3PrivateRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Condition: CreateCluster
     Properties:
-      RouteTableId: !Ref Neo4jRouteTable
+      RouteTableId: !Ref Neo4jRouteTablePrivate
       SubnetId: !Ref Neo4jSubnet3
+
+  Neo4jSubnet4PublicRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jPublicRouteTable
+      SubnetId: !Ref Neo4jSubnet4
+
+
+  Neo4jRouteTablePrivate:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
 
   Neo4jInternetGateway:
     Type: AWS::EC2::InternetGateway

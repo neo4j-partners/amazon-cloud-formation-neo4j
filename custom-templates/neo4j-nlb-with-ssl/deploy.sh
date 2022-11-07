@@ -10,7 +10,7 @@ SSHCIDR="0.0.0.0/0"
 GraphDatabaseVersion=5.1.0
 KeyName="edr-us-east-1"
 SSLDomain="neo4j.edrandall.uk"
-CertificateARN="arn:aws:acm:us-east-1:540622579701:certificate/4769e182-0874-47da-8e57-398da86f5011"
+CertificateARN="arn:aws:acm:us-east-1:540622579701:certificate/fbb5441f-4076-42a1-80e2-6ba065a8eaff"
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
 --stack-name ${STACK_NAME} \

@@ -17,7 +17,7 @@ There are two vital prerequisites which must be met prior to deploying this temp
 
 If you attempt to run this CloudFormation Template without observing the pre-requisite steps, the CloudFormation template will fail and you will experience the following error:
 
-<img src="images/create-failed.png" width="75%" height="75%" />
+<img src="images/create-failed.png" width="50%" height="50%" />
 
 ## Installation Instructions
 _These steps assume that the prerequisites listed above are met.  In this example, the domain edrandall.uk will be used._

@@ -176,7 +176,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       CidrBlock: 10.0.1.0/24
-      MapPublicIpOnLaunch: true
+      MapPublicIpOnLaunch: False
       AvailabilityZone:
         Fn::Select:
           - 0
@@ -193,7 +193,7 @@ Resources:
     Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.2.0/24
-      MapPublicIpOnLaunch: true
+      MapPublicIpOnLaunch: False
       AvailabilityZone:
         Fn::Select:
           - 1
@@ -210,7 +210,7 @@ Resources:
     Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.3.0/24
-      MapPublicIpOnLaunch: true
+      MapPublicIpOnLaunch: False
       AvailabilityZone:
         Fn::Select:
           - 2
@@ -221,6 +221,27 @@ Resources:
         - Key: Name
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref Neo4jSubnet4
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
 
   Neo4jRouteTable:
     Type: AWS::EC2::RouteTable

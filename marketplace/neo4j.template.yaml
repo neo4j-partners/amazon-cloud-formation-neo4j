@@ -1,12 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Neo4j Enterprise Edition
+Description: Neo4j 5 Enterprise Edition
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
           default: "Neo4j Configuration"
         Parameters:
-          - GraphDatabaseVersion
           - InstallGraphDataScience
           - GraphDataScienceLicenseKey
           - InstallBloom
@@ -20,8 +19,6 @@ Metadata:
           - DiskSize
           - SSHCIDR
     ParameterLabels:
-      GraphDatabaseVersion:
-        default: Graph Database Version
       InstallGraphDataScience:
         default: Install Graph Data Science
       GraphDataScienceLicenseKey:
@@ -42,11 +39,6 @@ Metadata:
         default: SSH CIDR
 
 Parameters:
-  GraphDatabaseVersion:
-    Description: Neo4j Graph Database Version
-    Type: String
-    Default: '5.1.0'
-
   InstallGraphDataScience:
     Description: Install Graph Data Science
     Type: String
@@ -393,10 +385,6 @@ Resources:
             - "set -euo pipefail\n"
             - "echo Running startup script...\n"
 
-            - "graphDatabaseVersion="
-            - Ref: GraphDatabaseVersion
-            - "\n"
-
             - "installGraphDataScience="
             - Ref: InstallGraphDataScience
             - "\n"
@@ -436,6 +424,7 @@ Resources:
             - "install_neo4j_from_yum() {\n"
             - "  echo \"Installing Graph Database...\"\n"
             - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
+            - "  graphDatabaseVersion=$(aws s3 --region $region cp s3://slask-hinken/versions/aws.json -)\n"
             - "  yum -y install \"neo4j-enterprise-${graphDatabaseVersion}\"\n"
             - "  yum update -y aws-cfn-bootstrap\n"
             - "  systemctl enable neo4j\n"
@@ -511,9 +500,7 @@ Resources:
             - "    sed -i s/#initial.dbms.default_secondaries_count=0/initial.dbms.default_secondaries_count=$(expr ${nodeCount} - 3)/g /etc/neo4j/neo4j.conf\n"
             - "    sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
             - "    echo \"dbms.cluster.minimum_initial_system_primaries_count=${nodeCount}\" >> /etc/neo4j/neo4j.conf\n"
-            - "    region=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed 's/.$//')\n"
             - "    instanceId=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n"
-            - "    stackName=$(aws cloudformation describe-stack-resources --physical-resource-id $instanceId --query 'StackResources[0].StackName' --output text --region $region)\n"
             - "    coreMembers=$(aws autoscaling describe-auto-scaling-instances --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
             - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')\n"
             - "    coreMembers=$(echo \"${coreMembers}\"):5000\n"

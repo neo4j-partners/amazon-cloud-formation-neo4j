@@ -6,7 +6,7 @@ This custom CloudFormation Template (CFT) provides a method of deploying Neo4j w
 
 ## Cloud Topology
 AWS Resources will be deployed as per the following diagram (this example depicts a 3 node Neo4j cluster):
-![](images/nlb-ssl-diagram.png?raw=true)
+![](images/neo4j-alb-ssl-diagram.png?raw=true)
 
 ## Prerequisites
 There are two vital prerequisites which must be met prior to deploying this template:

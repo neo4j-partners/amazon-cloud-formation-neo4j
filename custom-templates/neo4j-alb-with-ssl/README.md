@@ -1,8 +1,8 @@
-# AWS Network Load Balancer with SSL Termination
+# Neo4j behind an Application Load Balancer (ALB) with SSL/TLS
 
 ## Description
 
-This custom CloudFormation Template (CFT) provides a method of deploying Neo4j with a secure (SSL/TLS) connection between the client and the Network Load Balancer.  All traffic after (or 'south') of the NLB will remain unencrypted, as will traffic between the Neo4j EC2 instances.
+This custom CloudFormation Template (CFT) provides a method of deploying Neo4j with a secure (SSL/TLS) connection between the client and the Network Load Balancer.  All traffic after (or 'south') of the ALB will remain unencrypted, as will traffic between the Neo4j EC2 instances.
 
 ## Cloud Topology
 AWS Resources will be deployed as per the following diagram (this example depicts a 3 node Neo4j cluster):
@@ -56,7 +56,7 @@ Note the following additional values which are required to configure SSL and are
 2) Once the CloudFormation template has deployed, you will need to review the outputs and take note of the values shown.
 ![](images/outputs.png?raw=true)
 
-3) Create a another CNAME to point from your desired SSLDomain to the FQDN of the Network Load Balancer
+3) Create a another CNAME to point from your desired SSLDomain to the FQDN of the Application Load Balancer
 ![](images/create-cname-for-nlb.png?raw=true)
 
 4) Once the DNS records have propogated, your neo4j deployment can be accessed using your SSL domain (https://SSLDOMAIN:7474/browser/)

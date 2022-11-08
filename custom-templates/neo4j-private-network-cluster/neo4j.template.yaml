@@ -320,7 +320,7 @@ Resources:
       VpcId: !Ref Neo4jVPC
 
 
-  Neo4jPrivateRoute:
+  Neo4jPrivateRoute:R
     DependsOn: NATGateway
     Type: AWS::EC2::Route
     Properties:

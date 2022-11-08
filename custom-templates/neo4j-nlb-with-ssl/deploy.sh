@@ -1,11 +1,11 @@
 #!/bin/bash
 
 STACK_NAME=$1
-TEMPLATE_BODY="file://nlb_with_ssl.yaml"
-REGION=`aws configure get region`
+TEMPLATE_BODY="file://alb_with_ssl.yaml"
+REGION=$(aws configure get region)
 
 Password="foo123"
-NumberOfServers="6"
+NumberOfServers="3"
 SSHCIDR="0.0.0.0/0"
 GraphDatabaseVersion=5.1.0
 KeyName="edr-us-east-1"
@@ -25,4 +25,6 @@ ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=False \
 ParameterKey=InstallBloom,ParameterValue=False \
 ParameterKey=SSLDomain,ParameterValue=${SSLDomain} \
-ParameterKey=CertificateARN,ParameterValue=${CertificateARN}
+ParameterKey=CertificateARN,ParameterValue=${CertificateARN} \
+ParameterKey=KeyName,ParameterValue=${KeyName}
+

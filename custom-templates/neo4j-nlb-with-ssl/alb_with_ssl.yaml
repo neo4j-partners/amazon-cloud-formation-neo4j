@@ -183,7 +183,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       CidrBlock: 10.0.1.0/24
-      MapPublicIpOnLaunch: False
+      MapPublicIpOnLaunch: True
       AvailabilityZone:
         Fn::Select:
           - 0
@@ -200,7 +200,7 @@ Resources:
     Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.2.0/24
-      MapPublicIpOnLaunch: False
+      MapPublicIpOnLaunch: True
       AvailabilityZone:
         Fn::Select:
           - 1
@@ -217,7 +217,7 @@ Resources:
     Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.3.0/24
-      MapPublicIpOnLaunch: False
+      MapPublicIpOnLaunch: True
       AvailabilityZone:
         Fn::Select:
           - 2
@@ -229,45 +229,36 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
-  Neo4jSubnet4:
-    Type: AWS::EC2::Subnet
-    Condition: CreateCluster
-    Properties:
-      CidrBlock: 10.0.4.0/24
-      MapPublicIpOnLaunch: true
-      AvailabilityZone:
-        Fn::Select:
-          - 2
-          - Fn::GetAZs: !Ref 'AWS::Region'
-      Tags:
-        - Key: StackID
-          Value: !Ref 'AWS::StackId'
-        - Key: Name
-          Value: !Ref 'AWS::StackName'
-      VpcId: !Ref Neo4jVPC
-
-  Neo4jPublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      Tags:
-        - Key: StackID
-          Value: !Ref 'AWS::StackId'
-        - Key: Name
-          Value: !Ref 'AWS::StackName'
-      VpcId: !Ref Neo4jVPC
-
-  Neo4jPublicRoute:
+  Neo4jRoute:
     Type: AWS::EC2::Route
     Properties:
       GatewayId: !Ref Neo4jInternetGateway
-      RouteTableId: !Ref Neo4jPublicRouteTable
+      RouteTableId: !Ref Neo4jRouteTable
       DestinationCidrBlock: 0.0.0.0/0
 
-  Neo4jSubnet4PublicRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
+  Neo4jHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
-      RouteTableId: !Ref Neo4jPublicRouteTable
-      SubnetId: !Ref Neo4jSubnet4
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jApplicationLoadBalancer
+      Port: 7474
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateARN
+
+  Neo4jBoltListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jBoltTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jApplicationLoadBalancer
+      Port: 7687
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateARN
 
   Neo4jInternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -284,28 +275,7 @@ Resources:
       InternetGatewayId: !Ref Neo4jInternetGateway
       VpcId: !Ref Neo4jVPC
 
-  NATGateway:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt NATGatewayEIP.AllocationId
-      SubnetId: !Ref Neo4jSubnet4
-      Tags:
-        - Key: StackID
-          Value: !Ref 'AWS::StackId'
-        - Key: Name
-          Value: !Ref 'AWS::StackName'
-
-  NATGatewayEIP:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-      Tags:
-        - Key: StackID
-          Value: !Ref 'AWS::StackId'
-        - Key: Name
-          Value: !Ref 'AWS::StackName'
-
-  Neo4jRouteTablePrivate:
+  Neo4jRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       Tags:
@@ -315,36 +285,27 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
-  Neo4jPrivateRoute:
-    DependsOn: NATGateway
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref Neo4jRouteTablePrivate
-      DestinationCidrBlock: '0.0.0.0/0'
-      NatGatewayId: !Ref NATGateway
-
-  Neo4jSubnet1PrivateRouteTableAssociation:
+  Neo4jSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref Neo4jRouteTablePrivate
+      RouteTableId: !Ref Neo4jRouteTable
       SubnetId: !Ref Neo4jSubnet1
 
-  Neo4jSubnet2PrivateRouteTableAssociation:
+  Neo4jSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Condition: CreateCluster
     Properties:
-      RouteTableId: !Ref Neo4jRouteTablePrivate
+      RouteTableId: !Ref Neo4jRouteTable
       SubnetId: !Ref Neo4jSubnet2
 
-  Neo4jSubnet3PrivateRouteTableAssociation:
+  Neo4jSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Condition: CreateCluster
     Properties:
-      RouteTableId: !Ref Neo4jRouteTablePrivate
+      RouteTableId: !Ref Neo4jRouteTable
       SubnetId: !Ref Neo4jSubnet3
 
-
-  Neo4jNetworkLoadBalancer:
+  Neo4jApplicationLoadBalancer:
     DependsOn: Neo4jInternetGateway
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -352,7 +313,7 @@ Resources:
       Name: !Join
         - '-'
         - - !Ref 'AWS::StackName'
-          - 'nlb'
+          - 'alb'
       Scheme: internet-facing
       Subnets: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
       Tags:
@@ -360,32 +321,10 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
-      Type: network
-
-  Neo4jHTTPListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
-          Type: forward
-      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
-      Port: 7474
-      Protocol: TLS
-      Certificates:
-        - CertificateArn: !Ref CertificateARN
-
-  Neo4jBoltListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - TargetGroupArn: !Ref Neo4jBoltTargetGroup
-          Type: forward
-      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
-      Port: 7687
-      Protocol: TLS
-      Certificates:
-        - CertificateArn: !Ref CertificateARN
-
+      Type: application
+      SecurityGroups:
+        - Ref: Neo4jExternalSecurityGroup
+        - Ref: Neo4jInternalSecurityGroup
 
   Neo4jHTTPTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -396,7 +335,7 @@ Resources:
           - 'http'
           - 'tg'
       Port: 7474
-      Protocol: TCP
+      Protocol: HTTP
       HealthCheckIntervalSeconds: 10
       Tags:
         - Key: StackID
@@ -414,7 +353,7 @@ Resources:
           - 'bolt'
           - 'tg'
       Port: 7687
-      Protocol: TCP
+      Protocol: HTTP
       HealthCheckIntervalSeconds: 10
       Tags:
         - Key: StackID
@@ -422,30 +361,6 @@ Resources:
         - Key: Name
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
-
-  Neo4jBastionHost:
-    Type: AWS::EC2::Instance
-    Properties:
-      AvailabilityZone:
-        Fn::Select:
-          - 2
-          - Fn::GetAZs: !Ref 'AWS::Region'
-      IamInstanceProfile:
-        Ref: Neo4jInstanceProfile
-      ImageId: !FindInMap
-        - Neo4j
-        - !Ref 'AWS::Region'
-        - BYOL
-      InstanceType: !Ref InstanceType
-      KeyName: !Ref KeyName
-      SubnetId: !Ref Neo4jSubnet4
-      SecurityGroupIds:
-        - Fn::GetAtt: [Neo4jBastionSecurityGroup,GroupId]
-      Tags:
-        - Key: StackID
-          Value: !Ref 'AWS::StackId'
-        - Key: Name
-          Value: !Ref 'AWS::StackName'
 
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -472,7 +387,6 @@ Resources:
         - Key: Name
           Value: !Ref 'AWS::StackName'
           PropagateAtLaunch: true
-
 
   Neo4jLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -658,6 +572,7 @@ Resources:
     Properties:
       Roles:
         - Ref: Neo4jRole
+
   Neo4jRole:
     Type: AWS::IAM::Role
     Properties:
@@ -740,17 +655,6 @@ Resources:
           ToPort: 5005
           SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
 
-  Neo4jBastionSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Enable SSH and Neo4j External Ports
-      VpcId: !Ref Neo4jVPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref SSHCIDR
-
 Outputs:
   Neo4jBrowserURL:
     Description: URL for Neo4j Browser
@@ -759,12 +663,7 @@ Outputs:
       - - 'https://'
         - !Ref SSLDomain
         - ':7474/browser/'
-      
-  Neo4jNLBfqdn:
-    Description: URL for Neo4j Browser (for CNAME)
-    Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
-
-
+    
   Neo4jURI:
     Description: Neo4j URI Scheme
     Value: !Join
@@ -773,17 +672,6 @@ Outputs:
         - !Ref SSLDomain
         - ':'
         - '7687'
-
-  SSHTunnelURL:
-    Description: SSH Command for establishing a ssh tunnel to the bastion. Execute this command from your local terminal and access Neo4j on your browser via http://localhost:7474
-    Value: !Join
-      - ''
-      - - 'ssh -L 7474:'
-        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
-        - ':7474 -L 7687:'
-        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
-        - ':7687 -A ec2-user@'
-        - !GetAtt Neo4jBastionHost.PublicIp
 
   Neo4jUsername:
     Description: Username for Neo4j

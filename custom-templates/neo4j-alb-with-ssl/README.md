@@ -2,7 +2,7 @@
 
 ## Description
 
-This custom CloudFormation Template (CFT) provides a method of deploying Neo4j with a secure (SSL/TLS) connection between the client and the Network Load Balancer.  All traffic after (or 'south') of the ALB will remain unencrypted, as will traffic between the Neo4j EC2 instances.
+This custom CloudFormation Template (CFT) provides a method of deploying Neo4j with a secure (SSL/TLS) connection between the client and the Application Load Balancer.  All traffic after (or 'south') of the ALB will remain unencrypted, as will traffic between the Neo4j EC2 instances.
 
 ## Cloud Topology
 AWS Resources will be deployed as per the following diagram (this example depicts a 3 node Neo4j cluster):
@@ -39,7 +39,6 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
 
 6) After a few minutes (could take longer depending on DNS propogation speeds) your new certificate should change status to "Issued"
 ![](images/cert-issued.png?raw=true)
-
 
 ### Stage 2 - CloudFormation Template Installation
 1) Deploy the CloudFormation template in the usual way, either by uploading the CFT to the CloudFormation section of the AWS console, or by running the deploy.sh script:

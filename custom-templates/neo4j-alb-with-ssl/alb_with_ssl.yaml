@@ -243,7 +243,7 @@ Resources:
         - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
           Type: forward
       LoadBalancerArn: !Ref Neo4jApplicationLoadBalancer
-      Port: 7474
+      Port: 7473
       Protocol: HTTPS
       Certificates:
         - CertificateArn: !Ref CertificateARN
@@ -323,8 +323,7 @@ Resources:
           Value: !Ref 'AWS::StackName'
       Type: application
       SecurityGroups:
-        - Ref: Neo4jExternalSecurityGroup
-        - Ref: Neo4jInternalSecurityGroup
+        - Ref: Neo4jLoadBalancerSecurityGroup
 
   Neo4jHTTPTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
@@ -398,8 +397,7 @@ Resources:
       InstanceType:
         Ref: InstanceType
       SecurityGroups:
-        - Ref: Neo4jExternalSecurityGroup
-        - Ref: Neo4jInternalSecurityGroup
+        - Ref: Neo4jInstanceSecurityGroup
       KeyName:
         Ref: KeyName  
       EbsOptimized: true
@@ -597,10 +595,25 @@ Resources:
                   - ec2:DescribeInstances
                 Resource: "*"
 
-  Neo4jExternalSecurityGroup:
+  Neo4jLoadBalancerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Enable SSH and Neo4j External Ports
+      GroupDescription: Rules for ALB
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 7473
+          ToPort: 7473
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          CidrIp: 0.0.0.0/0
+
+  Neo4jInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Rules for EC2 Instances
       VpcId: !Ref Neo4jVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -608,52 +621,15 @@ Resources:
           ToPort: 22
           CidrIp: !Ref SSHCIDR
         - IpProtocol: tcp
-          FromPort: 7474
-          ToPort: 7474
+          FromPort: 0 
+          ToPort: 65535
           CidrIp: 0.0.0.0/0
+          #SourceSecurityGroupId: !GetAtt Neo4jLoadBalancerSecurityGroup.GroupId
         - IpProtocol: tcp
-          FromPort: 7687
-          ToPort: 7687
+          FromPort: 0
+          ToPort: 65535
           CidrIp: 0.0.0.0/0
-
-  Neo4jInternalSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Enable Neo4j Internal Ports
-      VpcId: !Ref Neo4jVPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 5000
-          ToPort: 5000
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 6000
-          ToPort: 6000
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 7000
-          ToPort: 7000
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 7688
-          ToPort: 7688
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 2003
-          ToPort: 2003
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 2004
-          ToPort: 2004
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 3637
-          ToPort: 3637
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 5005
-          ToPort: 5005
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+          #SourceSecurityGroupId: !GetAtt Neo4jLoadBalancerSecurityGroup.GroupId
 
 Outputs:
   Neo4jBrowserURL:
@@ -662,8 +638,12 @@ Outputs:
       - ''
       - - 'https://'
         - !Ref SSLDomain
-        - ':7474/browser/'
+        - ':7473/browser/'
     
+  Neo4jALBfqdn:
+    Description: The FQDN for the Application Load Balancer
+    Value: !GetAtt Neo4jApplicationLoadBalancer.DNSName
+        
   Neo4jURI:
     Description: Neo4j URI Scheme
     Value: !Join

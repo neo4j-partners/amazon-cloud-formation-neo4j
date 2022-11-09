@@ -624,12 +624,12 @@ Resources:
           FromPort: 0 
           ToPort: 65535
           CidrIp: 0.0.0.0/0
-          #SourceSecurityGroupId: !GetAtt Neo4jLoadBalancerSecurityGroup.GroupId
+          SourceSecurityGroupId: !GetAtt Neo4jLoadBalancerSecurityGroup.GroupId
         - IpProtocol: tcp
           FromPort: 0
           ToPort: 65535
           CidrIp: 0.0.0.0/0
-          #SourceSecurityGroupId: !GetAtt Neo4jLoadBalancerSecurityGroup.GroupId
+          SourceSecurityGroupId: !GetAtt Neo4jLoadBalancerSecurityGroup.GroupId
 
 Outputs:
   Neo4jBrowserURL:

@@ -41,7 +41,7 @@ _These steps assume that the prerequisites listed above are met.  In this exampl
 ![](images/cert-issued.png?raw=true)
 
 ### Stage 2 - CloudFormation Template Installation
-1) Deploy the CloudFormation template in the usual way, either by uploading the CFT to the CloudFormation section of the AWS console, or by running the deploy.sh script:
+1) Deploy the CloudFormation template in the usual way, either by uploading the CFT to the CloudFormation section of the AWS console, or by running the deploy.sh script.  Remember to take a look inside the deploy.sh script and understand the variables that need to be set before executing it.  The deploy.sh script takes a single command-line argument, which is the desired name of the CFT.
 
 ```
 ./deploy.sh nlb-with-ssl

@@ -13,3 +13,4 @@ gpgcheck=1
 EOF
 
 sudo yum install --downloadonly neo4j-enterprise
+sudo yum install -y jq

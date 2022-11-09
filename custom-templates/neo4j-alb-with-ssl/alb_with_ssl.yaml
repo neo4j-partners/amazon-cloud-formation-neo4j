@@ -645,24 +645,24 @@ Outputs:
       - ''
       - - 'https://'
         - !Ref SSLDomain
-        - ':7473/browser/'
+        - ':7473/'
     
   Neo4jALBfqdn:
-    Description: The FQDN for the Application Load Balancer
+    Description: The FQDN for the Application Load Balancer - Required for CNAME creation
     Value: !GetAtt Neo4jApplicationLoadBalancer.DNSName
         
   Neo4jURI:
     Description: Neo4j URI Scheme
     Value: !Join
       - ''
-      - - 'neo4j://'
+      - - 'neo4j+s://'
         - !Ref SSLDomain
         - ':'
         - '7687'
 
   Neo4jUsername:
     Description: Username for Neo4j
-    Value: 'The username is neo4j.  The password is what you provided to the template.'
+    Value: 'The username is neo4j.  The password is what you provided to the template or the deploy.sh script.'
 
 Mappings:
   Neo4j:

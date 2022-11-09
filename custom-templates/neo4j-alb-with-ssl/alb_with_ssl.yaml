@@ -621,16 +621,55 @@ Resources:
           ToPort: 22
           CidrIp: !Ref SSHCIDR
         - IpProtocol: tcp
-          FromPort: 0 
-          ToPort: 65535
-          CidrIp: 0.0.0.0/0
+          FromPort: 7474
+          ToPort: 7474
           SourceSecurityGroupId: !GetAtt Neo4jLoadBalancerSecurityGroup.GroupId
         - IpProtocol: tcp
-          FromPort: 0
-          ToPort: 65535
-          CidrIp: 0.0.0.0/0
+          FromPort: 7687
+          ToPort: 7687
           SourceSecurityGroupId: !GetAtt Neo4jLoadBalancerSecurityGroup.GroupId
+        # - IpProtocol: tcp
+        #   FromPort: 5000
+        #   ToPort: 5000
+        #   SourceSecurityGroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
+        # - IpProtocol: tcp
+        #   FromPort: 6000
+        #   ToPort: 6000
+        #   SourceSecurityGroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
+        # - IpProtocol: tcp
+        #   FromPort: 7000
+        #   ToPort: 7000
+        #   SourceSecurityGroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
+        # - IpProtocol: tcp
+        #   FromPort: 7688
+        #   ToPort: 7688
+        #   SourceSecurityGroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
+        # - IpProtocol: tcp
+        #   FromPort: 2003
+        #   ToPort: 2003
+        #   SourceSecurityGroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
+        # - IpProtocol: tcp
+        #   FromPort: 2004
+        #   ToPort: 2004
+        #   SourceSecurityGroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
+        # - IpProtocol: tcp
+        #   FromPort: 3637
+        #   ToPort: 3637
+        #   SourceSecurityGroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
+        # - IpProtocol: tcp
+        #   FromPort: 5005
+        #   ToPort: 5005
+        #   SourceSecurityGroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
 
+  InstanceInboundRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
+      GroupId: !GetAtt Neo4jInstanceSecurityGroup.GroupId
+      
 Outputs:
   Neo4jBrowserURL:
     Description: URL for Neo4j Browser

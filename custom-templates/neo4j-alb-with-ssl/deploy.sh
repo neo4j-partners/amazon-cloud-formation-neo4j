@@ -4,13 +4,18 @@ STACK_NAME=$1
 TEMPLATE_BODY="file://alb_with_ssl.yaml"
 REGION=$(aws configure get region)
 
-Password="foo123"
+Password="testpass123"
 NumberOfServers="3"
 SSHCIDR="0.0.0.0/0"
 GraphDatabaseVersion=5.1.0
 KeyName="edr-us-east-1"
-SSLDomain="neo4j-new.edrandall.uk"
-CertificateARN="arn:aws:acm:us-east-1:540622579701:certificate/9424f620-977b-412d-99d8-2d8e12acf71d"
+
+#Update with your SSLDomain
+SSLDomain="neo4j.edrandall.uk"
+
+#Update with the ARN of the Certificate from AWS Certificate Manager
+CertificateARN="arn:aws:acm:us-east-1:540622579701:certificate/f544dc8f-887d-4b4a-929a-549234e178e7"
+
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
 --stack-name ${STACK_NAME} \

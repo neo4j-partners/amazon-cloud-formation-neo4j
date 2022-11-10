@@ -8,7 +8,8 @@
 
 # User configurable variables
 Password="foo123"
-NodeCount="3"
+NumberOfServers="3"
+
 SSHCIDR="0.0.0.0/0"
 
 # Other Variables (changes not normally required)

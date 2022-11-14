@@ -4,6 +4,8 @@
 
 This custom CloudFormation Template (CFT) provides a method of deploying Neo4j with PRIVATE EC2 instances behind an INTERNET-FACING Network Load Balancer.
 
+NOTE:  This CFT can take up to 10 minutes to deploy.  It won't show as "CREATE COMPLETE" in the AWS CloudFormation console until all AWS resources have been deployed AND the Neo4j is up, running and available.
+
 
 ## Cloud Topology
 AWS Resources will be deployed as per the following diagram (this example depicts a 3 node Neo4j cluster):

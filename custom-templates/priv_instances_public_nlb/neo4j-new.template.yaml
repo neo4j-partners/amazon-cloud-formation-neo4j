@@ -664,8 +664,8 @@ Resources:
             - "    do echo \"Waiting for cluster to start\"\n"
             - "    sleep 5\n"
             - "  done\n"
-            - "  echo \"Waiting another 20 seconds to give the TGs a chance to go green...\"\n"
-            - "  sleep 20\n"
+            - "  echo \"Waiting another 2 minutes to give the TGs a chance to go green...\"\n"
+            - "  sleep 120\n"
             - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 

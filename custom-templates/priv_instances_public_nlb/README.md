@@ -69,9 +69,9 @@ _Users are reminded that the deployment of cloud resources will incur costs._
   - [Public Subnet 1]  10.0.1.0/24
   - [Public Subnet 2]  10.0.2.0/24
   - [Public Subnet 3]  10.0.3.0/24
-  - [Private Subnet 1] 10.0.1.0/24
-  - [Private Subnet 2] 10.0.2.0/24
-  - [Private Subnet 3] 10.0.3.0/24
+  - [Private Subnet 1] 10.0.4.0/24
+  - [Private Subnet 2] 10.0.5.0/24
+  - [Private Subnet 3] 10.0.6.0/24
 - 1, or between 3 and 10 EC2 instances (Depending on whether a single instance, or an autonomous cluster is selected)
 - 1 Network (Layer 4) Load Balancer
 - 1 NAT Gateway

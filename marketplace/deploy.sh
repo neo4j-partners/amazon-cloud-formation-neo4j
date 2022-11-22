@@ -8,7 +8,6 @@ REGION=`aws configure get region`
 Password="foo123"
 NumberOfServers="6"
 SSHCIDR="0.0.0.0/0"
-GraphDatabaseVersion=5.1.0
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -18,7 +17,6 @@ aws cloudformation create-stack \
 --disable-rollback \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
-ParameterKey=GraphDatabaseVersion,ParameterValue=${GraphDatabaseVersion} \
 ParameterKey=NumberOfServers,ParameterValue=${NumberOfServers} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=False \

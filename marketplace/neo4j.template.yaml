@@ -424,15 +424,27 @@ Resources:
             - "install_neo4j_from_yum() {\n"
             - "  echo \"Installing Graph Database...\"\n"
             - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
-            - "  if ! curl --fail http://versions.neo4j-templates.com/target.json; then\n"
+            - "  ASG_NAME=$(aws --region $region cloudformation describe-stack-resources --stack-name $stackName --query 'StackResources[?ResourceType==`AWS::AutoScaling::AutoScalingGroup`].PhysicalResourceId' --output text)\n"
+            - "  NEO4J_VERSION=$(aws --region $region autoscaling describe-auto-scaling-groups --auto-scaling-group-names $ASG_NAME --query 'AutoScalingGroups[0].Tags[?Key==`NEO4J_VERSION`].Value' --output text)\n"
+            - "  if [[ ! -z $NEO4J_VERSION ]]; then\n"
+            - "    echo \"Found NEO4J_VERSION Tag on AutoScalingGroup: NEO4J_VERSION=$NEO4J_VERSION\"\n"
+            - "    local -r graphDatabaseVersion=\"neo4j-enterprise-$NEO4J_VERSION\"\n"
+            - "  elif ! curl --fail http://versions.neo4j-templates.com/target.json; then\n"
             - "    echo 'Failed to resolve Neo4j version from http://versions.neo4j-templates.com, using latest'\n"
+            - "    NEO4J_VERSION=\"latest\"\n"
             - "    local -r graphDatabaseVersion='neo4j-enterprise'\n"
             - "  else\n"
-            - "    local -r graphDatabaseVersion=\"neo4j-enterprise-$(curl http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"5\"')\"\n"
+            - "    NEO4J_VERSION=$(curl http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"5\"')\n"
+            - "    local -r graphDatabaseVersion=\"neo4j-enterprise-$NEO4J_VERSION\"\n"
             - "  fi\n"
             - "  yum -y install \"${graphDatabaseVersion}\"\n"
             - "  yum update -y aws-cfn-bootstrap\n"
             - "  systemctl enable neo4j\n"
+            - "  if [[ \"$NEO4J_VERSION\" == \"latest\" ]]; then\n"
+            - "    NEO4J_VERSION=$(/usr/share/neo4j/bin/neo4j --version)\n"
+            - "  fi\n"
+            - "  echo \"Tagging AutoScalingGroup with NEO4J_VERSION=$NEO4J_VERSION\"\n"
+            - "  aws --region $region autoscaling create-or-update-tags --tags ResourceId=$ASG_NAME,ResourceType=auto-scaling-group,Key=NEO4J_VERSION,Value=$NEO4J_VERSION,PropagateAtLaunch=true\n"
             - "}\n"
 
             - "install_apoc_plugin() {\n"
@@ -556,7 +568,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
+                  - autoscaling:CreateOrUpdateTags
                   - autoscaling:DescribeAutoScalingInstances
+                  - autoscaling:DescribeAutoScalingGroups
                   - cloudformation:DescribeStack*
                   - ec2:DescribeInstances
                 Resource: "*"

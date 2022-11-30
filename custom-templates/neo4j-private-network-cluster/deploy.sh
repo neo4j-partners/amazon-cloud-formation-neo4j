@@ -10,7 +10,6 @@ Password="foo123"
 CoreInstanceCount="1"
 ReadReplicaCount="0"
 SSHCIDR="0.0.0.0/0"
-GraphDatabaseVersion=4.4.12
 KeyName="harshit"
 #KeyName="edr-test-121022"
 
@@ -22,7 +21,6 @@ aws cloudformation create-stack \
 --disable-rollback \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
-ParameterKey=GraphDatabaseVersion,ParameterValue=${GraphDatabaseVersion} \
 ParameterKey=CoreInstanceCount,ParameterValue=${CoreInstanceCount} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=False \

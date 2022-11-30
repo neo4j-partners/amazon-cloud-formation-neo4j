@@ -447,10 +447,6 @@ Resources:
             - "  if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
             - "    PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version)\n"
             - "  fi\n"
-            - "  if [[ -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
-            - "    echo \"Tagging AutoScalingGroup with Key NEO4J_VERSION and Value $PACKAGE_VERSION\"\n"
-            - "    aws --region $region autoscaling create-or-update-tags --tags ResourceId=$ASG_NAME,ResourceType=auto-scaling-group,Key=NEO4J_VERSION,Value=$PACKAGE_VERSION,PropagateAtLaunch=true\n"
-            - "  fi\n"
             - "}\n"
 
             - "install_apoc_plugin() {\n"
@@ -539,6 +535,15 @@ Resources:
             - "    do echo \"Waiting for cluster to start\"\n"
             - "    sleep 5\n"
             - "  done\n"
+            - "}\n"
+
+            - "tag_asg_with_neo4j_version() {\n"
+            - "  if [[ -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
+            - "    echo \"Tagging AutoScalingGroup with Key NEO4J_VERSION and Value $PACKAGE_VERSION\"\n"
+            - "    aws --region $region autoscaling create-or-update-tags --tags ResourceId=$ASG_NAME,ResourceType=auto-scaling-group,Key=NEO4J_VERSION,Value=$PACKAGE_VERSION,PropagateAtLaunch=true\n"
+            - "  else\n"
+            - "    echo \"ASG is already tagged with NEO4J_VERSION\"\n"
+            - "  fi\n"
             - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
@@ -549,6 +554,7 @@ Resources:
             - "configure_graph_data_science\n"
             - "configure_bloom\n"
             - "start_neo4j\n"
+            - "tag_asg_with_neo4j_version\n"
 
   Neo4jInstanceProfile:
     Type: AWS::IAM::InstanceProfile

@@ -9,7 +9,6 @@ Password="foo123"
 CoreInstanceCount="3"
 ReadReplicaCount="2"
 SSHCIDR="0.0.0.0/0"
-GraphDatabaseVersion=4.4.11
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -19,7 +18,6 @@ aws cloudformation create-stack \
 --disable-rollback \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
-ParameterKey=GraphDatabaseVersion,ParameterValue=${GraphDatabaseVersion} \
 ParameterKey=CoreInstanceCount,ParameterValue=${CoreInstanceCount} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=False \

@@ -427,7 +427,7 @@ Resources:
             - "  ASG_NAME=$(aws --region $region cloudformation describe-stack-resources --stack-name $stackName --query 'StackResources[?ResourceType==`AWS::AutoScaling::AutoScalingGroup` && LogicalResourceId==`Neo4jAutoScalingGroup`].PhysicalResourceId' --output text)\n"
             - "  NEO4J_VERSION_ASG_TAG=$(aws --region $region autoscaling describe-auto-scaling-groups --auto-scaling-group-names $ASG_NAME --query 'AutoScalingGroups[0].Tags[?Key==`NEO4J_VERSION`].Value' --output text)\n"
             - "  if [[ ! -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
-            - "    echo \"Found NEO4J_VERSION_ASG_TAG Tag on AutoScalingGroup: NEO4J_VERSION_ASG_TAG=$NEO4J_VERSION_ASG_TAG\"\n"
+            - "    echo \"Found NEO4J_VERSION_ASG_TAG Tag on AutoScalingGroup $ASG_NAME: NEO4J_VERSION_ASG_TAG=$NEO4J_VERSION_ASG_TAG\"\n"
             - "    PACKAGE_VERSION=$NEO4J_VERSION_ASG_TAG\n"
             - "    local -r NEO4J_YUM_PACKAGE=\"neo4j-enterprise-$PACKAGE_VERSION\"\n"
             - "  else\n"
@@ -539,7 +539,7 @@ Resources:
 
             - "tag_asg_with_neo4j_version() {\n"
             - "  if [[ -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
-            - "    echo \"Tagging AutoScalingGroup with Key NEO4J_VERSION and Value $PACKAGE_VERSION\"\n"
+            - "    echo \"Tagging AutoScalingGroup $ASG_NAME with Key NEO4J_VERSION and Value $PACKAGE_VERSION\"\n"
             - "    aws --region $region autoscaling create-or-update-tags --tags ResourceId=$ASG_NAME,ResourceType=auto-scaling-group,Key=NEO4J_VERSION,Value=$PACKAGE_VERSION,PropagateAtLaunch=true\n"
             - "  else\n"
             - "    echo \"ASG is already tagged with NEO4J_VERSION\"\n"

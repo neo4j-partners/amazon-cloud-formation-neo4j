@@ -734,6 +734,8 @@ Resources:
       SecurityGroups:
         - Ref: Neo4jExternalSecurityGroup
         - Ref: Neo4jInternalSecurityGroup
+      KeyName:
+        Ref: KeyName
       EbsOptimized: true
       IamInstanceProfile:
         Ref: Neo4jInstanceProfile

@@ -477,7 +477,7 @@ Resources:
             - "  yum update -y aws-cfn-bootstrap\n"
             - "  systemctl enable neo4j\n"
             - "  if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
-            - "    PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version)\n"
+            - "    PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version | cut -d ' ' -f2)\n"
             - "  fi\n"
             - "}\n"
 
@@ -707,7 +707,7 @@ Resources:
             - "  yum update -y aws-cfn-bootstrap\n"
             - "  systemctl enable neo4j\n"
             - "  if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
-            - "    PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version)\n"
+            - "    PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version | cut -d ' ' -f2)\n"
             - "  fi\n"
             - "}\n"
 

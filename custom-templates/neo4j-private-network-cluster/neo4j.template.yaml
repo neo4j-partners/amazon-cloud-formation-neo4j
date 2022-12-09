@@ -6,7 +6,6 @@ Metadata:
       - Label:
           default: "Neo4j Configuration"
         Parameters:
-          - GraphDatabaseVersion
           - InstallGraphDataScience
           - GraphDataScienceLicenseKey
           - InstallBloom
@@ -22,8 +21,6 @@ Metadata:
           - KeyName
           - SSHCIDR
     ParameterLabels:
-      GraphDatabaseVersion:
-        default: Graph Database Version
       InstallGraphDataScience:
         default: Install Graph Data Science
       GraphDataScienceLicenseKey:
@@ -48,11 +45,6 @@ Metadata:
         default: SSH CIDR
 
 Parameters:
-  GraphDatabaseVersion:
-    Description: Neo4j Graph Database Version
-    Type: String
-    Default: '4.4.11'
-
   InstallGraphDataScience:
     Description: Install Graph Data Science
     Type: String
@@ -507,10 +499,6 @@ Resources:
             - "set -euo pipefail\n"
             - "echo Running startup script...\n"
 
-            - "graphDatabaseVersion="
-            - Ref: GraphDatabaseVersion
-            - "\n"
-
             - "installGraphDataScience="
             - Ref: InstallGraphDataScience
             - "\n"
@@ -566,51 +554,34 @@ Resources:
             - "install_neo4j_from_yum() {\n"
             - "  echo \"Installing Graph Database...\"\n"
             - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
-            - "  yum -y install \"neo4j-enterprise-${graphDatabaseVersion}\"\n"
+            - "  ASG_NAME=$(aws --region $region cloudformation describe-stack-resources --stack-name $stackName --query 'StackResources[?ResourceType==`AWS::AutoScaling::AutoScalingGroup` && LogicalResourceId==`Neo4jAutoScalingGroup`].PhysicalResourceId' --output text)\n"
+            - "  NEO4J_VERSION_ASG_TAG=$(aws --region $region autoscaling describe-auto-scaling-groups --auto-scaling-group-names $ASG_NAME --query 'AutoScalingGroups[0].Tags[?Key==`NEO4J_VERSION`].Value' --output text)\n"
+            - "  if [[ ! -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
+            - "    echo \"Found NEO4J_VERSION_ASG_TAG Tag on AutoScalingGroup $ASG_NAME: NEO4J_VERSION_ASG_TAG=$NEO4J_VERSION_ASG_TAG\"\n"
+            - "    PACKAGE_VERSION=$NEO4J_VERSION_ASG_TAG\n"
+            - "    local -r NEO4J_YUM_PACKAGE=\"neo4j-enterprise-$PACKAGE_VERSION\"\n"
+            - "  else\n"
+            - "    PACKAGE_VERSION=$(curl --fail http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"4.4\"' || echo \"\")\n"
+            - "    if [[ ! -z $PACKAGE_VERSION ]]; then\n"
+            - "      echo \"Found PACKAGE_VERSION from http://versions.neo4j-templates.com : PACKAGE_VERSION=$PACKAGE_VERSION\"\n"
+            - "      local -r NEO4J_YUM_PACKAGE=\"neo4j-enterprise-$PACKAGE_VERSION\"\n"
+            - "    else\n"
+            - "      echo 'Failed to resolve Neo4j version from http://versions.neo4j-templates.com, using PACKAGE_VERSION=latest'\n"
+            - "      PACKAGE_VERSION=\"latest\"\n"
+            - "      local -r NEO4J_YUM_PACKAGE='neo4j-enterprise'\n"
+            - "    fi\n"
+            - "  fi\n"
+            - "  yum -y install \"${NEO4J_YUM_PACKAGE}\"\n"
             - "  yum update -y aws-cfn-bootstrap\n"
             - "  systemctl enable neo4j\n"
+            - "  if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
+            - "    PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version | cut -d ' ' -f2)\n"
+            - "  fi\n"
             - "}\n"
 
             - "install_apoc_plugin() {\n"
             - "  echo \"Installing APOC...\"\n"
             - "  mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
-            - "}\n"
-
-            - "configure_graph_data_science() {\n"
-            - "  if [[ \"${installGraphDataScience}\" == True && \"${nodeCount}\" == 1 ]]; then\n"
-            - "    echo \"Installing Graph Data Science...\"\n"
-            - "    cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
-            - "  fi\n"
-            - "  if [[ $graphDataScienceLicenseKey != None ]]; then\n"
-            - "    echo \"Writing GDS license key...\"\n"
-            - "    mkdir -p /etc/neo4j/licenses\n"
-            - "    echo \"${graphDataScienceLicenseKey}\" > /etc/neo4j/licenses/neo4j-gds.license\n"
-            - "    sed -i '$a gds.enterprise.license_file=/etc/neo4j/licenses/neo4j-gds.license' /etc/neo4j/neo4j.conf\n"
-            - "  fi\n"
-            - "}\n"
-
-            - "configure_bloom() {\n"
-            - "  if [[ $installBloom == True ]]; then\n"
-            - "    echo \"Installing Bloom...\"\n"
-            - "    cp /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
-            - "  fi\n"
-            - "  if [[ $bloomLicenseKey != None ]]; then\n"
-            - "    echo \"Writing Bloom license key...\"\n"
-            - "    mkdir -p /etc/neo4j/licenses\n"
-            - "    echo \"${bloomLicenseKey}\" > /etc/neo4j/licenses/neo4j-bloom.license\n"
-            - "    sed -i '$a neo4j.bloom.license_file=/etc/neo4j/licenses/neo4j-bloom.license' /etc/neo4j/neo4j.conf\n"
-            - "  fi\n"
-            - "}\n"
-
-            - "start_neo4j() {\n"
-            - "  echo \"Starting Neo4j...\"\n"
-            - "  service neo4j start\n"
-            - "  neo4j-admin set-initial-password \"${password}\"\n"
-            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
-            - "    do echo \"Waiting for cluster to start\"\n"
-            - "    sleep 5\n"
-            - "  done\n"
-            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
             - "extension_config() {\n"
@@ -664,6 +635,53 @@ Resources:
             - "    set_cluster_configs\n"
             - "  fi\n"
             - "}\n"
+
+            - "configure_graph_data_science() {\n"
+            - "  if [[ \"${installGraphDataScience}\" == True && \"${nodeCount}\" == 1 ]]; then\n"
+            - "    echo \"Installing Graph Data Science...\"\n"
+            - "    cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
+            - "  fi\n"
+            - "  if [[ $graphDataScienceLicenseKey != None ]]; then\n"
+            - "    echo \"Writing GDS license key...\"\n"
+            - "    mkdir -p /etc/neo4j/licenses\n"
+            - "    echo \"${graphDataScienceLicenseKey}\" > /etc/neo4j/licenses/neo4j-gds.license\n"
+            - "    sed -i '$a gds.enterprise.license_file=/etc/neo4j/licenses/neo4j-gds.license' /etc/neo4j/neo4j.conf\n"
+            - "  fi\n"
+            - "}\n"
+
+            - "configure_bloom() {\n"
+            - "  if [[ $installBloom == True ]]; then\n"
+            - "    echo \"Installing Bloom...\"\n"
+            - "    cp /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
+            - "  fi\n"
+            - "  if [[ $bloomLicenseKey != None ]]; then\n"
+            - "    echo \"Writing Bloom license key...\"\n"
+            - "    mkdir -p /etc/neo4j/licenses\n"
+            - "    echo \"${bloomLicenseKey}\" > /etc/neo4j/licenses/neo4j-bloom.license\n"
+            - "    sed -i '$a neo4j.bloom.license_file=/etc/neo4j/licenses/neo4j-bloom.license' /etc/neo4j/neo4j.conf\n"
+            - "  fi\n"
+            - "}\n"
+
+            - "start_neo4j() {\n"
+            - "  echo \"Starting Neo4j...\"\n"
+            - "  service neo4j start\n"
+            - "  neo4j-admin set-initial-password \"${password}\"\n"
+            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
+            - "    do echo \"Waiting for cluster to start\"\n"
+            - "    sleep 5\n"
+            - "  done\n"
+            - "}\n"
+
+            - "tag_asg_with_neo4j_version() {\n"
+            - "  if [[ -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
+            - "    echo \"Tagging AutoScalingGroup $ASG_NAME with Key NEO4J_VERSION and Value $PACKAGE_VERSION\"\n"
+            - "    aws --region $region autoscaling create-or-update-tags --tags ResourceId=$ASG_NAME,ResourceType=auto-scaling-group,Key=NEO4J_VERSION,Value=$PACKAGE_VERSION,PropagateAtLaunch=true\n"
+            - "  else\n"
+            - "    echo \"ASG is already tagged with NEO4J_VERSION\"\n"
+            - "  fi\n"
+            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
+            - "}\n"
+
             - "configure_yum_repo\n"
             - "install_neo4j_from_yum\n"
             - "install_apoc_plugin\n"
@@ -672,6 +690,7 @@ Resources:
             - "configure_graph_data_science\n"
             - "configure_bloom\n"
             - "start_neo4j\n"
+            - "tag_asg_with_neo4j_version\n"
 
   Neo4jReadReplicaAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
@@ -715,6 +734,8 @@ Resources:
       SecurityGroups:
         - Ref: Neo4jExternalSecurityGroup
         - Ref: Neo4jInternalSecurityGroup
+      KeyName:
+        Ref: KeyName
       EbsOptimized: true
       IamInstanceProfile:
         Ref: Neo4jInstanceProfile
@@ -731,10 +752,6 @@ Resources:
           - ''
           - - "#!/bin/bash\n"
             - "echo Running startup script...\n"
-
-            - "graphDatabaseVersion="
-            - Ref: GraphDatabaseVersion
-            - "\n"
 
             - "password="
             - Ref: Password
@@ -770,25 +787,34 @@ Resources:
             - "install_neo4j_from_yum() {\n"
             - "  echo \"Installing Graph Database...\"\n"
             - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
-            - "  yum -y install \"neo4j-enterprise-${graphDatabaseVersion}\"\n"
+            - "  ASG_NAME=$(aws --region $region cloudformation describe-stack-resources --stack-name $stackName --query 'StackResources[?ResourceType==`AWS::AutoScaling::AutoScalingGroup` && LogicalResourceId==`Neo4jReadReplicaAutoScalingGroup`].PhysicalResourceId' --output text)\n"
+            - "  NEO4J_VERSION_ASG_TAG=$(aws --region $region autoscaling describe-auto-scaling-groups --auto-scaling-group-names $ASG_NAME --query 'AutoScalingGroups[0].Tags[?Key==`NEO4J_VERSION`].Value' --output text)\n"
+            - "  if [[ ! -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
+            - "    echo \"Found NEO4J_VERSION_ASG_TAG Tag on AutoScalingGroup $ASG_NAME: NEO4J_VERSION_ASG_TAG=$NEO4J_VERSION_ASG_TAG\"\n"
+            - "    PACKAGE_VERSION=$NEO4J_VERSION_ASG_TAG\n"
+            - "    local -r NEO4J_YUM_PACKAGE=\"neo4j-enterprise-$PACKAGE_VERSION\"\n"
+            - "  else\n"
+            - "    PACKAGE_VERSION=$(curl --fail http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"4.4\"' || echo \"\")\n"
+            - "    if [[ ! -z $PACKAGE_VERSION ]]; then\n"
+            - "      echo \"Found PACKAGE_VERSION from http://versions.neo4j-templates.com : PACKAGE_VERSION=$PACKAGE_VERSION\"\n"
+            - "      local -r NEO4J_YUM_PACKAGE=\"neo4j-enterprise-$PACKAGE_VERSION\"\n"
+            - "    else\n"
+            - "      echo 'Failed to resolve Neo4j version from http://versions.neo4j-templates.com, using PACKAGE_VERSION=latest'\n"
+            - "      PACKAGE_VERSION=\"latest\"\n"
+            - "      local -r NEO4J_YUM_PACKAGE='neo4j-enterprise'\n"
+            - "    fi\n"
+            - "  fi\n"
+            - "  yum -y install \"${NEO4J_YUM_PACKAGE}\"\n"
             - "  yum update -y aws-cfn-bootstrap\n"
             - "  systemctl enable neo4j\n"
+            - "  if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
+            - "    PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version | cut -d ' ' -f2)\n"
+            - "  fi\n"
             - "}\n"
 
             - "install_apoc_plugin() {\n"
             - "  echo \"Installing APOC...\"\n"
             - "  mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
-            - "}\n"
-
-            - "start_neo4j() {\n"
-            - "  echo \"Starting Neo4j...\"\n"
-            - "  service neo4j start\n"
-            - "  neo4j-admin set-initial-password \"${password}\"\n"
-            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
-            - "    do echo \"Waiting for cluster to start\"\n"
-            - "    sleep 5\n"
-            - "  done\n"
-            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jReadReplicaAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
             - "extension_config() {\n"
@@ -821,12 +847,34 @@ Resources:
             - "  sed -i s/#dbms.routing.listen_address=0.0.0.0:7688/dbms.routing.listen_address=${privateIP}:7688/g /etc/neo4j/neo4j.conf\n"
             - "  echo \"dbms.routing.default_router=SERVER\" >> /etc/neo4j/neo4j.conf\n"
             - "}\n"
+
+            - "start_neo4j() {\n"
+            - "  echo \"Starting Neo4j...\"\n"
+            - "  service neo4j start\n"
+            - "  neo4j-admin set-initial-password \"${password}\"\n"
+            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
+            - "    do echo \"Waiting for cluster to start\"\n"
+            - "    sleep 5\n"
+            - "  done\n"
+            - "}\n"
+
+            - "tag_asg_with_neo4j_version() {\n"
+            - "  if [[ -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
+            - "    echo \"Tagging AutoScalingGroup $ASG_NAME with Key NEO4J_VERSION and Value $PACKAGE_VERSION\"\n"
+            - "    aws --region $region autoscaling create-or-update-tags --tags ResourceId=$ASG_NAME,ResourceType=auto-scaling-group,Key=NEO4J_VERSION,Value=$PACKAGE_VERSION,PropagateAtLaunch=true\n"
+            - "  else\n"
+            - "    echo \"ASG is already tagged with NEO4J_VERSION\"\n"
+            - "  fi\n"
+            - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jReadReplicaAutoScalingGroup --region \"${region}\"\n"
+            - "}\n"
+
             - "configure_yum_repo\n"
             - "install_neo4j_from_yum\n"
             - "install_apoc_plugin\n"
             - "extension_config\n"
             - "build_neo4j_conf_file\n"
             - "start_neo4j\n"
+            - "tag_asg_with_neo4j_version\n"
 
   Neo4jInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -852,7 +900,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
+                  - autoscaling:CreateOrUpdateTags
                   - autoscaling:DescribeAutoScalingInstances
+                  - autoscaling:DescribeAutoScalingGroups
                   - cloudformation:DescribeStack*
                   - ec2:DescribeInstances
                 Resource: "*"

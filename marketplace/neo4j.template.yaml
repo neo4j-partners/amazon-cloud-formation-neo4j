@@ -441,18 +441,6 @@ Resources:
             - Ref: AWS::Region
             - "\n"
 
-            - "configure_yum_repo() {\n"
-            - "  echo \"Adding neo4j yum repo...\"\n"
-            - "  rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
-            - "  cat <<EOF > /etc/yum.repos.d/neo4j.repo\n"
-            - "[neo4j]\n"
-            - "name=Neo4j Yum Repo\n"
-            - "baseurl=http://yum.neo4j.com/stable\n"
-            - "enabled=1\n"
-            - "gpgcheck=1\n"
-            - "EOF\n"
-            - "}\n"
-
             - "install_neo4j_from_yum() {\n"
             - "  echo \"Installing Graph Database...\"\n"
             - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
@@ -583,7 +571,6 @@ Resources:
             - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
-            - "configure_yum_repo\n"
             - "install_neo4j_from_yum\n"
             - "install_apoc_plugin\n"
             - "extension_config\n"
@@ -671,17 +658,6 @@ Resources:
             - "region="
             - Ref: AWS::Region
             - "\n"
-            - "configure_yum_repo() {\n"
-            - "  echo \"Adding neo4j yum repo...\"\n"
-            - "  rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
-            - "  cat <<EOF > /etc/yum.repos.d/neo4j.repo\n"
-            - "[neo4j]\n"
-            - "name=Neo4j Yum Repo\n"
-            - "baseurl=http://yum.neo4j.com/stable\n"
-            - "enabled=1\n"
-            - "gpgcheck=1\n"
-            - "EOF\n"
-            - "}\n"
 
             - "install_neo4j_from_yum() {\n"
             - "  echo \"Installing Graph Database...\"\n"
@@ -767,7 +743,6 @@ Resources:
             - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jReadReplicaAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
-            - "configure_yum_repo\n"
             - "install_neo4j_from_yum\n"
             - "install_apoc_plugin\n"
             - "extension_config\n"
@@ -885,7 +860,10 @@ Outputs:
     Description: Username for Neo4j
     Value: 'The username is neo4j.  The password is what you provided to the template.'
 
+
+
+
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-0dfa7ce8b6b37cc40
+      BYOL: ami-0ebd717756e832d9f

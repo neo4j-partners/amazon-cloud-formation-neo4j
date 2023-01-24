@@ -37,7 +37,7 @@ if [ $InstallGraphDataScience == "True" ] && [ $NumberOfServers != 1 ] ; then
   exit 1
 fi
 
-if [ -z $graphDataScienceLicenseKey ] || [ $graphDataScienceLicenseKey == "None" ] && [ $InstallGraphDataScience == "True" ] ; then
+if [ -z $graphDataScienceLicenseKey ] || [ $graphDataScienceLicenseKey != "None" ] && [ $InstallGraphDataScience == "True" ] ; then
   echo "The variable graphDataScienceLicenseKey should not be set if InstallGraphDataScience is set to \"False\"."
   exit 1
 fi

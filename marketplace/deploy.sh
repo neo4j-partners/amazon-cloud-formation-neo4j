@@ -37,11 +37,6 @@ if [ $InstallGraphDataScience == "True" ] && [ $NumberOfServers != 1 ] ; then
   exit 1
 fi
 
-if [ -z $graphDataScienceLicenseKey ] || [ $graphDataScienceLicenseKey != "None" ] && [ $InstallGraphDataScience == "True" ] ; then
-  echo "The variable graphDataScienceLicenseKey should not be set if InstallGraphDataScience is set to \"False\"."
-  exit 1
-fi
-
 if [ "$#" != 1 ] ; then
   echo "This script takes a single argument, the desired name of the target cloudformation stack."
   echo "Usage: { $0 [stack-name] }"

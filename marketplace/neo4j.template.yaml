@@ -504,11 +504,12 @@ Resources:
             - "configure_graph_data_science() {\n"
             - "  if [[ \"${installGraphDataScience}\" == True && \"${nodeCount}\" == 1 ]]; then\n"
             - "    echo \"Installing Graph Data Science...\"\n"
-            - "    cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
+            - "    cp -p /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
             - "  fi\n"
             - "  if [[ $graphDataScienceLicenseKey != None ]]; then\n"
             - "    echo \"Writing GDS license key...\"\n"
             - "    mkdir -p /etc/neo4j/licenses\n"
+            - "    chown neo4j:neo4j /etc/neo4j/licenses\n"
             - "    echo \"${graphDataScienceLicenseKey}\" > /etc/neo4j/licenses/neo4j-gds.license\n"
             - "    sed -i '$a gds.enterprise.license_file=/etc/neo4j/licenses/neo4j-gds.license' /etc/neo4j/neo4j.conf\n"
             - "  fi\n"
@@ -517,11 +518,12 @@ Resources:
             - "configure_bloom() {\n"
             - "  if [[ $installBloom == True ]]; then\n"
             - "    echo \"Installing Bloom...\"\n"
-            - "    cp /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
+            - "    cp -p /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
             - "  fi\n"
             - "  if [[ $bloomLicenseKey != None ]]; then\n"
             - "    echo \"Writing Bloom license key...\"\n"
             - "    mkdir -p /etc/neo4j/licenses\n"
+            - "    chown neo4j:neo4j /etc/neo4j/licenses\n"
             - "    echo \"${bloomLicenseKey}\" > /etc/neo4j/licenses/neo4j-bloom.license\n"
             - "    sed -i '$a dbms.bloom.license_file=/etc/neo4j/licenses/neo4j-bloom.license' /etc/neo4j/neo4j.conf\n"
             - "  fi\n"
@@ -666,53 +668,8 @@ Outputs:
     Description: Username for Neo4j
     Value: 'The username is neo4j.  The password is what you provided to the template.'
 
+
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-03b7b337c9f68e97d
-    us-east-2:
-      BYOL: ami-018e604c0346fdf5d
-    us-west-1:
-      BYOL: ami-0faaab77cdba70328
-    us-west-2:
-      BYOL: ami-02f796cbd7351da1e
-    af-south-1:
-      BYOL: ami-02a2005d3d8b0923a
-    ap-east-1:
-      BYOL: ami-0f784ad23ea2c26a0
-    ap-northeast-1:
-      BYOL: ami-0c473c5e93bebd661
-    ap-northeast-2:
-      BYOL: ami-0718c9ed3cf3e3f77
-    ap-northeast-3:
-      BYOL: ami-0dafdcd0a06be1f4a
-    ap-south-1:
-      BYOL: ami-0fb30359d134be992
-    ap-southeast-1:
-      BYOL: ami-0348bf0c0770d6db3
-    ap-southeast-2:
-      BYOL: ami-0a3220665ca782e98
-    ap-southeast-3:
-      BYOL: ami-032fe4d62e96eea71
-    ca-central-1:
-      BYOL: ami-0a82e055fd33797a8
-    eu-central-1:
-      BYOL: ami-0d4564dac0469110d
-    eu-north-1:
-      BYOL: ami-0c261056c74b1714a
-    eu-south-1:
-      BYOL: ami-07efc8812fb6ca61e
-    eu-west-1:
-      BYOL: ami-00353c283ab511700
-    eu-west-2:
-      BYOL: ami-03e57c001ba898256
-    eu-west-3:
-      BYOL: ami-0181551cf89ef5f0f
-    me-south-1:
-      BYOL: ami-04d4a60f89eb5708e
-    sa-east-1:
-      BYOL: ami-03d5676374bb89706
-    us-gov-east-1:
-      BYOL: ami-06e200b59deea9c18
-    us-gov-west-1:
-      BYOL: ami-0fb02b18326888360
+      BYOL: ami-0618db5a2ca354b74

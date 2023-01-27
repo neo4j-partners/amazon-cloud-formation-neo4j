@@ -10,13 +10,13 @@
 
 # User configurable variables
 Password="foobar123"
-NumberOfServers=1
+NumberOfServers=3
 SSHCIDR="0.0.0.0/0"
 InstallGraphDataScience="True"
 InstallBloom="False"
-REGION="eu-central-1"
+REGION="us-east-1"
 Password="foobar123"
-graphDataScienceLicenseKey="None"
+graphDataScienceLicenseKey=""
 
 ###################################################################################
 

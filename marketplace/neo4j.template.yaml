@@ -417,9 +417,9 @@ Resources:
             - Ref: BloomLicenseKey
             - "\n"
 
-            - "password="
+            - "password=\""
             - Ref: Password
-            - "\n"
+            - "\"\n"
 
             - "nodeCount="
             - Ref: CoreInstanceCount
@@ -528,11 +528,12 @@ Resources:
             - "configure_graph_data_science() {\n"
             - "  if [[ \"${installGraphDataScience}\" == True && \"${nodeCount}\" == 1 ]]; then\n"
             - "    echo \"Installing Graph Data Science...\"\n"
-            - "    cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
+            - "    cp -p /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
             - "  fi\n"
             - "  if [[ $graphDataScienceLicenseKey != None ]]; then\n"
             - "    echo \"Writing GDS license key...\"\n"
             - "    mkdir -p /etc/neo4j/licenses\n"
+            - "    chown neo4j:neo4j /etc/neo4j/licenses\n"
             - "    echo \"${graphDataScienceLicenseKey}\" > /etc/neo4j/licenses/neo4j-gds.license\n"
             - "    sed -i '$a gds.enterprise.license_file=/etc/neo4j/licenses/neo4j-gds.license' /etc/neo4j/neo4j.conf\n"
             - "  fi\n"
@@ -541,10 +542,11 @@ Resources:
             - "configure_bloom() {\n"
             - "  if [[ $installBloom == True ]]; then\n"
             - "    echo \"Installing Bloom...\"\n"
-            - "    cp /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
+            - "    cp -p /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
             - "  fi\n"
             - "  if [[ $bloomLicenseKey != None ]]; then\n"
             - "    echo \"Writing Bloom license key...\"\n"
+            - "    chown neo4j:neo4j /etc/neo4j/licenses\n"
             - "    mkdir -p /etc/neo4j/licenses\n"
             - "    echo \"${bloomLicenseKey}\" > /etc/neo4j/licenses/neo4j-bloom.license\n"
             - "    sed -i '$a neo4j.bloom.license_file=/etc/neo4j/licenses/neo4j-bloom.license' /etc/neo4j/neo4j.conf\n"
@@ -639,9 +641,9 @@ Resources:
           - - "#!/bin/bash\n"
             - "echo Running startup script...\n"
 
-            - "password="
+            - "password=\""
             - Ref: Password
-            - "\n"
+            - "\"\n"
 
             - "nodeCount="
             - Ref: CoreInstanceCount

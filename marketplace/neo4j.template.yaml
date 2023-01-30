@@ -401,9 +401,9 @@ Resources:
             - Ref: BloomLicenseKey
             - "\n"
 
-            - "password="
+            - "password=\""
             - Ref: Password
-            - "\n"
+            - "\"\n"
 
             - "nodeCount="
             - Ref: NumberOfServers

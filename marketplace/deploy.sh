@@ -9,14 +9,14 @@
 ###################################################################################
 
 # User configurable variables
-Password="foobar123"
-NumberOfServers=3
+NumberOfServers=1
 SSHCIDR="0.0.0.0/0"
-InstallGraphDataScience="True"
+InstallGraphDataScience="False"
 InstallBloom="False"
 REGION="us-east-1"
-Password="foobar123"
-graphDataScienceLicenseKey=""
+Password="foobar123%"
+graphDataScienceLicenseKey="None"
+bloomLicenseKey="None"
 
 ###################################################################################
 
@@ -57,4 +57,5 @@ ParameterKey=NumberOfServers,ParameterValue=${NumberOfServers} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=${InstallGraphDataScience} \
 ParameterKey=GraphDataScienceLicenseKey,ParameterValue=${graphDataScienceLicenseKey} \
-ParameterKey=InstallBloom,ParameterValue=${InstallBloom}
+ParameterKey=InstallBloom,ParameterValue=${InstallBloom} \
+ParameterKey=BloomLicenseKey,ParameterValue=${bloomLicenseKey}

@@ -9,7 +9,7 @@
 ###################################################################################
 
 # User configurable variables
-CoreInstanceCount="1"
+CoreInstanceCount="3"
 SSHCIDR="0.0.0.0/0"
 InstallGraphDataScience="False"
 InstallBloom="False"

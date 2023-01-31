@@ -573,12 +573,17 @@ Resources:
             - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
+            - "add_cypher_ip_blocklist() {\n"
+            - "  echo \"unsupported.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8\" >> /etc/neo4j/neo4j.conf\n"
+            - "}\n"
+
             - "install_neo4j_from_yum\n"
             - "install_apoc_plugin\n"
             - "extension_config\n"
             - "build_neo4j_conf_file\n"
             - "configure_graph_data_science\n"
             - "configure_bloom\n"
+            - "add_cypher_ip_blocklist\n"
             - "start_neo4j\n"
             - "tag_asg_with_neo4j_version\n"
 
@@ -745,10 +750,15 @@ Resources:
             - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jReadReplicaAutoScalingGroup --region \"${region}\"\n"
             - "}\n"
 
+            - "add_cypher_ip_blocklist() {\n"
+            - "  echo \"unsupported.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8\" >> /etc/neo4j/neo4j.conf\n"
+            - "}\n"
+
             - "install_neo4j_from_yum\n"
             - "install_apoc_plugin\n"
             - "extension_config\n"
             - "build_neo4j_conf_file\n"
+            - "add_cypher_ip_blocklist\n"
             - "start_neo4j\n"
             - "tag_asg_with_neo4j_version\n"
 

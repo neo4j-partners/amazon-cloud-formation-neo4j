@@ -52,7 +52,6 @@ $AWS cloudformation create-stack \
 --template-body $TEMPLATE_BODY \
 --region $REGION \
 --disable-rollback \
---profile product-na \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=NumberOfServers,ParameterValue=${NumberOfServers} \

@@ -17,6 +17,7 @@ REGION="us-east-1"
 Password="foobar123%"
 graphDataScienceLicenseKey="None"
 bloomLicenseKey="None"
+Neo4jEnterpriseLicense="False"
 
 ###################################################################################
 
@@ -51,6 +52,7 @@ $AWS cloudformation create-stack \
 --template-body $TEMPLATE_BODY \
 --region $REGION \
 --disable-rollback \
+--profile product-na \
 --parameters \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=NumberOfServers,ParameterValue=${NumberOfServers} \
@@ -58,4 +60,5 @@ ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=${InstallGraphDataScience} \
 ParameterKey=GraphDataScienceLicenseKey,ParameterValue=${graphDataScienceLicenseKey} \
 ParameterKey=InstallBloom,ParameterValue=${InstallBloom} \
-ParameterKey=BloomLicenseKey,ParameterValue=${bloomLicenseKey}
+ParameterKey=BloomLicenseKey,ParameterValue=${bloomLicenseKey} \
+ParameterKey=Neo4jEnterpriseLicense,ParameterValue=${Neo4jEnterpriseLicense}

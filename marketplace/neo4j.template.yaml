@@ -434,9 +434,8 @@ Resources:
 
             - "install_neo4j_from_yum() {\n"
             - "  echo \"Installing Graph Database...\"\n"
-            - "  if [[ \"$LicenseType\" == \"Enterprise\" ]]; then\n"
-            - "    export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
-            - "  elif [[ \"$LicenseType\" == \"Evaluation\" ]]; then\n"
+            - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
+            - "  if [[ \"$LicenseType\" == \"Evaluation\" ]]; then\n"
             - "    export NEO4J_ACCEPT_LICENSE_AGREEMENT=eval\n"
             - "  fi\n"
             - "  ASG_NAME=$(aws --region $region cloudformation describe-stack-resources --stack-name $stackName --query 'StackResources[?ResourceType==`AWS::AutoScaling::AutoScalingGroup` && LogicalResourceId==`Neo4jAutoScalingGroup`].PhysicalResourceId' --output text)\n"

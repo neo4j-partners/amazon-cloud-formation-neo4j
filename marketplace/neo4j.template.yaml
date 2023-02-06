@@ -6,7 +6,7 @@ Metadata:
       - Label:
           default: "Neo4j Configuration"
         Parameters:
-          - Neo4jEnterpriseLicense
+          - Neo4jLicenseType
           - InstallGraphDataScience
           - GraphDataScienceLicenseKey
           - InstallBloom
@@ -20,8 +20,8 @@ Metadata:
           - DiskSize
           - SSHCIDR
     ParameterLabels:
-      Neo4jEnterpriseLicense:
-        default: Neo4j Enterprise License
+      Neo4jLicenseType:
+        default: Evaluation
       InstallGraphDataScience:
         default: Install Graph Data Science
       GraphDataScienceLicenseKey:
@@ -42,11 +42,11 @@ Metadata:
         default: SSH CIDR
 
 Parameters:
-  Neo4jEnterpriseLicense:
-    Description: Select "Yes" if you already have a Neo4j Enterprise License, otherwise select "Evaluation" 
+  Neo4jLicenseType:
+    Description: Select "Enterprise" if you already have a Neo4j Enterprise License, otherwise select "Evaluation" 
     Type: String
     AllowedValues:
-      - 'Yes'
+      - 'Enterprise'
       - 'Evaluation' 
 
   InstallGraphDataScience:
@@ -392,8 +392,8 @@ Resources:
             - "set -euo pipefail\n"
             - "echo Running startup script...\n"
 
-            - "Neo4jEnterpriseLicense="
-            - Ref: Neo4jEnterpriseLicense
+            - "LicenseType="
+            - Ref: Neo4jLicenseType
             - "\n"
 
             - "installGraphDataScience="
@@ -434,9 +434,9 @@ Resources:
 
             - "install_neo4j_from_yum() {\n"
             - "  echo \"Installing Graph Database...\"\n"
-            - "  if [[ \"$Neo4jEnterpriseLicense\" == \"Yes\" ]]; then\n"
+            - "  if [[ \"$LicenseType\" == \"Enterprise\" ]]; then\n"
             - "    export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
-            - "  else\n"
+            - "  elif [[ \"$LicenseType\" == \"Evaluation\" ]]; then\n"
             - "    export NEO4J_ACCEPT_LICENSE_AGREEMENT=eval\n"
             - "  fi\n"
             - "  ASG_NAME=$(aws --region $region cloudformation describe-stack-resources --stack-name $stackName --query 'StackResources[?ResourceType==`AWS::AutoScaling::AutoScalingGroup` && LogicalResourceId==`Neo4jAutoScalingGroup`].PhysicalResourceId' --output text)\n"

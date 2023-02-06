@@ -21,7 +21,7 @@ Metadata:
           - SSHCIDR
     ParameterLabels:
       Neo4jLicenseType:
-        default: Evaluation
+        default: Neo4j License Type
       InstallGraphDataScience:
         default: Install Graph Data Science
       GraphDataScienceLicenseKey:

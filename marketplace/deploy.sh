@@ -11,8 +11,8 @@
 # User configurable variables
 NumberOfServers=3
 SSHCIDR="0.0.0.0/0"
-InstallGraphDataScience="False"
-InstallBloom="False"
+InstallGraphDataScience="No"
+InstallBloom="No"
 REGION="us-east-1"
 Password="foobar123%"
 graphDataScienceLicenseKey="None"

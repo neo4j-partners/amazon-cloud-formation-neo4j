@@ -32,7 +32,7 @@ if [ $NumberOfServers == 2 ] || [ $NumberOfServers -gt 10 ] || [ $NumberOfServer
   exit 1
 fi
 
-if [ $InstallGraphDataScience == "True" ] && [ $NumberOfServers != 1 ] ; then
+if [ $InstallGraphDataScience == "Yes" ] && [ $NumberOfServers != 1 ] ; then
   echo "GDS cannot be installed on a cluster. NumberOfServers must be set to \"1\" if InstallGraphDataScience is set to \"True\"."
   exit 1
 fi

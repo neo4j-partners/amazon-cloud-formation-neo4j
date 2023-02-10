@@ -9,15 +9,15 @@
 ###################################################################################
 
 # User configurable variables
-CoreInstanceCount="3"
+CoreInstanceCount=3
 SSHCIDR="0.0.0.0/0"
-InstallGraphDataScience="False"
-InstallBloom="False"
+InstallGraphDataScience="No"
+InstallBloom="No"
 REGION="us-east-1"
 Password="foobar123%"
 graphDataScienceLicenseKey="None"
 bloomLicenseKey="None"
-ReadReplicaCount="2"
+ReadReplicaCount=2
 
 ###################################################################################
 
@@ -33,8 +33,8 @@ if [ $CoreInstanceCount == 2 ] || [ $CoreInstanceCount -gt 10 ] || [ $CoreInstan
   exit 1
 fi
 
-if [ $InstallGraphDataScience == "True" ] && [ $CoreInstanceCount != 1 ] ; then
-  echo "GDS cannot be installed on a cluster. CoreInstanceCount must be set to \"1\" if InstallGraphDataScience is set to \"True\"."
+if [ $InstallGraphDataScience == "Yes" ] && [ $CoreInstanceCount != 1 ] ; then
+  echo "GDS cannot be installed on a cluster. CoreInstanceCount must be set to \"1\" if InstallGraphDataScience is set to \"No\"."
   exit 1
 fi
 
@@ -53,6 +53,7 @@ $AWS cloudformation create-stack \
 --region $REGION \
 --disable-rollback \
 --parameters \
+--profile product-na \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=CoreInstanceCount,ParameterValue=${CoreInstanceCount} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \

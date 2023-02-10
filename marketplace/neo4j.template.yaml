@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Neo4j Enterprise Edition
+Description: Neo4j Enterprise Edition v4.4
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -45,10 +45,10 @@ Parameters:
   InstallGraphDataScience:
     Description: Install Graph Data Science
     Type: String
-    Default: 'False'
+    Default: 'No'
     AllowedValues:
-      - 'True'
-      - 'False'
+      - 'Yes'
+      - 'No'
 
   GraphDataScienceLicenseKey:
     Description: License Key for Graph Data Science (License keys will be sent to and stored by Neo4j. This information will only be used for the purposes of product activation.)
@@ -58,10 +58,10 @@ Parameters:
   InstallBloom:
     Description: Install Bloom
     Type: String
-    Default: 'False'
+    Default: 'No'
     AllowedValues:
-      - 'True'
-      - 'False'
+      - 'Yes'
+      - 'No'
 
   BloomLicenseKey:
     Description: License Key for Bloom (License keys will be sent to and stored by Neo4j. This information will only be used for the purposes of product activation.)
@@ -137,7 +137,7 @@ Rules:
   GDSCheck:
     RuleCondition: !Equals
       - !Ref InstallGraphDataScience
-      - 'True'
+      - 'Yes'
     Assertions:
       - Assert: !Not
           - !Equals
@@ -526,7 +526,7 @@ Resources:
             - "}\n"
 
             - "configure_graph_data_science() {\n"
-            - "  if [[ \"${installGraphDataScience}\" == True && \"${nodeCount}\" == 1 ]]; then\n"
+            - "  if [[ \"${installGraphDataScience}\" == Yes && \"${nodeCount}\" == 1 ]]; then\n"
             - "    echo \"Installing Graph Data Science...\"\n"
             - "    cp -p /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
             - "  fi\n"
@@ -540,7 +540,7 @@ Resources:
             - "}\n"
 
             - "configure_bloom() {\n"
-            - "  if [[ $installBloom == True ]]; then\n"
+            - "  if [[ $installBloom == Yes ]]; then\n"
             - "    echo \"Installing Bloom...\"\n"
             - "    cp -p /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
             - "  fi\n"

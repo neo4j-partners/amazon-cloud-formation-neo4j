@@ -11,13 +11,13 @@
 # User configurable variables
 CoreInstanceCount="3"
 SSHCIDR="0.0.0.0/0"
-InstallGraphDataScience="False"
-InstallBloom="False"
+InstallGraphDataScience="No"
+InstallBloom="No"
 REGION="us-east-1"
 Password="foobar123%"
 graphDataScienceLicenseKey="None"
 bloomLicenseKey="None"
-ReadReplicaCount="2"
+ReadReplicaCount="0"
 
 ###################################################################################
 
@@ -33,8 +33,8 @@ if [ $CoreInstanceCount == 2 ] || [ $CoreInstanceCount -gt 10 ] || [ $CoreInstan
   exit 1
 fi
 
-if [ $InstallGraphDataScience == "True" ] && [ $CoreInstanceCount != 1 ] ; then
-  echo "GDS cannot be installed on a cluster. CoreInstanceCount must be set to \"1\" if InstallGraphDataScience is set to \"True\"."
+if [ $InstallGraphDataScience == "Yes" ] && [ $CoreInstanceCount != 1 ] ; then
+  echo "GDS cannot be installed on a cluster. CoreInstanceCount must be set to \"1\" if InstallGraphDataScience is set to \"Yes\"."
   exit 1
 fi
 

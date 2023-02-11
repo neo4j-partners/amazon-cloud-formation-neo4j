@@ -36,8 +36,7 @@ jobs:
         echo "Stack name: $STACKNAME"
         echo "::set-output name=stackname::$STACKNAME"
 
-    - name: Deploy Amazon EKS Cluster
-      id: eks-cluster
+    - name: Run CloudFormation Template
       uses: aws-actions/aws-cloudformation-github-deploy@master
       with:
         name: ${{ steps.stack-name.outputs.stackname }}
@@ -48,7 +47,6 @@ jobs:
           SSHCIDR=0.0.0.0/0,
           InstallGraphDataScience=False,
           InstallBloom=False,
-          REGION=us-east-1,
           Password=foobar123%,
           GraphDataScienceLicenseKey=None,
           BloomLicenseKey=None

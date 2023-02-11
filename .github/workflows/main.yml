@@ -52,4 +52,4 @@ jobs:
 
     - name: Get stack output    
       run: |
-        aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName==\'${{ steps.stack-name.outputs.stackname }}\'][].Outputs[?OutputKey=='Neo4jBrowserURL'].OutputValue" --output text
+        aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'][].Outputs[?OutputKey=='Neo4jBrowserURL'].OutputValue" --output text

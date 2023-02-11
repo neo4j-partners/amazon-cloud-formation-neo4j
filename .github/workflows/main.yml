@@ -15,8 +15,6 @@ jobs:
   test-template:
     name: Run AWS Cloudformation
     runs-on: ubuntu-latest
-    outputs:
-      stack-name: ${{ steps.cft.outputs.stack-id }}
     steps:
     - name: Checkout
       uses: actions/checkout@v2
@@ -51,3 +49,7 @@ jobs:
           Password=foobar123%,
           GraphDataScienceLicenseKey=None,
           BloomLicenseKey=None
+
+    - name: Get stack output    
+      run: |
+        aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName==${{ steps.stack-name.outputs.stackname }}][].Outputs[?OutputKey=='Neo4jBrowserURL'].OutputValue" --output text

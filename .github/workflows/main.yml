@@ -45,8 +45,8 @@ jobs:
         parameter-overrides: >-
           NumberOfServers=3,
           SSHCIDR=0.0.0.0/0,
-          InstallGraphDataScience=False,
-          InstallBloom=False,
+          InstallGraphDataScience=No,
+          InstallBloom=No,
           Password=foobar123%,
           GraphDataScienceLicenseKey=None,
           BloomLicenseKey=None

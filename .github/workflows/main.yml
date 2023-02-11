@@ -1,0 +1,55 @@
+name: Test CloudFormation Template
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - 'Neo4j-4.4'
+  pull_request:
+    branches:    
+      - main
+      - 'Neo4j-4.4'
+
+
+jobs:
+  test-template:
+    name: Run AWS Cloudformation
+    runs-on: ubuntu-latest
+    outputs:
+      stack-name: ${{ steps.stack-name.outputs.stackname }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Configure AWS credentials
+      id: creds
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Configure environment name
+      id: stack-name    
+      run: |
+        STACKNAME=`echo test-$(date '+%Y%m%d-%S')`
+        echo "Stack name: $STACKNAME"
+        echo "::set-output name=stackname::$STACKNAME"
+
+    - name: Deploy Amazon EKS Cluster
+      id: eks-cluster
+      uses: aws-actions/aws-cloudformation-github-deploy@master
+      with:
+        name: ${{ steps.stack-name.outputs.stackname }}
+        template: marketplace/neo4j.template.yaml
+        no-fail-on-empty-changeset: "1"
+        parameter-overrides: >-
+          NumberOfServers=3,
+          SSHCIDR=0.0.0.0/0,
+          InstallGraphDataScience=False,
+          InstallBloom=False,
+          REGION=us-east-1,
+          Password=foobar123%,
+          graphDataScienceLicenseKey=None,
+          bloomLicenseKey=None

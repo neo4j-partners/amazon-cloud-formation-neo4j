@@ -58,7 +58,6 @@ jobs:
         echo "::set-output name=uri::$URI"
 
     - name: Execute tests
-      id: uri
       run: |
         ./marketplace/neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
         echo "Neo4j URI: $URI"

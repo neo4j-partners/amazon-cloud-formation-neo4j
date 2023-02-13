@@ -50,6 +50,16 @@ jobs:
     #       GraphDataScienceLicenseKey=None,
     #       BloomLicenseKey=None
 
-    - name: Get stack output    
+    - name: Retrieve Neo4j URI
+      id: uri
       run: |
-        aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'][].Outputs[?OutputKey=='Neo4jBrowserURL'].OutputValue" --output text
+        URI=`aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'][].Outputs[?OutputKey=='Neo4jURI'].OutputValue" --output text`
+        echo "Neo4j URI: $URI"
+        echo "::set-output name=uri::$URI"
+
+    - name: Execute tests
+      id: uri
+      run: |
+        ./marketplace/neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+        echo "Neo4j URI: $URI"
+        echo "::set-output name=uri::$URI"

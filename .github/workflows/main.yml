@@ -13,7 +13,7 @@ on:
 
 jobs:
   test-template:
-    name: Run AWS Cloudformation
+    name: Test Cloudformation (Neo4j Cluster)
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -65,3 +65,15 @@ jobs:
       if: always()
       run: |
         aws cloudformation delete-stack --stack-name ${{ steps.stack-name.outputs.stackname }}
+        while true
+        do
+          STACK_STATUS=`aws cloudformation describe-stacks --region us-east-1 --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'].StackStatus" --output text`
+          echo "Printing stack status := ${STACK_STATUS}" 
+          if ${STACK_STATUS} == "DELETE_IN_PROGRESS"; then
+            continue
+          else
+            echo "Cloudformation stack is deleted !!"
+            break
+          fi
+        sleep 10
+        done

@@ -32,7 +32,7 @@ jobs:
       run: |
         STACKNAME=`echo test-$(date '+%Y%m%d-%S')`
         echo "Stack name: $STACKNAME"
-        echo "::set-output name=stackname::test-20230211-12"
+        echo "::set-output name=stackname::$STACKNAME"
 
     - name: Run CloudFormation Template
       id: cft
@@ -69,11 +69,11 @@ jobs:
         do
           STACK_STATUS=`aws cloudformation describe-stacks --region us-east-1 --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'].StackStatus" --output text`
           echo "Printing stack status := ${STACK_STATUS}" 
-          if ${STACK_STATUS} == "DELETE_IN_PROGRESS"; then
+          if [[ ${STACK_STATUS} == "DELETE_IN_PROGRESS" ]]; then
+            sleep 10
             continue
           else
             echo "Cloudformation stack is deleted !!"
             break
-          fi
-        sleep 10
+          fi        
         done

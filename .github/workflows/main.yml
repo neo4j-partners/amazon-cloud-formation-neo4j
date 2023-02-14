@@ -34,21 +34,21 @@ jobs:
         echo "Stack name: $STACKNAME"
         echo "::set-output name=stackname::test-20230211-12"
 
-    # - name: Run CloudFormation Template
-    #   id: cft
-    #   uses: aws-actions/aws-cloudformation-github-deploy@master
-    #   with:
-    #     name: ${{ steps.stack-name.outputs.stackname }}
-    #     template: marketplace/neo4j.template.yaml
-    #     no-fail-on-empty-changeset: "1"
-    #     parameter-overrides: >-
-    #       NumberOfServers=3,
-    #       SSHCIDR=0.0.0.0/0,
-    #       InstallGraphDataScience=No,
-    #       InstallBloom=No,
-    #       Password=foobar123%,
-    #       GraphDataScienceLicenseKey=None,
-    #       BloomLicenseKey=None
+    - name: Run CloudFormation Template
+      id: cft
+      uses: aws-actions/aws-cloudformation-github-deploy@master
+      with:
+        name: ${{ steps.stack-name.outputs.stackname }}
+        template: marketplace/neo4j.template.yaml
+        no-fail-on-empty-changeset: "1"
+        parameter-overrides: >-
+           NumberOfServers=3,
+           SSHCIDR=0.0.0.0/0,
+           InstallGraphDataScience=No,
+           InstallBloom=No,
+           Password=foobar123%,
+           GraphDataScienceLicenseKey=None,
+           BloomLicenseKey=None
 
     - name: Retrieve Neo4j URI
       id: uri
@@ -59,7 +59,7 @@ jobs:
 
     - name: Execute tests
       run: |
-        ./marketplace/neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar124%"
+        ./marketplace/neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
 
     - name: Delete CloudFormation Stack
       if: always()

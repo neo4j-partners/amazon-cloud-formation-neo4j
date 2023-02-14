@@ -61,3 +61,7 @@ jobs:
       run: |
         ./marketplace/neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar124%"
 
+    - name: Delete CloudFormation Stack
+      if: always()
+      run: |
+        aws cloudformation delete-stack --stack-name ${{ steps.stack-name.outputs.stackname }}

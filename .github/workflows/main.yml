@@ -70,7 +70,8 @@ jobs:
           STACK_STATUS=`aws cloudformation describe-stacks --region us-east-1 --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'].StackStatus" --output text`
           echo "Printing stack status := ${STACK_STATUS}" 
           if [[ ${STACK_STATUS} == "DELETE_IN_PROGRESS" ]]; then
-            sleep 10
+            echo "Sleeping for a minute...be right back !!"
+            sleep 60
             continue
           else
             echo "Cloudformation stack is deleted !!"

@@ -9,7 +9,7 @@ on:
 
 jobs:
   test-template-cluster-v5:
-    name: Test Cloudformation (Neo4j Cluster)
+    name: Test CFT (Neo4j Cluster)
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -78,7 +78,7 @@ jobs:
         done
 
   test-template-standalone-v5:
-    name: Test Cloudformation (Neo4j Standalone)
+    name: Test CFT (Neo4j Standalone)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -147,7 +147,7 @@ jobs:
           done
 
   test-template-cluster-v44:
-    name: Test Cloudformation (Neo4j Cluster v4.4)
+    name: Test CFT (Neo4j Cluster v4.4)
     runs-on: ubuntu-latest
     if: github.head_ref == 'Neo4j-4.4'
     steps:
@@ -217,7 +217,7 @@ jobs:
           done
 
   test-template-standalone-v44:
-    name: Test Cloudformation (Neo4j Standalone v4.4)
+    name: Test CFT (Neo4j Standalone v4.4)
     runs-on: ubuntu-latest
     if: github.head_ref == 'Neo4j-4.4'
     steps:

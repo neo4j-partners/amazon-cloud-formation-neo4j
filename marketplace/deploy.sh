@@ -17,6 +17,7 @@ REGION="us-east-1"
 Password="foobar123%"
 graphDataScienceLicenseKey="None"
 bloomLicenseKey="None"
+Neo4jLicenseType="Evaluation"
 
 ###################################################################################
 
@@ -58,4 +59,5 @@ ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=${InstallGraphDataScience} \
 ParameterKey=GraphDataScienceLicenseKey,ParameterValue=${graphDataScienceLicenseKey} \
 ParameterKey=InstallBloom,ParameterValue=${InstallBloom} \
-ParameterKey=BloomLicenseKey,ParameterValue=${bloomLicenseKey}
+ParameterKey=BloomLicenseKey,ParameterValue=${bloomLicenseKey} \
+ParameterKey=Neo4jLicenseType,ParameterValue=${Neo4jLicenseType}

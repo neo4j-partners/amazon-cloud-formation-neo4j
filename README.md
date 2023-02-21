@@ -6,8 +6,8 @@ This repository contains a number of AWS CloudFormation Templates (CFTs), create
 | Template Name | Location | Description |
 | ------------- | -------- | ----------- |
 | Neo4j Enterprise | [neo4j-enterprise](/neo4j-enterprise/) | CloudFormation template to deploy neo4j enterprise edition |
-| Neo4j Community  | [neo4j-community](/neo4j-community/)   | CloudFormation template to deploy neo4j community edition
-| Custom Templates | [custom-templates](/custom-templates/  | CloudFormation templates for various custom use cases
+| Neo4j Community  | [neo4j-community](/neo4j-community/)   | CloudFormation template to deploy neo4j community edition  |
+| Custom Templates | [custom-templates](/custom-templates/  | CloudFormation templates for various custom use cases      |
 
 Most significantly, this repository hosts the CFT for the Neo4j Enterprise listing on the AWS Marketplace.  This CFT can be found in the [neo4j-enterprise](/neo4j-enterprise/) folder.
 

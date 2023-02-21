@@ -2,7 +2,6 @@
 This directory contains tools to automate AWS Marketplace CFT generation.
 If you are running this from your local machine you need to have `Python` and `Packer` installed.
 
-
 The Python script first runs Packer which will generate a new AMI based on Amzn Linux2, will copy it across all the supported regions and as a result will give us some output with new AMI IDs and the regions where we can find them.
 Then it will parse the Packer output and will update the CFT with the new Mappings. The script also updates the CFT with the new Neo4j version passed as an argument during runtime.
 

@@ -1,6 +1,8 @@
 # AWS Marketplace CloudFormation Template for Neo4j Enterprise
 This repository holds the Amazon CloudFormation Template (CFT) that deploys Neo4j Enterprise (version 4.4 or 5) on the Amazon Web Services (AWS) platform (optionally including Neo4j Graph Data Science and Neo4j Bloom)  
 
+> ### Please see the [Official Neo4j Operations Manual](https://neo4j.com/docs/operations-manual/current/cloud-deployments/neo4j-aws/) for more detailed installation instructions.
+
 These CloudFormation Templates are also used to Neo4j to deploy the official Neo4j offering into the AWS Marketplace. 
 
 Therefore, the easiest method to deploy Neo4j on AWS Elastic Compute Cloud (EC2) instances, is to go directly to the [Neo4j Listing in the AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4)

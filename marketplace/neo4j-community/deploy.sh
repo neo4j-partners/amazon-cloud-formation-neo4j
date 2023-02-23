@@ -37,6 +37,5 @@ $AWS cloudformation create-stack \
 --region $REGION \
 --disable-rollback \
 --parameters \
---profile product-na \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} 

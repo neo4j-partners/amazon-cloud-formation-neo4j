@@ -151,6 +151,10 @@ Resources:
 
   Neo4jEC2Instance:
     Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT8M
+        Count: 1
     Properties:
       SubnetId: !Ref Neo4jSubnet
       ImageId: !FindInMap

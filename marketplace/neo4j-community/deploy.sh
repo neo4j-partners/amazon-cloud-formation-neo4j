@@ -1,14 +1,14 @@
 #!/bin/bash
 
 #
-# Script:  deploy-neo4j-community.sh
-# Purpose: This script can be used to deploy the Neo4j CloudFormation template if the aws cli
-#          is correctly installed and configured
+# Script:      deploy.sh
+# Purpose:     This script can be used to deploy the Neo4j Community CloudFormation template.
+# Prequisites: The aws cli must be correctly installed and configured.
 #
 
 ###################################################################################
 
-# User configurable variables
+# User configurable variablese
 SSHCIDR="0.0.0.0/0"
 REGION="us-east-1"
 Password="foobar123"
@@ -37,5 +37,6 @@ $AWS cloudformation create-stack \
 --region $REGION \
 --disable-rollback \
 --parameters \
+--profile product-na \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} 

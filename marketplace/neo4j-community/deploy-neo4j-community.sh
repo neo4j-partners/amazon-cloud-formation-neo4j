@@ -10,9 +10,8 @@
 
 # User configurable variables
 SSHCIDR="0.0.0.0/0"
-InstallGraphDataScience="No"
 REGION="us-east-1"
-Password="foobar123%"
+Password="foobar123"
 
 ###################################################################################
 
@@ -40,5 +39,4 @@ $AWS cloudformation create-stack \
 --parameters \
 --profile product-na \
 ParameterKey=Password,ParameterValue=${Password} \
-ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
-ParameterKey=InstallGraphDataScience,ParameterValue=${InstallGraphDataScience}
+ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} 

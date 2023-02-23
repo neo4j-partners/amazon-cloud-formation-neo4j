@@ -208,13 +208,12 @@ Resources:
             - " PACKAGE_VERSION=$(curl --fail http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"5\"' || echo \"\")\n"
             - "    if [[ ! -z $PACKAGE_VERSION && $PACKAGE_VERSION != \"null\" ]]; then\n"
             - "      echo \"Found PACKAGE_VERSION from http://versions.neo4j-templates.com : PACKAGE_VERSION=$PACKAGE_VERSION\"\n"
-            - "      local -r NEO4J_YUM_PACKAGE=\"neo4j-$PACKAGE_VERSION\"\n"
+            - "      NEO4J_YUM_PACKAGE=\"neo4j-$PACKAGE_VERSION\"\n"
             - "    else\n"
             - "      echo 'Failed to resolve Neo4j version from http://versions.neo4j-templates.com, using PACKAGE_VERSION=latest'\n"
             - "      PACKAGE_VERSION=\"latest\"\n"
-            - "      local -r NEO4J_YUM_PACKAGE='neo4j-enterprise'\n"
+            - "      NEO4J_YUM_PACKAGE='neo4j-enterprise'\n"
             - "    fi\n"
-            - "  fi\n"
             - "  yum -y install \"${NEO4J_YUM_PACKAGE}\"\n"
             - "  yum update -y aws-cfn-bootstrap\n"
             - "  systemctl enable neo4j\n"
@@ -225,27 +224,59 @@ Resources:
             - "  echo \"Installing APOC...\"\n"
             - "  mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
 
-#Outputs:
-#  Neo4jBrowserURL:
-#    Description: URL for Neo4j Browser
-#    Value: !Join
-#      - ''
-#      - - 'http://'
-#        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
-#        - ':'
-#        - '7474'
-#  Neo4jURI:
-#    Description: Neo4j URI Scheme
-#    Value: !Join
-#      - ''
-#      - - 'neo4j://'
-#        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
-#        - ':'
-#        - '7687'
-#  Neo4jUsername:
-#    Description: Username for Neo4j
-#    Value: 'The username is neo4j.  The password is what you provided to the template.'
+            - "  echo Configuring extensions and security in neo4j.conf...\n"
+            - "  sed -i s~#server.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~server.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8\" >> /etc/neo4j/neo4j.conf\n"
 
+            - "  privateIP=\"$(hostname -i | awk '{print $NF}')\"\n"
+            - "  publicIP=\"$(wget -O - -q http://169.254.169.254/latest/meta-data/public-ipv4)\"\n"
+            - "  echo \"Configuring network in neo4j.conf...\"\n"
+            - "  sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address=\"${publicIP}\"/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.discovery.advertised_address=:5000/server.discovery.advertised_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.discovery.listen_address=:5000/server.discovery.listen_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=\"${publicIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "  neo4j-admin server memory-recommendation | grep -v ^# >> /etc/neo4j/neo4j.conf\n"
+
+            - "  if [[ \"${installGraphDataScience}\" == Yes ]]; then\n"
+            - "    echo \"Installing Graph Data Science...\"\n"
+            - "    cp -p /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
+            - "  fi\n"
+
+            - "  echo \"Starting Neo4j...\"\n"
+            - "  service neo4j start\n"
+            - "  neo4j-admin dbms set-initial-password \"${password}\"\n"
+            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
+            - "    do echo \"Waiting for neo4j to start\"\n"
+            - "    sleep 5\n"
+            - "  done\n"
+
+Outputs:
+  Neo4jBrowserURL:
+    Description: URL for Neo4j Browser
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt Neo4jEC2Instance.PublicIp
+        - ':'
+        - '7474'
+  Neo4jURI:
+    Description: Neo4j URI Scheme
+    Value: !Join
+      - ''
+      - - 'neo4j://'
+        - !GetAtt Neo4jEC2Instance.PublicIp
+        - ':'
+        - '7687'
+  Neo4jUsername:
+    Description: Username for Neo4j
+    Value: 'The username is neo4j.  The password is what you provided to the template.'
 
 Mappings:
   Neo4j:

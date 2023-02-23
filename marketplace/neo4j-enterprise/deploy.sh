@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #
-# Script:  deploy.sh
-# Purpose: This script can be used to deploy the Neo4j CloudFormation template if the aws cli
-#          is correctly installed and configured
+# Script:      deploy.sh
+# Purpose:     This script can be used to deploy the Neo4j Enterprise CloudFormation template.
+# Prequisites: The aws cli must be correctly installed and configured.
 #
 
 ###################################################################################

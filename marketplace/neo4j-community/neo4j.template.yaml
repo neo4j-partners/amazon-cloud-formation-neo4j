@@ -1,0 +1,330 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Neo4j 5 Community Edition
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Neo4j Configuration"
+        Parameters:
+          - Password
+      - Label:
+          default: "Infrastructure Configuration"
+        Parameters:
+          - InstanceType
+          - DiskSize
+          - SSHCIDR
+    ParameterLabels:
+      Password:
+        default: Password
+      InstanceType:
+        default: Instance Type
+      DiskSize:
+        default: Disk Size
+      SSHCIDR:
+        default: SSH CIDR
+
+Parameters:
+  Password:
+    Description: Password for Neo4j
+    Type: String
+    MinLength: 8
+    NoEcho: true
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - r6i.large
+      - r6i.xlarge
+      - r6i.2xlarge
+      - r6i.4xlarge
+      - r6i.8xlarge
+      - r6i.12xlarge
+      - r6i.16xlarge
+      - r6i.24xlarge
+      - r6i.32xlarge
+
+  DiskSize:
+    Description: Size in GB of the EBS volume on each node
+    Type: Number
+    Default: 100
+    MinValue: 100
+    ConstraintDescription: "Minimum disk size should be 100"
+
+  SSHCIDR:
+    Description: SSH CIDR (Specify an address range from which ec2 instances are accessible on port 22. You can use 0.0.0.0/0 to allow access from any IP address)
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: "must be a valid CIDR range of the form x.x.x.x/x."
+
+Resources:
+  Neo4jVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      GatewayId: !Ref Neo4jInternetGateway
+      RouteTableId: !Ref Neo4jRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  Neo4jSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet
+
+  Neo4jInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref Neo4jInternetGateway
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH and Neo4j External Ports
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHCIDR
+        - IpProtocol: tcp
+          FromPort: 7474
+          ToPort: 7474
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          CidrIp: 0.0.0.0/0
+
+  Neo4jEC2Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT8M
+        Count: 1
+    Properties:
+      SubnetId: !Ref Neo4jSubnet
+      ImageId: !FindInMap
+        - Neo4j
+        - !Ref 'AWS::Region'
+        - BYOL
+      InstanceType:
+        Ref: InstanceType
+      SecurityGroupIds:
+        - Fn::GetAtt: [Neo4jSecurityGroup, GroupId]
+      EbsOptimized: true
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize:
+              Ref: DiskSize
+            VolumeType: gp3
+            Encrypted: true
+      UserData:
+        Fn::Base64:
+          !Join
+          - ''
+          - - "#!/bin/bash\n"
+            - "set -euo pipefail\n"
+            - "echo Running startup script...\n"
+
+            - "password=\""
+            - Ref: Password
+            - "\"\n"
+
+            - "stackName="
+            - Ref: AWS::StackName
+            - "\n"
+
+            - "region="
+            - Ref: AWS::Region
+            - "\n"
+
+            - "install_neo4j_from_yum() {\n"
+            - "  echo \"Installing Graph Database...\"\n"
+            - "   PACKAGE_VERSION=$(curl --fail http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"5\"' || echo \"\")\n"
+            - "      if [[ ! -z $PACKAGE_VERSION && $PACKAGE_VERSION != \"null\" ]]; then\n"
+            - "        echo \"Found PACKAGE_VERSION from http://versions.neo4j-templates.com : PACKAGE_VERSION=$PACKAGE_VERSION\"\n"
+            - "        NEO4J_YUM_PACKAGE=\"neo4j-$PACKAGE_VERSION\"\n"
+            - "      else\n"
+            - "        echo 'Failed to resolve Neo4j version from http://versions.neo4j-templates.com, using PACKAGE_VERSION=latest'\n"
+            - "        PACKAGE_VERSION=\"latest\"\n"
+            - "        NEO4J_YUM_PACKAGE='neo4j-enterprise'\n"
+            - "      fi\n"
+            - "    yum -y install \"${NEO4J_YUM_PACKAGE}\"\n"
+            - "    yum update -y aws-cfn-bootstrap\n"
+            - "    systemctl enable neo4j\n"
+            - "    if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
+            - "      PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version)\n"
+            - "    fi\n"
+            - "}\n"
+
+            - "install_apoc_plugin() {\n"            
+            - "  echo \"Installing APOC...\"\n"
+            - "  mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
+            - "}\n"
+
+            - "extension_config() {\n"            
+            - "  echo Configuring extensions and security in neo4j.conf...\n"
+            - "  sed -i s~#server.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~server.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=apoc.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*\" >> /etc/neo4j/neo4j.conf\n"
+            - "  echo \"dbms.security.procedures.allowlist=apoc.*,bloom.*\" >> /etc/neo4j/neo4j.conf\n"
+            - "}\n"
+
+            - "build_neo4j_conf_file() {\n"            
+            - "  privateIP=\"$(hostname -i | awk '{print $NF}')\"\n"
+            - "  publicIP=\"$(wget -O - -q http://169.254.169.254/latest/meta-data/public-ipv4)\"\n"
+            - "  echo \"Configuring network in neo4j.conf...\"\n"
+            - "  sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address=\"${publicIP}\"/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.discovery.advertised_address=:5000/server.discovery.advertised_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.discovery.listen_address=:5000/server.discovery.listen_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=\"${publicIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "  echo \"internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8\" >> /etc/neo4j/neo4j.conf\n"
+            - "  neo4j-admin server memory-recommendation | grep -v ^# >> /etc/neo4j/neo4j.conf\n"
+            - "}\n"
+
+            - "start_neo4j() {\n"            
+            - "  echo \"Starting Neo4j...\"\n"
+            - "  systemctl start neo4j\n"
+            - "  neo4j-admin dbms set-initial-password \"${password}\"\n"
+            - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
+            - "    do echo \"Waiting for neo4j to start\"\n"
+            - "    sleep 5\n"
+            - "  done\n"
+            - "}\n"
+
+            - "install_neo4j_from_yum\n"
+            - "install_apoc_plugin\n"
+            - "extension_config\n"
+            - "build_neo4j_conf_file\n"
+            - "start_neo4j && /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jEC2Instance --region \"${region}\"\n"
+
+Outputs:
+  Neo4jBrowserURL:
+    Description: URL for Neo4j Browser
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt Neo4jEC2Instance.PublicIp
+        - ':'
+        - '7474'
+  Neo4jURI:
+    Description: Neo4j URI Scheme
+    Value: !Join
+      - ''
+      - - 'neo4j://'
+        - !GetAtt Neo4jEC2Instance.PublicIp
+        - ':'
+        - '7687'
+  Neo4jUsername:
+    Description: Username for Neo4j
+    Value: 'The username is neo4j.  The password is what you provided to the template.'
+
+Mappings:
+  Neo4j:
+    us-east-1:
+      BYOL: ami-0d4345c4eda92cf0d
+    us-east-2:
+      BYOL: ami-08f4e727ca7002eb2
+    us-west-1:
+      BYOL: ami-09b061154a9512835
+    us-west-2:
+      BYOL: ami-05203927886e2d30a
+    us-gov-east-1:
+      BYOL: ami-0198d56bba3cb2370
+    us-gov-west-1:
+      BYOL: ami-049e2a18beab88f8a
+    ca-central-1:
+      BYOL: ami-009be38856076a61c
+    eu-central-1:
+      BYOL: ami-0cb274e70de7c7e73
+    eu-west-1:
+      BYOL: ami-06e82cde97832d21e
+    eu-west-2:
+      BYOL: ami-0cdf2f30323cc3229
+    eu-west-3:
+      BYOL: ami-0d42adc7c4cccbdb9
+    eu-north-1:
+      BYOL: ami-0dd674f1ce2fe0bba
+    eu-south-1:
+      BYOL: ami-0654fffc7416df5e3
+    ap-southeast-1:
+      BYOL: ami-0157e30d5e3684ad7
+    ap-southeast-2:
+      BYOL: ami-03c6b78465e4a087a
+    ap-southeast-3:
+      BYOL: ami-0f686d51981a84386
+    ap-south-1:
+      BYOL: ami-02d75632a4cfc6740
+    ap-northeast-1:
+      BYOL: ami-085256ec7f72c34d9
+    ap-northeast-2:
+      BYOL: ami-0ca3ecc56ad03e3e7
+    ap-northeast-3:
+      BYOL: ami-0f38478a0bcd36643
+    ap-east-1:
+      BYOL: ami-0f169e23f42a3cdb2
+    sa-east-1:
+      BYOL: ami-0faa2ca6ee6443065
+    me-south-1:
+      BYOL: ami-022e85c3f05f54650
+    af-south-1:
+      BYOL: ami-040f969b620301ba7

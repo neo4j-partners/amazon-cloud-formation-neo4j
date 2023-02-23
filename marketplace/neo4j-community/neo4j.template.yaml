@@ -202,6 +202,7 @@ Resources:
             - "      fi\n"
             - "    yum -y install \"${NEO4J_YUM_PACKAGE}\"\n"
             - "    yum update -y aws-cfn-bootstrap\n"
+            - "    systemctl enable neo4j\n"
             - "    if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
             - "      PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version)\n"
             - "    fi\n"
@@ -238,7 +239,6 @@ Resources:
 
             - "start_neo4j() {\n"            
             - "  echo \"Starting Neo4j...\"\n"
-            - "  systemctl enable neo4j\n"
             - "  systemctl start neo4j\n"
             - "  neo4j-admin dbms set-initial-password \"${password}\"\n"
             - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
@@ -247,13 +247,11 @@ Resources:
             - "  done\n"
             - "}\n"
 
-
             - "install_neo4j_from_yum\n"
             - "install_apoc_plugin\n"
             - "extension_config\n"
             - "build_neo4j_conf_file\n"
-            - "start_neo4j\n"
-
+            - "start_neo4j && /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jEC2Instance --region \"${region}\"\n"
 
 Outputs:
   Neo4jBrowserURL:

@@ -144,6 +144,41 @@ Rules:
             - !Ref CoreInstanceCount
             - '3'
         AssertDescription: Node Count cannot be set to 3 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
+      - Assert: !Not
+          - !Equals
+            - !Ref NumberOfServers
+            - '4'
+        AssertDescription: Node Count cannot be set to 4 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
+      - Assert: !Not
+          - !Equals
+            - !Ref NumberOfServers
+            - '5'
+        AssertDescription: Node Count cannot be set to 5 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
+      - Assert: !Not
+          - !Equals
+            - !Ref NumberOfServers
+            - '6'
+        AssertDescription: Node Count cannot be set to 6 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
+      - Assert: !Not
+          - !Equals
+            - !Ref NumberOfServers
+            - '7'
+        AssertDescription: Node Count cannot be set to 7 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
+      - Assert: !Not
+          - !Equals
+            - !Ref NumberOfServers
+            - '8'
+        AssertDescription: Node Count cannot be set to 8 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
+      - Assert: !Not
+          - !Equals
+            - !Ref NumberOfServers
+            - '9'
+        AssertDescription: Node Count cannot be set to 9 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
+      - Assert: !Not
+          - !Equals
+            - !Ref NumberOfServers
+            - '10'
+        AssertDescription: Node Count cannot be set to 10 when InstallGraphDataScience is selected. Please set Node Count to 1 or set InstallGraphDataScience to false.
 
 Conditions:
   CreateReadReplicas: !Not

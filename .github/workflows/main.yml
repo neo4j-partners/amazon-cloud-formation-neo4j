@@ -35,7 +35,7 @@ jobs:
       uses: aws-actions/aws-cloudformation-github-deploy@master
       with:
         name: ${{ steps.stack-name.outputs.stackname }}
-        template: marketplace/neo4j.template.yaml
+        template: marketplace/neo4j-enterprise/neo4j.template.yaml
         no-fail-on-empty-changeset: "1"
         parameter-overrides: >-
            NumberOfServers=3,
@@ -104,7 +104,7 @@ jobs:
         uses: aws-actions/aws-cloudformation-github-deploy@master
         with:
           name: ${{ steps.stack-name.outputs.stackname }}
-          template: marketplace/neo4j.template.yaml
+          template: marketplace/neo4j-enterprise/neo4j.template.yaml
           no-fail-on-empty-changeset: "1"
           parameter-overrides: >-
             NumberOfServers=1,
@@ -174,7 +174,7 @@ jobs:
         uses: aws-actions/aws-cloudformation-github-deploy@master
         with:
           name: ${{ steps.stack-name.outputs.stackname }}
-          template: marketplace/neo4j.template.yaml
+          template: marketplace/neo4j-enterprise/neo4j.template.yaml
           no-fail-on-empty-changeset: "1"
           parameter-overrides: >-
             NumberOfServers=3,
@@ -244,7 +244,7 @@ jobs:
         uses: aws-actions/aws-cloudformation-github-deploy@master
         with:
           name: ${{ steps.stack-name.outputs.stackname }}
-          template: marketplace/neo4j.template.yaml
+          template: marketplace/neo4j-enterprise/neo4j.template.yaml
           no-fail-on-empty-changeset: "1"
           parameter-overrides: >-
             NumberOfServers=1,

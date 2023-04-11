@@ -933,8 +933,8 @@ Outputs:
         - ':7687 -A ec2-user@'
         - !GetAtt Neo4jBastionHost.PublicIp
   Neo4jUsername:
-    Description: Username for Neo4j
-    Value: 'The username is neo4j.  The password is what you provided to the template.'
+    Description: 'The username is neo4j.  The password is what you provided to the template.'
+    Value: 'neo4j'
 
 Mappings:
   Neo4j:

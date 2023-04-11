@@ -953,7 +953,7 @@ Outputs:
         - '7474'
 
   Neo4jURI:
-    Description: Neo4j URI Scheme
+    Description: Neo4j URI
     Value: !Join
       - ''
       - - 'neo4j://'
@@ -962,8 +962,8 @@ Outputs:
         - '7687'
 
   Neo4jUsername:
-    Description: Username for Neo4j
-    Value: 'The username is neo4j.  The password is what you provided to the template.'
+    Description: 'The username is neo4j.  The password is what you provided to the template.'
+    Value: 'neo4j'
 
 Mappings:
   Neo4j:

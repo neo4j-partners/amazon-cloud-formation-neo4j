@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #
-# Script:  deploy.sh
-# Purpose: This script can be used to deploy the Neo4j CloudFormation template if the aws cli
-#          is correctly installed and configured
+# Script:      deploy.sh
+# Purpose:     This script can be used to deploy the Neo4j Enterprise CloudFormation template.
+# Prequisites: The aws cli must be correctly installed and configured.
 #
 
 ###################################################################################
@@ -11,8 +11,8 @@
 # User configurable variables
 NumberOfServers=3
 SSHCIDR="0.0.0.0/0"
-InstallGraphDataScience="False"
-InstallBloom="False"
+InstallGraphDataScience="No"
+InstallBloom="No"
 REGION="us-east-1"
 Password="foobar123%"
 graphDataScienceLicenseKey="None"
@@ -33,7 +33,7 @@ if [ $NumberOfServers == 2 ] || [ $NumberOfServers -gt 10 ] || [ $NumberOfServer
   exit 1
 fi
 
-if [ $InstallGraphDataScience == "True" ] && [ $NumberOfServers != 1 ] ; then
+if [ $InstallGraphDataScience == "Yes" ] && [ $NumberOfServers != 1 ] ; then
   echo "GDS cannot be installed on a cluster. NumberOfServers must be set to \"1\" if InstallGraphDataScience is set to \"True\"."
   exit 1
 fi

@@ -51,11 +51,11 @@ for line in parsed_data:
 logging.debug(f'Total output:{ output}')
 
 #Update CFT Mappings with fresh AMI IDs and regions
-with open("../neo4j.template.yaml", "r") as file:
+with open("../neo4j-community/neo4j.template.yaml", "r") as file:
   template = file.read()
   ami_index = template.find("Mappings:\n  Neo4j:\n")
   updated_template = f'{template[:ami_index]}\n{output}'
 
-with open("../neo4j.template.yaml", "w") as file:
+with open("../neo4j-community/neo4j.template.yaml", "w") as file:
   file.write(updated_template)
 

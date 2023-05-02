@@ -724,53 +724,8 @@ Outputs:
 
 
 
+
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-0d4345c4eda92cf0d
-    us-east-2:
-      BYOL: ami-08f4e727ca7002eb2
-    us-west-1:
-      BYOL: ami-09b061154a9512835
-    us-west-2:
-      BYOL: ami-05203927886e2d30a
-    us-gov-east-1:
-      BYOL: ami-0198d56bba3cb2370
-    us-gov-west-1:
-      BYOL: ami-049e2a18beab88f8a
-    ca-central-1:
-      BYOL: ami-009be38856076a61c
-    eu-central-1:
-      BYOL: ami-0cb274e70de7c7e73
-    eu-west-1:
-      BYOL: ami-06e82cde97832d21e
-    eu-west-2:
-      BYOL: ami-0cdf2f30323cc3229
-    eu-west-3:
-      BYOL: ami-0d42adc7c4cccbdb9
-    eu-north-1:
-      BYOL: ami-0dd674f1ce2fe0bba
-    eu-south-1:
-      BYOL: ami-0654fffc7416df5e3
-    ap-southeast-1:
-      BYOL: ami-0157e30d5e3684ad7
-    ap-southeast-2:
-      BYOL: ami-03c6b78465e4a087a
-    ap-southeast-3:
-      BYOL: ami-0f686d51981a84386
-    ap-south-1:
-      BYOL: ami-02d75632a4cfc6740
-    ap-northeast-1:
-      BYOL: ami-085256ec7f72c34d9
-    ap-northeast-2:
-      BYOL: ami-0ca3ecc56ad03e3e7
-    ap-northeast-3:
-      BYOL: ami-0f38478a0bcd36643
-    ap-east-1:
-      BYOL: ami-0f169e23f42a3cdb2
-    sa-east-1:
-      BYOL: ami-0faa2ca6ee6443065
-    me-south-1:
-      BYOL: ami-022e85c3f05f54650
-    af-south-1:
-      BYOL: ami-040f969b620301ba7
+      BYOL: ami-029bd7bbaaeed9d68

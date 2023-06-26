@@ -325,8 +325,7 @@ jobs:
             InstallBloom=No,
             Password=foobar123%,
             GraphDataScienceLicenseKey=None,
-            BloomLicenseKey=None,
-            Neo4jLicenseType=Evaluation
+            BloomLicenseKey=None            
 
 
       - name: Retrieve Neo4j URI
@@ -397,8 +396,7 @@ jobs:
             InstallBloom=No,
             Password=foobar123%,
             GraphDataScienceLicenseKey=None,
-            BloomLicenseKey=None,
-            Neo4jLicenseType=Evaluation
+            BloomLicenseKey=None            
 
       - name: Retrieve Neo4j URI
         id: uri

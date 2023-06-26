@@ -325,7 +325,7 @@ jobs:
             InstallBloom=No,
             Password=foobar123%,
             GraphDataScienceLicenseKey=None,
-            BloomLicenseKey=None            
+            BloomLicenseKey=None        
 
 
       - name: Retrieve Neo4j URI
@@ -339,7 +339,7 @@ jobs:
         run: |
           curl -LJO https://github.com/neo4j/neo4jtester/raw/main/build/neo4jtester_linux
           chmod +x ./neo4jtester_linux
-          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%" "Evaluation"
 
       - name: Delete CloudFormation Stack
         if: always()
@@ -409,7 +409,7 @@ jobs:
         run: |
           curl -LJO https://github.com/neo4j/neo4jtester/raw/main/build/neo4jtester_linux
           chmod +x ./neo4jtester_linux
-          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%" "Evaluation"
 
       - name: Delete CloudFormation Stack
         if: always()

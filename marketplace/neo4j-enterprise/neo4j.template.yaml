@@ -45,6 +45,7 @@ Parameters:
   Neo4jLicenseType:
     Description: Select "Enterprise" if you already have a Neo4j Enterprise License, otherwise select "Evaluation" 
     Type: String
+    Default: 'Evaluation'
     AllowedValues:
       - 'Enterprise'
       - 'Evaluation' 

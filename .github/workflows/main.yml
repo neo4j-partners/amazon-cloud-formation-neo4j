@@ -37,7 +37,7 @@ jobs:
           template: marketplace/neo4j.template.yaml
           no-fail-on-empty-changeset: "1"
           parameter-overrides: >-
-            NumberOfServers=3,
+            CoreInstanceCount=3,
             SSHCIDR=0.0.0.0/0,
             InstallGraphDataScience=No,
             InstallBloom=No,
@@ -56,7 +56,7 @@ jobs:
         run: |
           curl -LJO https://github.com/neo4j/neo4jtester/raw/main/build/neo4jtester_linux
           chmod +x ./neo4jtester_linux
-          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%" "Enterprise"
 
       - name: Delete CloudFormation Stack
         if: always()
@@ -105,7 +105,7 @@ jobs:
           template: marketplace/neo4j.template.yaml
           no-fail-on-empty-changeset: "1"
           parameter-overrides: >-
-            NumberOfServers=1,
+            CoreInstanceCount=1,
             SSHCIDR=0.0.0.0/0,
             InstallGraphDataScience=No,
             InstallBloom=No,
@@ -124,7 +124,7 @@ jobs:
         run: |
           curl -LJO https://github.com/neo4j/neo4jtester/raw/main/build/neo4jtester_linux
           chmod +x ./neo4jtester_linux
-          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%" "Enterprise"
 
       - name: Delete CloudFormation Stack
         if: always()

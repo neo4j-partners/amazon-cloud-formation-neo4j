@@ -96,6 +96,7 @@ jobs:
         run: |
           STACKNAME=`echo test-$(date '+%Y%m%d-%S-%2N')`
           echo "Stack name: $STACKNAME"
+          echo "::set-output name=stackname::$STACKNAME"
 
       - name: Run CloudFormation Template
         id: cft

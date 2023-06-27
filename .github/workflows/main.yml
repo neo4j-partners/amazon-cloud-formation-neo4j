@@ -10,7 +10,6 @@ jobs:
   test-template-cluster-v44:
     name: Test CFT (Neo4j Cluster v4.4)
     runs-on: ubuntu-latest
-    if: github.head_ref == 'Neo4j-4.4'
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -29,32 +28,36 @@ jobs:
           STACKNAME=`echo test-$(date '+%Y%m%d-%S-%2N')`
           echo "Stack name: $STACKNAME"
           echo "::set-output name=stackname::$STACKNAME"
+
       - name: Run CloudFormation Template
         id: cft
         uses: aws-actions/aws-cloudformation-github-deploy@master
         with:
           name: ${{ steps.stack-name.outputs.stackname }}
-          template: marketplace/neo4j-enterprise/neo4j.template.yaml
+          template: marketplace/neo4j.template.yaml
           no-fail-on-empty-changeset: "1"
           parameter-overrides: >-
-            NumberOfServers=3,
+            CoreInstanceCount=3,
             SSHCIDR=0.0.0.0/0,
             InstallGraphDataScience=No,
             InstallBloom=No,
             Password=foobar123%,
             GraphDataScienceLicenseKey=None,
             BloomLicenseKey=None
+
       - name: Retrieve Neo4j URI
         id: uri
         run: |
           URI=`aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'][].Outputs[?OutputKey=='Neo4jURI'].OutputValue" --output text`
           echo "Neo4j URI: $URI"
           echo "::set-output name=uri::$URI"
+
       - name: Execute tests
         run: |
           curl -LJO https://github.com/neo4j/neo4jtester/raw/main/build/neo4jtester_linux
           chmod +x ./neo4jtester_linux
-          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%" "Enterprise"
+
       - name: Delete CloudFormation Stack
         if: always()
         run: |
@@ -72,10 +75,10 @@ jobs:
               break
             fi        
           done
+
   test-template-standalone-v44:
     name: Test CFT (Neo4j Standalone v4.4)
     runs-on: ubuntu-latest
-    if: github.head_ref == 'Neo4j-4.4'
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -94,32 +97,36 @@ jobs:
           STACKNAME=`echo test-$(date '+%Y%m%d-%S-%2N')`
           echo "Stack name: $STACKNAME"
           echo "::set-output name=stackname::$STACKNAME"
+
       - name: Run CloudFormation Template
         id: cft
         uses: aws-actions/aws-cloudformation-github-deploy@master
         with:
           name: ${{ steps.stack-name.outputs.stackname }}
-          template: marketplace/neo4j-enterprise/neo4j.template.yaml
+          template: marketplace/neo4j.template.yaml
           no-fail-on-empty-changeset: "1"
           parameter-overrides: >-
-            NumberOfServers=1,
+            CoreInstanceCount=1,
             SSHCIDR=0.0.0.0/0,
             InstallGraphDataScience=No,
             InstallBloom=No,
             Password=foobar123%,
             GraphDataScienceLicenseKey=None,
             BloomLicenseKey=None
+
       - name: Retrieve Neo4j URI
         id: uri
         run: |
           URI=`aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'][].Outputs[?OutputKey=='Neo4jURI'].OutputValue" --output text`
           echo "Neo4j URI: $URI"
           echo "::set-output name=uri::$URI"
+
       - name: Execute tests
         run: |
           curl -LJO https://github.com/neo4j/neo4jtester/raw/main/build/neo4jtester_linux
           chmod +x ./neo4jtester_linux
-          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%" "Enterprise"
+
       - name: Delete CloudFormation Stack
         if: always()
         run: |

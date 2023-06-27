@@ -375,7 +375,7 @@ Resources:
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     CreationPolicy:
-        ResourceSignal:
+      ResourceSignal:
         Count: !Ref NumberOfServers
         Timeout: PT12M
     Properties:

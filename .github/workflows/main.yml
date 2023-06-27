@@ -98,7 +98,6 @@ jobs:
         run: |
           STACKNAME=`echo test-$(date '+%Y%m%d-%S-%2N')`
           echo "Stack name: $STACKNAME"
-          echo "::set-output name=stackname::$STACKNAME"
 
       - name: Run CloudFormation Template
         id: cft
@@ -115,20 +114,29 @@ jobs:
             Password=foobar123%,
             GraphDataScienceLicenseKey=None,
             BloomLicenseKey=None
+<<<<<<< HEAD
 
+=======
+>>>>>>> Neo4j-4.4
       - name: Retrieve Neo4j URI
         id: uri
         run: |
           URI=`aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'][].Outputs[?OutputKey=='Neo4jURI'].OutputValue" --output text`
           echo "Neo4j URI: $URI"
           echo "::set-output name=uri::$URI"
+<<<<<<< HEAD
 
+=======
+>>>>>>> Neo4j-4.4
       - name: Execute tests
         run: |
           curl -LJO https://github.com/neo4j/neo4jtester/raw/main/build/neo4jtester_linux
           chmod +x ./neo4jtester_linux
           ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+<<<<<<< HEAD
 
+=======
+>>>>>>> Neo4j-4.4
       - name: Delete CloudFormation Stack
         if: always()
         run: |
@@ -146,4 +154,7 @@ jobs:
               break
             fi        
           done
+<<<<<<< HEAD
 
+=======
+>>>>>>> Neo4j-4.4

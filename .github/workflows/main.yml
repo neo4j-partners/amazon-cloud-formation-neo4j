@@ -10,7 +10,6 @@ jobs:
   test-template-cluster-v44:
     name: Test CFT (Neo4j Cluster v4.4)
     runs-on: ubuntu-latest
-    if: github.head_ref == 'Neo4j-4.4'
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -80,7 +79,6 @@ jobs:
   test-template-standalone-v44:
     name: Test CFT (Neo4j Standalone v4.4)
     runs-on: ubuntu-latest
-    if: github.head_ref == 'Neo4j-4.4'
     steps:
       - name: Checkout
         uses: actions/checkout@v2

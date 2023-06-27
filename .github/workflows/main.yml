@@ -1,0 +1,139 @@
+name: Test CloudFormation Template
+
+on:
+  pull_request:
+    branches:
+      - 'Neo4j-4.4'
+
+
+jobs:
+  test-template-cluster-v44:
+    name: Test CFT (Neo4j Cluster v4.4)
+    runs-on: ubuntu-latest
+    if: github.head_ref == 'Neo4j-4.4'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        id: creds
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Configure stack name
+        id: stack-name
+        run: |
+          STACKNAME=`echo test-$(date '+%Y%m%d-%S-%2N')`
+          echo "Stack name: $STACKNAME"
+          echo "::set-output name=stackname::$STACKNAME"
+      - name: Run CloudFormation Template
+        id: cft
+        uses: aws-actions/aws-cloudformation-github-deploy@master
+        with:
+          name: ${{ steps.stack-name.outputs.stackname }}
+          template: marketplace/neo4j-enterprise/neo4j.template.yaml
+          no-fail-on-empty-changeset: "1"
+          parameter-overrides: >-
+            NumberOfServers=3,
+            SSHCIDR=0.0.0.0/0,
+            InstallGraphDataScience=No,
+            InstallBloom=No,
+            Password=foobar123%,
+            GraphDataScienceLicenseKey=None,
+            BloomLicenseKey=None
+      - name: Retrieve Neo4j URI
+        id: uri
+        run: |
+          URI=`aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'][].Outputs[?OutputKey=='Neo4jURI'].OutputValue" --output text`
+          echo "Neo4j URI: $URI"
+          echo "::set-output name=uri::$URI"
+      - name: Execute tests
+        run: |
+          curl -LJO https://github.com/neo4j/neo4jtester/raw/main/build/neo4jtester_linux
+          chmod +x ./neo4jtester_linux
+          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+      - name: Delete CloudFormation Stack
+        if: always()
+        run: |
+          aws cloudformation delete-stack --stack-name ${{ steps.stack-name.outputs.stackname }}
+          while true
+          do
+            STACK_STATUS=`aws cloudformation describe-stacks --region us-east-1 --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'].StackStatus" --output text`
+            echo "Printing stack status := ${STACK_STATUS}" 
+            if [[ ${STACK_STATUS} == "DELETE_IN_PROGRESS" ]]; then
+              echo "Sleeping for a minute...be right back !!"
+              sleep 60
+              continue
+            else
+              echo "Cloudformation stack is deleted !!"
+              break
+            fi        
+          done
+  test-template-standalone-v44:
+    name: Test CFT (Neo4j Standalone v4.4)
+    runs-on: ubuntu-latest
+    if: github.head_ref == 'Neo4j-4.4'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        id: creds
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Configure stack name
+        id: stack-name
+        run: |
+          STACKNAME=`echo test-$(date '+%Y%m%d-%S-%2N')`
+          echo "Stack name: $STACKNAME"
+          echo "::set-output name=stackname::$STACKNAME"
+      - name: Run CloudFormation Template
+        id: cft
+        uses: aws-actions/aws-cloudformation-github-deploy@master
+        with:
+          name: ${{ steps.stack-name.outputs.stackname }}
+          template: marketplace/neo4j-enterprise/neo4j.template.yaml
+          no-fail-on-empty-changeset: "1"
+          parameter-overrides: >-
+            NumberOfServers=1,
+            SSHCIDR=0.0.0.0/0,
+            InstallGraphDataScience=No,
+            InstallBloom=No,
+            Password=foobar123%,
+            GraphDataScienceLicenseKey=None,
+            BloomLicenseKey=None
+      - name: Retrieve Neo4j URI
+        id: uri
+        run: |
+          URI=`aws cloudformation describe-stacks --region ${AWS_REGION} --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'][].Outputs[?OutputKey=='Neo4jURI'].OutputValue" --output text`
+          echo "Neo4j URI: $URI"
+          echo "::set-output name=uri::$URI"
+      - name: Execute tests
+        run: |
+          curl -LJO https://github.com/neo4j/neo4jtester/raw/main/build/neo4jtester_linux
+          chmod +x ./neo4jtester_linux
+          ./neo4jtester_linux "${{ steps.uri.outputs.uri }}" "neo4j" "foobar123%"
+      - name: Delete CloudFormation Stack
+        if: always()
+        run: |
+          aws cloudformation delete-stack --stack-name ${{ steps.stack-name.outputs.stackname }}
+          while true
+          do
+            STACK_STATUS=`aws cloudformation describe-stacks --region us-east-1 --query "Stacks[?StackName=='${{ steps.stack-name.outputs.stackname }}'].StackStatus" --output text`
+            echo "Printing stack status := ${STACK_STATUS}" 
+            if [[ ${STACK_STATUS} == "DELETE_IN_PROGRESS" ]]; then
+              echo "Sleeping for a minute...be right back !!"
+              sleep 60
+              continue
+            else
+              echo "Cloudformation stack is deleted !!"
+              break
+            fi        
+          done

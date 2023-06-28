@@ -9,7 +9,7 @@
 ###################################################################################
 
 # User configurable variables
-NumberOfServers=3
+NumberOfServers=1
 SSHCIDR="0.0.0.0/0"
 InstallGraphDataScience="No"
 InstallBloom="No"

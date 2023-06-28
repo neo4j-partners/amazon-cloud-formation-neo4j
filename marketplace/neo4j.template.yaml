@@ -872,7 +872,8 @@ Outputs:
     Description: 'The username is neo4j.  The password is what you provided to the template.'
     Value: 'neo4j'
 
+
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-0e3c7f9c7c5c67a3e
+      BYOL: ami-0c023e2d6e675c3b8

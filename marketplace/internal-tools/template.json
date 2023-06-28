@@ -24,7 +24,7 @@
         "filters": {
           "virtualization-type": "hvm",
           "architecture": "x86_64",
-          "name": "*amzn2-ami-hvm-*",
+          "name": "*al2023-ami-2023*",
           "root-device-type": "ebs"
         },
         "owners": "137112412989",

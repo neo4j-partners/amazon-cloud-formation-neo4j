@@ -514,13 +514,17 @@ Resources:
             - "  else\n"
             - "    echo \"Running on multiple nodes.  Configuring membership in neo4j.conf...\"\n"
             - "    TOKEN=$(curl -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")\n"
+            - "    echo \"TOKEN IS ${TOKEN}\" \n"
             - "    instanceId=$(curl -H \"X-aws-ec2-metadata-token: $TOKEN\" -s http://169.254.169.254/latest/meta-data/instance-id)\n"
+            - "    echo \"INSTANCE ID IS ${instanceId}\" \n"
             - "    if [[ ${#instanceId} -eq 0 ]]; then\n"
             - "     echo \"Missing instance Id. Exiting!! \"\n"
+            - "     exit 1\n"
             - "    fi\n"
             - "    coreMembers=$(aws autoscaling describe-auto-scaling-instances \ --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
             - "    if [[ ${#coreMembers} -eq 0 ]]; then\n"
             - "     echo \"Missing coreMembers. Exiting!! \"\n"
+            - "     exit 1\n"
             - "    fi\n"
             - "    echo \"CoreMembers = ${coreMembers}\"\n"
             - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')\n"
@@ -600,7 +604,7 @@ Resources:
     CreationPolicy:
       ResourceSignal:
         Count: !Ref ReadReplicaCount
-        Timeout: PT3M
+        Timeout: PT12M
     Properties:
       AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchConfigurationName:
@@ -724,13 +728,17 @@ Resources:
             - "  sed -i s/#dbms.mode=CORE/dbms.mode=READ_REPLICA/g /etc/neo4j/neo4j.conf\n"
             - "  sed -i s/#dbms.default_advertised_address=localhost/dbms.default_advertised_address=${privateIP}/g /etc/neo4j/neo4j.conf"
             - "  TOKEN=$(curl -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")\n"
+            - "  echo \"TOKEN IS ${TOKEN}\" \n"
             - "  instanceId=$(curl -H \"X-aws-ec2-metadata-token: $TOKEN\" -s http://169.254.169.254/latest/meta-data/instance-id)\n"
+            - "  echo \"INSTANCE ID IS ${instanceId}\" \n"
             - "  if [[ ${#instanceId} -eq 0 ]]; then\n"
             - "    echo \"Missing instance Id. Exiting!! \"\n"
+            - "    exit 1\n"
             - "  fi\n"
             - "  coreMembers=$(aws autoscaling describe-auto-scaling-instances \ --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
             - "  if [[ ${#coreMembers} -eq 0 ]]; then\n"
             - "    echo \"Missing coreMembers. Exiting!! \"\n"
+            - "    exit 1\n"
             - "  fi\n"
             - "  echo \"CoreMembers = ${coreMembers}\"\n"
             - "  coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')\n"

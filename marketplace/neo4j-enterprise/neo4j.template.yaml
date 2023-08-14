@@ -731,10 +731,53 @@ Outputs:
     Description: 'The username is neo4j.  The password is what you provided to the template.'
     Value: 'neo4j'
 
-
-
-
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-04d5be4f4e4f8ce06
+      BYOL: ami-076e371313209986d
+    us-east-2:
+      BYOL: ami-09918c7bbde0ab772
+    us-west-1:
+      BYOL: ami-075131927ecaae246
+    us-west-2:
+      BYOL: ami-0f61ba91b4c9fa9f8
+    ca-central-1:
+      BYOL: ami-05c5820aadc1856b3
+    eu-central-1:
+      BYOL: ami-00dfc469c87e36adc
+    eu-west-1:
+      BYOL: ami-012161ead0c35965d
+    eu-west-2:
+      BYOL: ami-02f80c539e1fd994d
+    eu-west-3:
+      BYOL: ami-06613a858a28eab61
+    eu-north-1:
+      BYOL: ami-0fcc3852ddb79948c
+    eu-south-1:
+      BYOL: ami-05e75f3859714598d
+    ap-southeast-1:
+      BYOL: ami-0130851c67fe11180
+    ap-southeast-2:
+      BYOL: ami-06f9159dbe1671b87
+    ap-southeast-3:
+      BYOL: ami-01693fc57f9af9e2e
+    ap-south-1:
+      BYOL: ami-0b3b2deb1dc06d924
+    ap-northeast-1:
+      BYOL: ami-01c21313e45c4cb18
+    ap-northeast-2:
+      BYOL: ami-08cdbac9635bb6c69
+    ap-northeast-3:
+      BYOL: ami-0ec45f37b81455522
+    ap-east-1:
+      BYOL: ami-09d81d5320f1bc668
+    sa-east-1:
+      BYOL: ami-026493bae9e0ea46c
+    me-south-1:
+      BYOL: ami-0f0b9529e4c22dfad
+    af-south-1:
+      BYOL: ami-019d2ba60727408b9
+    us-gov-east-1:
+      BYOL:  ami-0c25a9b76d4b7d921
+    us-gov-west-1:
+      BYOL: ami-0ee3c5a19beabc3a5

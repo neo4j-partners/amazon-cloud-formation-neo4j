@@ -303,6 +303,8 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       IpAddressType: ipv4
+      SecurityGroups:
+        - !GetAtt Neo4jExternalSecurityGroup.GroupId
       Name: !Join
         - '-'
         - - !Ref 'AWS::StackName'

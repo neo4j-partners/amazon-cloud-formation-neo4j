@@ -104,6 +104,7 @@ Resources:
 
   Neo4jRoute:
     Type: AWS::EC2::Route
+    DependsOn: Neo4jInternetGatewayAttachment
     Properties:
       GatewayId: !Ref Neo4jInternetGateway
       RouteTableId: !Ref Neo4jRouteTable

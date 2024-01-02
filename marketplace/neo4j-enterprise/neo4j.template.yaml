@@ -409,9 +409,9 @@ Resources:
         - BYOL
       InstanceType:
         Ref: InstanceType
-      SecurityGroups:
-        - Ref: Neo4jExternalSecurityGroup
-        - Ref: Neo4jInternalSecurityGroup
+#      SecurityGroups:
+#        - Ref: Neo4jExternalSecurityGroup
+#        - Ref: Neo4jInternalSecurityGroup
       EbsOptimized: true
       IamInstanceProfile:
         Ref: Neo4jInstanceProfile

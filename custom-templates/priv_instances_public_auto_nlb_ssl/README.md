@@ -104,7 +104,11 @@ _Users are reminded that the deployment of cloud resources will incur costs._
 
 ## Navigate to the Neo4j Browser via a web browser
 
-Once the DNS records have propogated, your neo4j deployment can be accessed using your SSL domain. Note that you will need to enter the complete URL including the directory suffix:  https://SSLDOMAIN/browser/
+A) Once the CloudFormation template has deployed, you will need to review the outputs and take note of the values shown. 
+
+![](images/outputs.png?raw=true)
+
+B) Once the DNS records have propogated, your neo4j deployment can be accessed using your SSL domain. Note that you will need to enter the complete URL including the directory suffix:  https://SSLDOMAIN/browser/
 
 ![](images/neo4j-behind-ssl.png?raw=true)
 

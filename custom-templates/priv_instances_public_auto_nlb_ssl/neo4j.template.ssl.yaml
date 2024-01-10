@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Neo4j 5 Enterprise Edition
+Description:  Neo4j v5 / NLB / Non Routable (Private) Instances
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:

@@ -8,30 +8,29 @@
 
 ###################################################################################
 
+STACK_NAME=$1
+TEMPLATE_BODY="file://neo4j-nlb-priv-ssl.template.yaml"
+
 # User configurable variables
-NumberOfServers=1
-SSHCIDR="0.0.0.0/0"
+NumberOfServers=3
+BastionSSHCIDR="0.0.0.0/0"
 InstallGraphDataScience="No"
 InstallBloom="No"
-REGION="us-east-1"
+REGION="us-east-2"
 Password="foobar123%"
 graphDataScienceLicenseKey="None"
 bloomLicenseKey="None"
-Neo4jLicenseType="Evaluation"
-# Route 53 Hosted Zone Id
-R53HostedZoneId="XXXXXXXXXXXXXXXXXXXX"
-# DNS Name to create the SSL certificates and DNS entry within Route 53
-DNSName="myapp.example.com"
+SSHKeyName="jhair-neo4j-us-east-2"
 
-###################################################################################
+# Update with your Route 53 Hosted Zone Id
+R53HostedZoneId="XXXXXXXXXXXXXXXXXXXX"
+# Update with your SSL Name to create the SSL certificates and DNS entry within Route 53
+SSLDomain="jshair.neo4j-field.com"
 
 # Other Variables (changes not normally required)
 AWS=$(basename "$(which aws)") ||  { echo "Please ensure that the AWS cli client is installed." && exit 1; };
-STACK_NAME=$1
-TEMPLATE_BODY="file://neo4j.template.ssl.yaml"
 
 ###################################################################################
-
 if [ $NumberOfServers == 2 ] || [ $NumberOfServers -gt 10 ] || [ $NumberOfServers -lt 1 ]; then
   echo "A single instance, or between 3 and 10 instances can be installed."
   exit 1
@@ -57,13 +56,13 @@ $AWS cloudformation create-stack \
 --region $REGION \
 --disable-rollback \
 --parameters \
-ParameterKey=R53HostedZoneId,ParameterValue=${R53HostedZoneId} \
-ParameterKey=DNSName,ParameterValue=${DNSName} \
 ParameterKey=Password,ParameterValue=${Password} \
 ParameterKey=NumberOfServers,ParameterValue=${NumberOfServers} \
-ParameterKey=SSHCIDR,ParameterValue=${SSHCIDR} \
+ParameterKey=BastionSSHCIDR,ParameterValue=${BastionSSHCIDR} \
 ParameterKey=InstallGraphDataScience,ParameterValue=${InstallGraphDataScience} \
 ParameterKey=GraphDataScienceLicenseKey,ParameterValue=${graphDataScienceLicenseKey} \
 ParameterKey=InstallBloom,ParameterValue=${InstallBloom} \
 ParameterKey=BloomLicenseKey,ParameterValue=${bloomLicenseKey} \
-ParameterKey=Neo4jLicenseType,ParameterValue=${Neo4jLicenseType}
+ParameterKey=R53HostedZoneId,ParameterValue=${R53HostedZoneId} \
+ParameterKey=SSHKeyName,ParameterValue=${SSHKeyName} \
+ParameterKey=SSLDomain,ParameterValue=${SSLDomain}

@@ -7,7 +7,7 @@ import argparse
 import logging
 import sys
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logging.debug('Setting up logger')
 
 parser = argparse.ArgumentParser()

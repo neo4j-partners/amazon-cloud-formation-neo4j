@@ -747,49 +747,49 @@ Mappings:
   Neo4j:
     us-east-1:
       BYOL: ami-009bad8ee37e7a1b7
-    us-east-2:
-      BYOL: ami-09918c7bbde0ab772
-    us-west-1:
-      BYOL: ami-075131927ecaae246
-    us-west-2:
-      BYOL: ami-0f61ba91b4c9fa9f8
-    ca-central-1:
-      BYOL: ami-05c5820aadc1856b3
-    eu-central-1:
-      BYOL: ami-00dfc469c87e36adc
-    eu-west-1:
-      BYOL: ami-012161ead0c35965d
-    eu-west-2:
-      BYOL: ami-02f80c539e1fd994d
-    eu-west-3:
-      BYOL: ami-06613a858a28eab61
-    eu-north-1:
-      BYOL: ami-0fcc3852ddb79948c
-    eu-south-1:
-      BYOL: ami-05e75f3859714598d
-    ap-southeast-1:
-      BYOL: ami-0130851c67fe11180
-    ap-southeast-2:
-      BYOL: ami-06f9159dbe1671b87
-    ap-southeast-3:
-      BYOL: ami-01693fc57f9af9e2e
-    ap-south-1:
-      BYOL: ami-0b3b2deb1dc06d924
-    ap-northeast-1:
-      BYOL: ami-01c21313e45c4cb18
-    ap-northeast-2:
-      BYOL: ami-08cdbac9635bb6c69
-    ap-northeast-3:
-      BYOL: ami-0ec45f37b81455522
-    ap-east-1:
-      BYOL: ami-09d81d5320f1bc668
-    sa-east-1:
-      BYOL: ami-026493bae9e0ea46c
-    me-south-1:
-      BYOL: ami-0f0b9529e4c22dfad
-    af-south-1:
-      BYOL: ami-019d2ba60727408b9
     us-gov-east-1:
-      BYOL:  ami-0c25a9b76d4b7d921
+      BYOL: ami-051425a2f736e1878
     us-gov-west-1:
-      BYOL: ami-0ee3c5a19beabc3a5
+      BYOL: ami-0a4b16e0e71d1c9e5
+    us-east-2:
+      BYOL: ami-0bf5ca660db2dccc3
+    us-west-1:
+      BYOL: ami-0463450c05b8264df
+    us-west-2:
+      BYOL: ami-0379d78be3267e6e7
+    ca-central-1:
+      BYOL: ami-0035737d1bcd0f7cd
+    eu-central-1:
+      BYOL: ami-02671f83bd8232827
+    eu-west-1:
+      BYOL: ami-003c3dacd21e078f3
+    eu-west-2:
+      BYOL: ami-08c0f6244e810874e
+    eu-west-3:
+      BYOL: ami-096bc2b7847bd2ee4
+    eu-north-1:
+      BYOL: ami-04964036867700c8b
+    eu-south-1:
+      BYOL: ami-05796833c3d37acc1
+    ap-southeast-1:
+      BYOL: ami-05b664da81852ca0a
+    ap-southeast-2:
+      BYOL: ami-04732b1088bdfed9f
+    ap-southeast-3:
+      BYOL: ami-0a0491462aa1dc1ed
+    ap-south-1:
+      BYOL: ami-032150b10f8652ef9
+    ap-northeast-1:
+      BYOL: ami-0aa63e3a037874a61
+    ap-northeast-2:
+      BYOL: ami-03a9400fd4fd94e32
+    ap-northeast-3:
+      BYOL: ami-048bca7fe5c83e370
+    ap-east-1:
+      BYOL: ami-01f1fb2492635d51e
+    sa-east-1:
+      BYOL: ami-009e11cad48233c41
+    me-south-1:
+      BYOL: ami-025d2a76802560a55
+    af-south-1:
+      BYOL: ami-098e0e524f6e8c499

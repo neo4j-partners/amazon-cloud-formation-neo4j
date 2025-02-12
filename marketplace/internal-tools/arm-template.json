@@ -1,0 +1,50 @@
+{
+    "variables": {
+      "aws_access_key": "{{env `AWS_ACCESS_KEY_ID`}}",
+      "aws_secret_key": "{{env `AWS_SECRET_ACCESS_KEY`}}",
+      "creation_date": "{{isotime \"2006-01-02T03:04:05Z\"}}",
+      "region": "us-east-1",
+      "account": "385155106615",
+      "instance_type": "t2.micro",
+      "destination_regions": "us-east-1",
+      "ami_name": "Neo4j5-Marketplace-Image-Public-Amzn-Linux-ARM",
+      "neo4j_version": "5.x"
+    },
+    "builders": [
+        {
+            "name": "Neo4j",
+            "ami_description": "Neo4j5-AMI-{{user `creation_date` | clean_resource_name}}",
+            "type": "amazon-ebs",
+            "access_key": "{{user `aws_access_key`}}",
+            "secret_key": "{{user `aws_secret_key`}}",
+            "region": "{{user `region`}}",
+            "force_deregister": true,
+            "associate_public_ip_address": true,
+            "source_ami_filter": {
+              "filters": {
+                "virtualization-type": "hvm",
+                "name": "al2023-ami-minimal-*-arm64",
+                "root-device-type": "ebs"
+              },
+              "owners": ["137112412989"],
+              "most_recent": true
+            },
+            "instance_type": "m6g.large",
+            "ssh_username": "ec2-user",
+            "ami_name": "{{user `ami_name`}}-{{user `creation_date` | clean_resource_name}}",
+            "ami_regions": "{{user `destination_regions`}}",
+            "ami_groups": [
+                "all"
+            ],
+            "tags": {
+                "ami-creation-date": "{{user `creation_date`}}"
+            }
+        }
+    ],
+    "provisioners": [
+        {
+            "type": "shell",
+            "script": "packer-script.sh"
+        }
+    ]
+}   

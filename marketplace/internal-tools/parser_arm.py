@@ -7,7 +7,7 @@ import argparse
 import logging
 import sys
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logging.debug('Setting up logger')
 
 parser = argparse.ArgumentParser()
@@ -24,18 +24,20 @@ cmd = subprocess.run(
    "-var", f"aws_account={args.aws_account}",
    "-var", f"aws_region={args.aws_region}",
    "-var", f"destination_regions={args.destination_regions}",
-   "template.json"],
+   "arm-template.json"],
   capture_output=True, text=True)
+
+# Print both stdout and stderr if there's an error
+if cmd.returncode != 0:
+    print("Packer stdout:")
+    print(cmd.stdout)
+    print("\nPacker stderr:")
+    print(cmd.stderr)
+    sys.exit("Packer build failed!")
+
 logging.debug(cmd.stdout)
 
-#Command to feed dummy output for debugging purposes
-# cmd = subprocess.run(["cat", "output.out"], stdout=subprocess.PIPE, text=True)
-
-#Fail script on Packer error
-if cmd.returncode != 0 :
-  sys.exit("Packer build failed!")
-
-#Parse Packer output to get generated AMI IDs and thei respective regions
+#Parse Packer output to get generated AMI IDs and their respective regions
 raw_exec_output = cmd.stdout.split("AMIs were created:")
 logging.debug(f'{raw_exec_output=}')
 parsed_data = raw_exec_output[1].split("\n")
@@ -44,18 +46,24 @@ logging.debug(f'{parsed_data=}')
 #Format Packer output to be put in CFT template
 output="Mappings:\n  Neo4j:\n"
 for line in parsed_data:
-  if "ami-" in line:
+  if "ami-" in line and "-arm64" in line:  # Only process ARM64 AMIs
     logging.debug(f'{line=}')
     region, ami_id = line.split(": ")
-    output += f"    {region}:\n      BYOL: {ami_id}\n"
-logging.debug(f'Total output:{ output}')
+    output += f"    {region}:\n      BYOL: {ami_id}\n"  # Keep the original BYOL format
+
+logging.debug(f'Total output:{output}')
 
 #Update CFT Mappings with fresh AMI IDs and regions
-with open("../neo4j-community/neo4j.template.yaml", "r") as file:
-  template = file.read()
-  ami_index = template.find("Mappings:\n  Neo4j:\n")
-  updated_template = f'{template[:ami_index]}\n{output}'
+template_file = "../neo4j-enterprise/neo4j.template.yaml"
+try:
+    with open(template_file, "r") as file:
+        template = file.read()
+        ami_index = template.find("Mappings:\n  Neo4j:\n")
+        updated_template = f'{template[:ami_index]}\n{output}'
 
-with open("../neo4j-community/neo4j.template.yaml", "w") as file:
-  file.write(updated_template)
-
+    with open(template_file, "w") as file:
+        file.write(updated_template)
+    logging.info(f'Successfully updated {template_file} with ARM64 AMI IDs')
+except FileNotFoundError:
+    logging.error(f'Template file {template_file} not found')
+    sys.exit(1)

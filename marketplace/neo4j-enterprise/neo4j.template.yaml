@@ -127,17 +127,6 @@ Parameters:
       - r7a.24xlarge
       - r7a.32xlarge
       - r7a.48xlarge
-      - m6g.large
-      - t4g.medium
-      - t4g.large
-      - c6g.xlarge
-      - c6g.2xlarge
-      - m6g.xlarge
-      - m6g.2xlarge
-      - r6g.xlarge
-      - r6g.2xlarge
-      - c7g.xlarge
-      - c7g.2xlarge
   DiskSize:
     Description: Size in GB of the EBS volume on each node
     Type: Number
@@ -205,9 +194,6 @@ Conditions:
     - !Equals
       - !Ref NumberOfServers
       - '1'
-  IsARM: !Equals 
-    - !FindInMap [InstanceArchitecture, !Ref InstanceType, Arch]
-    - ARM64
 
 Resources:
   Neo4jVPC:
@@ -426,10 +412,10 @@ Resources:
   Neo4jLaunchConfiguration:
     Type: AWS::AutoScaling::LaunchConfiguration
     Properties:
-      ImageId: !If 
-        - IsARM
-        - !FindInMap [Neo4j, !Ref 'AWS::Region', ARM64]
-        - !FindInMap [Neo4j, !Ref 'AWS::Region', AMD64]
+      ImageId: !FindInMap
+        - Neo4j
+        - !Ref 'AWS::Region'
+        - BYOL
       InstanceType:
         Ref: InstanceType
       SecurityGroups:
@@ -761,41 +747,4 @@ Outputs:
 Mappings:
   Neo4j:
     us-east-1:
-      AMD64: ami-0ad466122f6335341
-      ARM64: ami-09a236b3e43d914e3
-  InstanceArchitecture:
-    t4g.medium: { Arch: ARM64 }
-    t4g.large: { Arch: ARM64 }
-    c6g.xlarge: { Arch: ARM64 }
-    c6g.2xlarge: { Arch: ARM64 }
-    m6g.xlarge: { Arch: ARM64 }
-    m6g.2xlarge: { Arch: ARM64 }
-    r6g.xlarge: { Arch: ARM64 }
-    r6g.2xlarge: { Arch: ARM64 }
-    c7g.xlarge: { Arch: ARM64 }
-    c7g.2xlarge: { Arch: ARM64 }
-    t3.medium: { Arch: AMD64 }
-    t3.large: { Arch: AMD64 }
-    t3.xlarge: { Arch: AMD64 }
-    t3.2xlarge: { Arch: AMD64 }
-    r6i.large: { Arch: AMD64 }
-    r6i.xlarge: { Arch: AMD64 }
-    r6i.2xlarge: { Arch: AMD64 }
-    r6i.4xlarge: { Arch: AMD64 }
-    r6i.8xlarge: { Arch: AMD64 }
-    r6i.12xlarge: { Arch: AMD64 }
-    r6i.16xlarge: { Arch: AMD64 }
-    r6i.24xlarge: { Arch: AMD64 }
-    r6i.32xlarge: { Arch: AMD64 }
-    r6a.8xlarge: { Arch: AMD64 }
-    r7a.medium: { Arch: AMD64 }
-    r7a.large: { Arch: AMD64 }
-    r7a.xlarge: { Arch: AMD64 }
-    r7a.2xlarge: { Arch: AMD64 }
-    r7a.4xlarge: { Arch: AMD64 }
-    r7a.8xlarge: { Arch: AMD64 }
-    r7a.12xlarge: { Arch: AMD64 }
-    r7a.16xlarge: { Arch: AMD64 }
-    r7a.24xlarge: { Arch: AMD64 }
-    r7a.32xlarge: { Arch: AMD64 }
-    r7a.48xlarge: { Arch: AMD64 }
+      BYOL: ami-0ad466122f6335341

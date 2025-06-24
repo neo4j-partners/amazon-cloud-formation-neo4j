@@ -7,13 +7,13 @@
       "account": "385155106615",
       "instance_type": "t2.micro",
       "destination_regions": "us-east-1",
-      "ami_name": "Neo4j5-Marketplace-Image-Public-Amzn-Linux-ARM",
-      "neo4j_version": "5.x"
+      "ami_name": "Neo4j-Marketplace-Image-Public-Amzn-Linux-ARM",
+      "neo4j_version": "latest"
     },
     "builders": [
         {
             "name": "Neo4j",
-            "ami_description": "Neo4j5-AMI-{{user `creation_date` | clean_resource_name}}",
+            "ami_description": "Neo4j-AMI-{{user `creation_date` | clean_resource_name}}",
             "type": "amazon-ebs",
             "access_key": "{{user `aws_access_key`}}",
             "secret_key": "{{user `aws_secret_key`}}",

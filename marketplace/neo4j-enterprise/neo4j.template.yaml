@@ -4,6 +4,10 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
+          default: "AWS Marketplace Parameters"
+        Parameters:
+          - ImageId
+      - Label:
           default: "Neo4j Configuration"
         Parameters:
           - Neo4jLicenseType
@@ -20,6 +24,8 @@ Metadata:
           - DiskSize
           - SSHCIDR
     ParameterLabels:
+      ImageId:
+        default: AMI ID
       Neo4jLicenseType:
         default: Neo4j License Type
       InstallGraphDataScience:
@@ -42,6 +48,11 @@ Metadata:
         default: SSH CIDR
 
 Parameters:
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-07f83a354c934b879
+    Description: The AMI that will be used to launch EC2 resources.
+
   Neo4jLicenseType:
     Description: Select "Enterprise" if you already have a Neo4j Enterprise License, otherwise select "Evaluation" 
     Type: String
@@ -414,10 +425,7 @@ Resources:
     Type: AWS::EC2::LaunchTemplate
     Properties:
       LaunchTemplateData:
-        ImageId: !FindInMap
-          - Neo4j
-          - !Ref 'AWS::Region'
-          - BYOL
+        ImageId: !Ref ImageId
         InstanceType:
           Ref: InstanceType
         SecurityGroupIds:
@@ -745,8 +753,3 @@ Outputs:
     Description: 'The username is neo4j.  The password is what you provided to the template.'
     Value: 'neo4j'
 
-
-Mappings:
-  Neo4j:
-    us-east-1:
-      BYOL: ami-07f83a354c934b879

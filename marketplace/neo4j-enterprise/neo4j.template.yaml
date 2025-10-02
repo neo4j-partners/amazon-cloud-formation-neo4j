@@ -445,13 +445,6 @@ Resources:
   Neo4jLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      Tags:
-        - Key: StackID
-          Value: !Ref 'AWS::StackId'
-        - Key: Name
-          Value: !Ref 'AWS::StackName'
-        - Key: "aws-apn-id"
-          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       LaunchTemplateData:
         ImageId: !Ref ImageId
         InstanceType:
@@ -674,13 +667,6 @@ Resources:
   Neo4jInstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      Tags:
-        - Key: StackID
-          Value: !Ref 'AWS::StackId'
-        - Key: Name
-          Value: !Ref 'AWS::StackName'
-        - Key: "aws-apn-id"
-          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       Roles:
         - Ref: Neo4jRole
   Neo4jRole:

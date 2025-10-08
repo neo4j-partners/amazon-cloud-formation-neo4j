@@ -217,6 +217,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
 
   Neo4jSubnet1:
     Type: AWS::EC2::Subnet
@@ -232,6 +234,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jSubnet2:
@@ -249,6 +253,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jSubnet3:
@@ -266,6 +272,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jRouteTable:
@@ -276,6 +284,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jRoute:
@@ -313,6 +323,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
 
   Neo4jInternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -336,6 +348,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       Type: network
 
   Neo4jHTTPListener:
@@ -374,6 +388,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jBoltTargetGroup:
@@ -392,6 +408,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jAutoScalingGroup:
@@ -419,6 +437,9 @@ Resources:
           PropagateAtLaunch: true
         - Key: Name
           Value: !Ref 'AWS::StackName'
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
           PropagateAtLaunch: true
 
   Neo4jLaunchTemplate:
@@ -752,4 +773,3 @@ Outputs:
   Neo4jUsername:
     Description: 'The username is neo4j.  The password is what you provided to the template.'
     Value: 'neo4j'
-

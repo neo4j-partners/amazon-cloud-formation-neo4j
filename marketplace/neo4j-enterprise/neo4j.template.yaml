@@ -425,18 +425,16 @@ Resources:
         Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
       MinSize: !Ref NumberOfServers
       MaxSize: !Ref NumberOfServers
-      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
+      DesiredCapacity: !Ref NumberOfServers
       TargetGroupARNs:
-        - Ref: Neo4jHTTPTargetGroup
-        - Ref: Neo4jBoltTargetGroup
-      DesiredCapacity:
-        !Ref NumberOfServers
+        - !Ref Neo4jHTTPTargetGroup
+        - !Ref Neo4jBoltTargetGroup
       Tags:
         - Key: StackID
-          Value: !Ref 'AWS::StackId'
+          Value: !Ref AWS::StackId
           PropagateAtLaunch: true
         - Key: Name
-          Value: !Ref 'AWS::StackName'
+          Value: !Ref AWS::StackName
           PropagateAtLaunch: true
         - Key: "aws-apn-id"
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"

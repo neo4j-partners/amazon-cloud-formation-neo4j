@@ -7,10 +7,10 @@ sudo rpm --import https://debian.neo4j.com/neotechnology.gpg.key
 sudo bash -c 'cat > /etc/yum.repos.d/neo4j.repo' << EOF
 [neo4j]
 name=Neo4j Yum Repo
-baseurl=http://yum.neo4j.com/stable/5
+baseurl=http://yum.neo4j.com/stable/latest
 enabled=1
 gpgcheck=1
 EOF
 
-sudo yum install --downloadonly neo4j-enterprise
+sudo yum install -y --downloadonly neo4j-enterprise
 sudo yum install -y jq

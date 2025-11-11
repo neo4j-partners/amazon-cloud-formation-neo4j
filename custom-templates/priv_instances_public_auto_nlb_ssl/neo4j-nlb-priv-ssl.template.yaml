@@ -14,7 +14,6 @@ Metadata:
       - Label:
           default: "Infrastructure Configuration"
         Parameters:
-          - CertificateARN
           - SSLDomain
           - NumberOfServers
           - InstanceType
@@ -22,12 +21,11 @@ Metadata:
           - BastionSSHCIDR
           - BastionImageId
           - SSHKeyName
+          - R53HostedZoneId
 
     ParameterLabels:
       SSLDomain:
         default: Domain for SSL/TLS
-      CertificateARN:
-        default: TLS/SSL Certificate ARN
       InstallGraphDataScience:
         default: Install Graph Data Science
       GraphDataScienceLicenseKey:
@@ -50,23 +48,25 @@ Metadata:
         default: Bastion Host AMI ID
       SSHKeyName:
         default: SSH Key Name 
+      R53HostedZoneId:
+        default: Route 53 Hosted Zone Id
 
 Parameters:
   SSLDomain:
     Description: The fully qualified domain name which will be used for SSL/TLS
     Type: String
 
-  CertificateARN:
-    Description: The ARN of the certificate to be used with the NLB Listeners
+  R53HostedZoneId:
+    Description: Route 53 Hosted Zone Id
     Type: String
-
+    
   InstallGraphDataScience:
     Description: Install Graph Data Science
     Type: String
-    Default: 'False'
+    Default: 'No'
     AllowedValues:
-      - 'True'
-      - 'False'
+      - 'Yes'
+      - 'No'
 
   GraphDataScienceLicenseKey:
     Description: License Key for Graph Data Science (License keys will be sent to and stored by Neo4j. This information will only be used for the purposes of product activation.)
@@ -76,10 +76,10 @@ Parameters:
   InstallBloom:
     Description: Install Bloom
     Type: String
-    Default: 'False'
+    Default: 'No'
     AllowedValues:
-      - 'True'
-      - 'False'
+      - 'Yes'
+      - 'No'
 
   BloomLicenseKey:
     Description: License Key for Bloom (License keys will be sent to and stored by Neo4j. This information will only be used for the purposes of product activation.)
@@ -154,7 +154,7 @@ Rules:
     GDSCheck:
       RuleCondition: !Equals
         - !Ref InstallGraphDataScience
-        - 'True'
+        - 'Yes'
       Assertions:
         - Assert: !Not
             - !Equals
@@ -825,12 +825,9 @@ Resources:
             - "     echo \"Missing coreMembers. Exiting!! \"\n"
             - "    fi\n"
             - "    echo \"CoreMembers = ${coreMembers}\"\n"
-            - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:6000,/g')\n"
-            - "    coreMembers=$(echo \"${coreMembers}\"):6000\n"
-            - "    sed -i -e '$a\\dbms.cluster.discovery.version=V2_ONLY' \\\n"
-            - "           -e '$a\\dbms.cluster.discovery.resolver_type=LIST' \\\n"
-            - "           -e \"\\$a\\dbms.cluster.discovery.v2.endpoints=${coreMembers}\" \\\n"
-            - "           /etc/neo4j/neo4j.conf\n"
+            - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')\n"
+            - "    coreMembers=$(echo \"${coreMembers}\"):5000\n"
+            - "    sed -i s/#dbms.cluster.discovery.endpoints=localhost:5000,localhost:5001,localhost:5002/dbms.cluster.discovery.endpoints=${coreMembers}/g /etc/neo4j/neo4j.conf\n"
             - "  fi\n"
             - "}\n"
 
@@ -927,7 +924,28 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
+  DNSRecord:
+    DependsOn: Neo4jNetworkLoadBalancer
+    Type: AWS::Route53::RecordSet
+    Properties:
+      Name: !Ref SSLDomain
+      Type: A
+      HostedZoneId: !Ref R53HostedZoneId
+      AliasTarget:
+          HostedZoneId: !GetAtt Neo4jNetworkLoadBalancer.CanonicalHostedZoneID
+          DNSName: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+
+  Neo4jCertificate: 
+    Type: "AWS::CertificateManager::Certificate"
+    Properties: 
+      DomainName: !Ref SSLDomain
+      DomainValidationOptions:
+        - DomainName: !Ref SSLDomain
+          HostedZoneId: !Ref R53HostedZoneId
+      ValidationMethod: DNS
+
   Neo4jNetworkLoadBalancer:
+    DependsOn: Neo4jIGWAttachment
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       IpAddressType: ipv4
@@ -952,18 +970,24 @@ Resources:
          Value: true
 
   Neo4jHTTPSListener:
+    DependsOn:
+      - Neo4jNetworkLoadBalancer
+      - DNSRecord
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
         - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
-      Port: 7473
+      Port: 443
       Protocol: TLS
       Certificates:
-        - CertificateArn: !Ref CertificateARN
+        - CertificateArn: !Ref Neo4jCertificate
 
   Neo4jSecureBoltListener:
+    DependsOn:
+      - Neo4jNetworkLoadBalancer
+      - DNSRecord
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
@@ -973,7 +997,7 @@ Resources:
       Port: 7687
       Protocol: TLS
       Certificates:
-        - CertificateArn: !Ref CertificateARN
+        - CertificateArn: !Ref Neo4jCertificate
 
 Outputs:
   Neo4jBrowserURL:
@@ -982,7 +1006,7 @@ Outputs:
       - ''
       - - 'https://'
         - !Ref SSLDomain
-        - ':7473/browser/'
+        - '/browser/'
 
   Neo4jURI:
     Description: Neo4j URI

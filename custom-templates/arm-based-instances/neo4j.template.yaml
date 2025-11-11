@@ -102,20 +102,17 @@ Parameters:
     Type: String
     Default: t3.medium
     AllowedValues:
-      - t3.medium
-      - t3.large
-      - t3.xlarge
-      - t3.2xlarge
-      - r6i.large
-      - r6i.xlarge
-      - r6i.2xlarge
-      - r6i.4xlarge
-      - r6i.8xlarge
-      - r6i.12xlarge
-      - r6i.16xlarge
-      - r6i.24xlarge
-      - r6i.32xlarge
-
+      - m6g.large
+      - t4g.medium
+      - t4g.large
+      - c6g.xlarge
+      - c6g.2xlarge
+      - m6g.xlarge
+      - m6g.2xlarge
+      - r6g.xlarge
+      - r6g.2xlarge
+      - c7g.xlarge
+      - c7g.2xlarge
   DiskSize:
     Description: Size in GB of the EBS volume on each node
     Type: Number
@@ -229,6 +226,23 @@ Resources:
           Value: !Ref 'AWS::StackName'
       VpcId: !Ref Neo4jVPC
 
+  Neo4jSubnet3:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+      VpcId: !Ref Neo4jVPC
+
   Neo4jRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -259,6 +273,13 @@ Resources:
       RouteTableId: !Ref Neo4jRouteTable
       SubnetId: !Ref Neo4jSubnet2
 
+  Neo4jSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet3
+
   Neo4jInternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
@@ -284,7 +305,7 @@ Resources:
         - - !Ref 'AWS::StackName'
           - 'nlb'
       Scheme: internet-facing
-      Subnets: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2], [!Ref Neo4jSubnet1]]
+      Subnets: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -355,12 +376,12 @@ Resources:
         Count: !Ref NumberOfServers
         Timeout: PT12M
     Properties:
-      AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] ], [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]] ]
+      AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchConfigurationName:
         Ref: Neo4jLaunchConfiguration
       MinSize: !Ref NumberOfServers
       MaxSize: !Ref NumberOfServers
-      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2], [!Ref Neo4jSubnet1]]
+      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1,!Ref Neo4jSubnet2,!Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
@@ -468,6 +489,7 @@ Resources:
             - "    fi\n"
             - "  fi\n"
             - "  yum -y install \"${NEO4J_YUM_PACKAGE}\"\n"
+            - "  yum -y install aws-cfn-bootstrap\n"
             - "  yum update -y aws-cfn-bootstrap\n"
             - "  systemctl enable neo4j\n"
             - "  if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
@@ -707,7 +729,8 @@ Outputs:
     Description: 'The username is neo4j.  The password is what you provided to the template.'
     Value: 'neo4j'
 
+
 Mappings:
   Neo4j:
     us-east-1:
-      BYOL: ami-045629cb22f970c04
+      BYOL: ami-09a236b3e43d914e3

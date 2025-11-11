@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Neo4j 5 Community Edition
+Description: Neo4j Community Edition
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -195,7 +195,7 @@ Resources:
 
             - "install_neo4j_from_yum() {\n"
             - "  echo \"Installing Graph Database...\"\n"
-            - "   PACKAGE_VERSION=$(curl --fail http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"5\"' || echo \"\")\n"
+            - "   PACKAGE_VERSION=$(curl --fail http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"latest\"' || echo \"\")\n"
             - "      if [[ ! -z $PACKAGE_VERSION && $PACKAGE_VERSION != \"null\" ]]; then\n"
             - "        echo \"Found PACKAGE_VERSION from http://versions.neo4j-templates.com : PACKAGE_VERSION=$PACKAGE_VERSION\"\n"
             - "        NEO4J_YUM_PACKAGE=\"neo4j-$PACKAGE_VERSION\"\n"
@@ -231,12 +231,10 @@ Resources:
             - "  echo \"Configuring network in neo4j.conf...\"\n"
             - "  sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
             - "  sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address=\"${publicIP}\"/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#server.discovery.advertised_address=:5000/server.discovery.advertised_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#server.discovery.listen_address=:5000/server.discovery.listen_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
-            - "  sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=0.0.0.0:7687/g /etc/neo4j/neo4j.conf\n"
             - "  sed -i s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=\"${publicIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.http.listen_address=:7474/server.http.listen_address=0.0.0.0:7474/g /etc/neo4j/neo4j.conf\n"
+            - "  sed -i s/#server.http.advertised_address=:7474/server.http.advertised_address=\"${publicIP}\":7474/g /etc/neo4j/neo4j.conf\n"
             - "  echo \"internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8\" >> /etc/neo4j/neo4j.conf\n"
             - "  neo4j-admin server memory-recommendation | grep -v ^# >> /etc/neo4j/neo4j.conf\n"
             - "}\n"

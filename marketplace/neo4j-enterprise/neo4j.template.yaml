@@ -1,8 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Neo4j 5 Enterprise Edition
+Description: Neo4j Enterprise Edition
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
+      - Label:
+          default: "AWS Marketplace Parameters"
+        Parameters:
+          - ImageId
       - Label:
           default: "Neo4j Configuration"
         Parameters:
@@ -20,6 +24,8 @@ Metadata:
           - DiskSize
           - SSHCIDR
     ParameterLabels:
+      ImageId:
+        default: AMI ID
       Neo4jLicenseType:
         default: Neo4j License Type
       InstallGraphDataScience:
@@ -42,6 +48,11 @@ Metadata:
         default: SSH CIDR
 
 Parameters:
+  ImageId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-07f83a354c934b879
+    Description: The AMI that will be used to launch EC2 resources.
+
   Neo4jLicenseType:
     Description: Select "Enterprise" if you already have a Neo4j Enterprise License, otherwise select "Evaluation" 
     Type: String
@@ -127,7 +138,6 @@ Parameters:
       - r7a.24xlarge
       - r7a.32xlarge
       - r7a.48xlarge
-
   DiskSize:
     Description: Size in GB of the EBS volume on each node
     Type: Number
@@ -207,6 +217,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
 
   Neo4jSubnet1:
     Type: AWS::EC2::Subnet
@@ -222,6 +234,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jSubnet2:
@@ -239,6 +253,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jSubnet3:
@@ -256,6 +272,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jRouteTable:
@@ -266,6 +284,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jRoute:
@@ -303,6 +323,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
 
   Neo4jInternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -326,6 +348,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       Type: network
 
   Neo4jHTTPListener:
@@ -364,6 +388,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jBoltTargetGroup:
@@ -382,6 +408,8 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
   Neo4jAutoScalingGroup:
@@ -391,7 +419,10 @@ Resources:
         Count: !Ref NumberOfServers
         Timeout: PT12M
     Properties:
-      VPCZoneIdentifier: !If [CreateCluster, [!Ref Neo4jSubnet1, !Ref Neo4jSubnet2, !Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
+      AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
       MinSize: !Ref NumberOfServers
       MaxSize: !Ref NumberOfServers
       DesiredCapacity: !Ref NumberOfServers
@@ -405,34 +436,32 @@ Resources:
         - Key: Name
           Value: !Ref AWS::StackName
           PropagateAtLaunch: true
-      MixedInstancesPolicy:
-        LaunchTemplate:
-          LaunchTemplateSpecification:
-            LaunchTemplateId: !Ref Neo4jLaunchTemplate
-            Version: "1"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
 
   Neo4jLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
-      LaunchTemplateName: !Sub "${AWS::StackName}-Neo4jLT"
-      VersionDescription: "Initial version"
       LaunchTemplateData:
-        ImageId: !FindInMap [Neo4j, !Ref 'AWS::Region', BYOL]
-        InstanceType: !Ref InstanceType
+        ImageId: !Ref ImageId
+        InstanceType:
+          Ref: InstanceType
         SecurityGroupIds:
-          - !Ref Neo4jExternalSecurityGroup
-          - !Ref Neo4jInternalSecurityGroup
+          - Ref: Neo4jExternalSecurityGroup
+          - Ref: Neo4jInternalSecurityGroup
         EbsOptimized: true
         IamInstanceProfile:
-          Name: !Ref Neo4jInstanceProfile
+          Arn: !GetAtt Neo4jInstanceProfile.Arn
         BlockDeviceMappings:
           - DeviceName: /dev/xvda
             Ebs:
-              VolumeSize: !Ref DiskSize
+              VolumeSize:
+                Ref: DiskSize
               VolumeType: gp3
               Encrypted: true
         UserData:
-          Fn::Base64: 
+          Fn::Base64:
             !Join
             - ''
             - - "#!/bin/bash\n"
@@ -492,7 +521,7 @@ Resources:
               - "    PACKAGE_VERSION=$NEO4J_VERSION_ASG_TAG\n"
               - "    local -r NEO4J_YUM_PACKAGE=\"neo4j-enterprise-$PACKAGE_VERSION\"\n"
               - "  else\n"
-              - "    PACKAGE_VERSION=$(curl --fail http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"5\"' || echo \"\")\n"
+              - "    PACKAGE_VERSION=$(curl --fail http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"latest\"' || echo \"\")\n"
               - "    if [[ ! -z $PACKAGE_VERSION && $PACKAGE_VERSION != \"null\" ]]; then\n"
               - "      echo \"Found PACKAGE_VERSION from http://versions.neo4j-templates.com : PACKAGE_VERSION=$PACKAGE_VERSION\"\n"
               - "      local -r NEO4J_YUM_PACKAGE=\"neo4j-enterprise-$PACKAGE_VERSION\"\n"
@@ -503,6 +532,7 @@ Resources:
               - "    fi\n"
               - "  fi\n"
               - "  yum -y install \"${NEO4J_YUM_PACKAGE}\"\n"
+              - "  yum -y install aws-cfn-bootstrap\n"
               - "  yum update -y aws-cfn-bootstrap\n"
               - "  systemctl enable neo4j\n"
               - "  if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
@@ -528,16 +558,10 @@ Resources:
               - "  echo \"Configuring network in neo4j.conf...\"\n"
               - "  sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
               - "  sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address=\"${loadBalancerDNSName}\"/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.discovery.advertised_address=:5000/server.discovery.advertised_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.cluster.advertised_address=:6000/server.cluster.advertised_address=\"${privateIP}\":6000/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.cluster.raft.advertised_address=:7000/server.cluster.raft.advertised_address=\"${privateIP}\":7000/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.discovery.listen_address=:5000/server.discovery.listen_address=\"${privateIP}\":5000/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.cluster.listen_address=:6000/server.cluster.listen_address=\"${privateIP}\":6000/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.cluster.raft.listen_address=:7000/server.cluster.raft.listen_address=\"${privateIP}\":7000/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
+              - "  sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=0.0.0.0:7687/g /etc/neo4j/neo4j.conf\n"
+              - "  sed -i s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=\"${loadBalancerDNSName}\":7687/g /etc/neo4j/neo4j.conf\n"
+              - "  sed -i s/#server.http.listen_address=:7474/server.http.listen_address=0.0.0.0:7474/g /etc/neo4j/neo4j.conf\n"
+              - "  sed -i s/#server.http.advertised_address=:7474/server.http.advertised_address=\"${loadBalancerDNSName}\":7474/g /etc/neo4j/neo4j.conf\n"
               - "  neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf\n"
               - "  echo \"server.metrics.enabled=true\" >> /etc/neo4j/neo4j.conf\n"
               - "  echo \"server.metrics.jmx.enabled=true\" >> /etc/neo4j/neo4j.conf\n"
@@ -550,9 +574,14 @@ Resources:
               - "    echo \"Running on a single node.\"\n"
               - "  else\n"
               - "    echo \"Running on multiple nodes.  Configuring membership in neo4j.conf...\"\n"
+              - "    sed -i s/#server.cluster.listen_address=:6000/server.cluster.listen_address=0.0.0.0:6000/g /etc/neo4j/neo4j.conf\n"
+              - "    sed -i s/#server.cluster.advertised_address=:6000/server.cluster.advertised_address=\"${privateIP}\":6000/g /etc/neo4j/neo4j.conf\n"
+              - "    sed -i s/#server.cluster.raft.listen_address=:7000/server.cluster.raft.listen_address=0.0.0.0:7000/g /etc/neo4j/neo4j.conf\n"
+              - "    sed -i s/#server.cluster.raft.advertised_address=:7000/server.cluster.raft.advertised_address=\"${privateIP}\":7000/g /etc/neo4j/neo4j.conf\n"
+              - "    sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address=0.0.0.0:7688/g /etc/neo4j/neo4j.conf\n"
+              - "    sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
               - "    sed -i s/#initial.dbms.default_primaries_count=1/initial.dbms.default_primaries_count=3/g /etc/neo4j/neo4j.conf\n"
               - "    sed -i s/#initial.dbms.default_secondaries_count=0/initial.dbms.default_secondaries_count=$(expr ${nodeCount} - 3)/g /etc/neo4j/neo4j.conf\n"
-              - "    sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=\"${privateIP}\":7687/g /etc/neo4j/neo4j.conf\n"
               - "    echo \"dbms.cluster.minimum_initial_system_primaries_count=${nodeCount}\" >> /etc/neo4j/neo4j.conf\n"
               - "    TOKEN=$(curl -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")\n"
               - "    instanceId=$(curl -H \"X-aws-ec2-metadata-token: $TOKEN\" -s http://169.254.169.254/latest/meta-data/instance-id)\n"
@@ -564,9 +593,10 @@ Resources:
               - "     echo \"Missing coreMembers. Exiting!! \"\n"
               - "    fi\n"
               - "    echo \"CoreMembers = ${coreMembers}\"\n"
-              - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:5000,/g')\n"
-              - "    coreMembers=$(echo \"${coreMembers}\"):5000\n"
-              - "    sed -i s/#dbms.cluster.discovery.endpoints=localhost:5000,localhost:5001,localhost:5002/dbms.cluster.discovery.endpoints=${coreMembers}/g /etc/neo4j/neo4j.conf\n"
+              - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:6000,/g')\n"
+              - "    coreMembers=$(echo \"${coreMembers}\"):6000\n"
+              - "    echo \"dbms.cluster.discovery.resolver_type=LIST\" >> /etc/neo4j/neo4j.conf\n"
+              - "    echo \"dbms.cluster.endpoints=${coreMembers}\" >> /etc/neo4j/neo4j.conf\n"
               - "  fi\n"
               - "}\n"
 
@@ -741,9 +771,3 @@ Outputs:
   Neo4jUsername:
     Description: 'The username is neo4j.  The password is what you provided to the template.'
     Value: 'neo4j'
-
-
-Mappings:
-  Neo4j:
-    us-east-1:
-      BYOL: ami-0ad466122f6335341

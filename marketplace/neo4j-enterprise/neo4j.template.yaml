@@ -290,6 +290,7 @@ Resources:
 
   Neo4jRoute:
     Type: AWS::EC2::Route
+    DependsOn: Neo4jInternetGatewayAttachment
     Properties:
       GatewayId: !Ref Neo4jInternetGateway
       RouteTableId: !Ref Neo4jRouteTable
@@ -333,7 +334,7 @@ Resources:
       VpcId: !Ref Neo4jVPC
 
   Neo4jNetworkLoadBalancer:
-    DependsOn: Neo4jInternetGateway
+    DependsOn: Neo4jInternetGatewayAttachment
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       IpAddressType: ipv4

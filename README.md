@@ -21,7 +21,6 @@ Then you'll want to clone this repo.  You can do that with the command:
 
     git clone https://github.com/neo4j-partners/amazon-cloud-formation-neo4j.git
     cd amazon-cloud-formation-neo4j
-    cd marketplace
 
 ## Creating a Stack
 The AWS word for a deployment is a stack.  [deploy.sh](deploy.sh) is a helper script to deploy a stack.  Take a look at it and modify any variables, then run it as:

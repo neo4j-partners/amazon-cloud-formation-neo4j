@@ -1,37 +1,61 @@
-# AWS Marketplace CloudFormation Template for Neo4j Enterprise
-This repository holds the Amazon CloudFormation Template (CFT) that deploys Neo4j Enterprise (version 4.4 or 5) on the Amazon Web Services (AWS) platform (optionally including Neo4j Graph Data Science and Neo4j Bloom)  
+# marketplace
+This template is used by the Neo4j AWS Marketplace offer. 
 
-> ### Please see the [Official Neo4j Operations Manual](https://neo4j.com/docs/operations-manual/current/cloud-deployments/neo4j-aws/) for more detailed installation instructions.
+## Deploying through Marketplace
+The template is listed in the AWS Marketplace.  You can deploy it [here](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4).  It can also be useful to fork this repo and customize the template to meet your needs.
 
-These CloudFormation Templates are also used to Neo4j to deploy the official Neo4j offering into the AWS Marketplace. 
+## Deploying via the CLI
+To deploy this template from the command line, follow these instructions.
 
-Therefore, the easiest method to deploy Neo4j on AWS Elastic Compute Cloud (EC2) instances, is to go directly to the [Neo4j Listing in the AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4)
+### Environment Setup
+First we need to install and configure the AWS CLI.  Follow the instructions Amazon provides [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).  Basically all you need to do is:
 
-# Provisioned Resources
-The following resources are created by the CFT, and users will need to ensure they have the correct permissions within AWS to provision them:
+    curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+    sudo installer -pkg AWSCLIV2.pkg -target /
 
-_Users are reminded that the deployment of cloud resources will incur costs._
+Once installed, configure with the command:
 
-- 1 VPC, with a CIDR Range of 10.0.0.0/16
-- 3 Subnets, distributed evenly across 3 Availability zones, with the following CIDR Ranges:
-  - 10.0.1.0/24
-  - 10.0.2.0/24
-  - 10.0.3.0/24
-- 1, or between 3 and 10 EC2 instances (Depending on whether a single instance, or an autonomous cluster is selected)
-- 1 Network (Layer 4) Load Balancer
+    aws configure
 
-The following diagram is shown by way of an example, the first depicts a single instance and the second depicts a 3-node cluster:
+You can confirm the CLI is working properly by running:
 
-# Diagram: Single Neo4j Instance on AWS
-![image](aws-1-instance.png)
+    aws ec2 describe-account-attributes
+    
+Then you'll want to clone this repo.  You can do that with the command:
 
-# Diagram: Three Node Neo4j Cluster on AWS
-![image](aws-3-instance-cluster.png)
+    git clone https://github.com/neo4j-partners/amazon-cloud-formation-neo4j.git
+    cd amazon-cloud-formation-neo4j
+    cd marketplace
 
-## Common Considerations
-- The simplest way to deploy Neo4j on an IaaS environment is to use the [Neo4j Listing in the AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4)
-- Users are reminded that the provisioning of cloud resources will incur costs
-- Users will need to ensure that they have the correct permissions with AWS to deploy the CFT and create the associated cloud resources
-- Autoscaling groups are included as part of this topology which means that EC2 instances will be re-created if deleted.  This should be considered default and expected behaviour.
-- To delete all resources, users should delete the CloudFormation template, rather than attempting to delete individual resources within AWS.
+### Creating a Stack
+The AWS word for a deployment is a stack.  [deploy.sh](deploy.sh) is a helper script to deploy a stack.  Take a look at it and modify any variables, then run it as:
 
+    ./deploy.sh <STACK_NAME>
+
+When complete you can access the Neo4j console on port 7474 of any node.
+
+### Deleting a Stack
+To delete your deployment you can either run the command below or use the GUI in the web console [here](https://console.aws.amazon.com/cloudformation/home).
+
+    aws cloudformation delete-stack --stack-name <STACK_NAME>
+
+### Debugging
+If the Neo4j Browser isn't coming up, there's a good chance something isn't right in your deployment.  One thing to investigate is the cloud-init logs.  `/var/log/cloud-init-output.log` is probably the best starting point.  If that looks good, the next place to check out is `/var/log/neo4j/debug.log`.
+
+## Updating the AMI
+If you're a Neo4j employee updating the AWS Marketplace listing, you're first going to have to get a new AMI ID.  First off, make extra special sure you do this work in the AWS account associated with our publisher.  It's seems AMI sharing across accounts has bugs, so you want to avoid needing to use that. 
+
+If you're setting up a publisher account for the first time, you'll need to add a role as decribed [here](https://docs.aws.amazon.com/marketplace/latest/userguide/ami-single-ami-products.html#single-ami-marketplace-ami-access).
+
+We've been using the AMI builder with the [build.sh](build.sh) script in this directory.  Marketplace has a requirement to disable password access to Marketplace VMs even though the platform images have it enabled.  The builder creates an AMI in a special builder account.  We've had to then copy that AMI to the publisher account manually because something in the Marketplace pipeline is broken.  This process seems like it's changing daily, so it's probably best to check with the AWS Marketplace operations people as you work through the process.
+
+You'll then want to take the AMI ID from that and stuff it both into the CFT and the product load form.  In addition, login to [Marketplace Portal](https://aws.amazon.com/marketplace/management/manage-products/?#/share) and add the AMI.
+
+## Updating the Marketplace Listing
+CFT deploys in AWS Marketplace aren't self service.  At some point that might change.  So, next up is updating the product load form.  That's stored [here](https://docs.google.com/spreadsheets/d/1Nmpw3etZX7xj6nQgS5w3K2B-i0gJevdQ/edit?usp=sharing&ouid=115505246243451814800&rtpof=true&sd=true).  Note that AWS will almost certainly continue to rev the product load form.  So, you might periodically be forced to grab a new copy from to publisher portal.
+
+You'll defintely want to update the version ID in the product load form.  You will need to update the AMI ID as well, if you built a new one.
+
+Once the product load form is all up to date, you'll just need to resubmit it in the portal [here](https://aws.amazon.com/marketplace/management/offers).
+
+There is currently no API for any of this, so the process has to be manual.  If we didn't have a CFT we could automate.

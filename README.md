@@ -1,5 +1,5 @@
-# marketplace
-This template is used by the Neo4j AWS Marketplace offer.  You can deploy it [here](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4).  It can also be useful to fork this repo and customize the template to meet your needs.
+# amazon-cloud-formation-neo4j
+This repo contains an Amazon CloudFormation Templates (CFT) that deploys Neo4j Enterprise Edition on AWS.   It is the template used in the [Neo4j Enterprise Edition AWS Marketplace listing](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4).  While deployable through the marketplace, it can also be useful to fork and customize the template to meet your needs.
 
 To deploy this template from the command line, follow these instructions.
 

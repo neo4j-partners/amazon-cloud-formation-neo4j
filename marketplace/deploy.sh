@@ -3,7 +3,7 @@
 STACK_NAME=$1
 TEMPLATE_BODY="file://neo4j.template.yaml"
 REGION="us-east-1"
-NumberOfServers=3
+Password="foobar123"
 
 aws cloudformation create-stack \
 --capabilities CAPABILITY_IAM \
@@ -11,4 +11,4 @@ aws cloudformation create-stack \
 --template-body $TEMPLATE_BODY \
 --region $REGION \
 --parameters \
-ParameterKey=NumberOfServers,ParameterValue=${NumberOfServers}
+ParameterKey=Password,ParameterValue=${Password}

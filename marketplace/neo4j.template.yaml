@@ -4,12 +4,15 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: "Infrastructure Configuration"
+          default: "Neo4j Configuration"
         Parameters:
+          - Password
           - NumberOfServers
           - InstanceType
           - DiskSize
     ParameterLabels:
+      Password:
+        default: Password
       NumberOfServers:
         default: Number of Servers
       InstanceType:
@@ -24,7 +27,6 @@ Parameters:
   Password:
     Description: Password for Neo4j
     Type: String
-    Default: "foobar123"
     MinLength: 8
   NumberOfServers:
     Description: Number of EC2 instances to deploy
@@ -270,10 +272,6 @@ Resources:
 
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
-    CreationPolicy:
-      ResourceSignal:
-        Count: !Ref NumberOfServers
-        Timeout: PT12M
     Properties:
       AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchTemplate:
@@ -326,12 +324,6 @@ Resources:
               - "set -euo pipefail\n"
               - "echo Running startup script...\n"
 
-              - "LicenseType=Enterprise\n"
-              - "\n"
-
-              - "installGraphDataScience=No\n"
-              - "installBloom=No\n"
-
               - "password=\""
               - Ref: Password
               - "\"\n"
@@ -355,30 +347,10 @@ Resources:
               - "install_neo4j_from_yum() {\n"
               - "  echo \"Installing Graph Database...\"\n"
               - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
-              - "  ASG_NAME=$(aws --region $region cloudformation describe-stack-resources --stack-name $stackName --query 'StackResources[?ResourceType==`AWS::AutoScaling::AutoScalingGroup` && LogicalResourceId==`Neo4jAutoScalingGroup`].PhysicalResourceId' --output text)\n"
-              - "  NEO4J_VERSION_ASG_TAG=$(aws --region $region autoscaling describe-auto-scaling-groups --auto-scaling-group-names $ASG_NAME --query 'AutoScalingGroups[0].Tags[?Key==`NEO4J_VERSION`].Value' --output text)\n"
-              - "  if [[ ! -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
-              - "    echo \"Found NEO4J_VERSION_ASG_TAG Tag on AutoScalingGroup $ASG_NAME: NEO4J_VERSION_ASG_TAG=$NEO4J_VERSION_ASG_TAG\"\n"
-              - "    PACKAGE_VERSION=$NEO4J_VERSION_ASG_TAG\n"
-              - "    local -r NEO4J_YUM_PACKAGE=\"neo4j-enterprise-$PACKAGE_VERSION\"\n"
-              - "  else\n"
-              - "    PACKAGE_VERSION=$(curl --fail http://versions.neo4j-templates.com/target.json | jq -r '.aws.\"latest\"' || echo \"\")\n"
-              - "    if [[ ! -z $PACKAGE_VERSION && $PACKAGE_VERSION != \"null\" ]]; then\n"
-              - "      echo \"Found PACKAGE_VERSION from http://versions.neo4j-templates.com : PACKAGE_VERSION=$PACKAGE_VERSION\"\n"
-              - "      local -r NEO4J_YUM_PACKAGE=\"neo4j-enterprise-$PACKAGE_VERSION\"\n"
-              - "    else\n"
-              - "      echo 'Failed to resolve Neo4j version from http://versions.neo4j-templates.com, using PACKAGE_VERSION=latest'\n"
-              - "      PACKAGE_VERSION=\"latest\"\n"
-              - "      local -r NEO4J_YUM_PACKAGE='neo4j-enterprise'\n"
-              - "    fi\n"
-              - "  fi\n"
-              - "  yum -y install \"${NEO4J_YUM_PACKAGE}\"\n"
+              - "  yum -y install neo4j-enterprise\n"
               - "  yum -y install aws-cfn-bootstrap\n"
               - "  yum update -y aws-cfn-bootstrap\n"
               - "  systemctl enable neo4j\n"
-              - "  if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
-              - "    PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version)\n"
-              - "  fi\n"
               - "}\n"
 
               - "extension_config() {\n"
@@ -436,28 +408,14 @@ Resources:
               - "  fi\n"
               - "}\n"
 
+              - "add_cypher_ip_blocklist() {\n"
+              - "  echo \"internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8\" >> /etc/neo4j/neo4j.conf\n"
+              - "}\n"
+
               - "start_neo4j() {\n"
               - "  echo \"Starting Neo4j...\"\n"
               - "  service neo4j start\n"
               - "  neo4j-admin dbms set-initial-password \"${password}\"\n"
-              - "  while [[ \"$(curl -s -o /dev/null -m 3 -L -w '%{http_code}' http://localhost:7474 )\" != \"200\" ]];\n"
-              - "    do echo \"Waiting for cluster to start\"\n"
-              - "    sleep 5\n"
-              - "  done\n"
-              - "}\n"
-
-              - "tag_asg_with_neo4j_version() {\n"
-              - "  if [[ -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
-              - "    echo \"Tagging AutoScalingGroup $ASG_NAME with Key NEO4J_VERSION and Value $PACKAGE_VERSION\"\n"
-              - "    aws --region $region autoscaling create-or-update-tags --tags ResourceId=$ASG_NAME,ResourceType=auto-scaling-group,Key=NEO4J_VERSION,Value=$PACKAGE_VERSION,PropagateAtLaunch=true\n"
-              - "  else\n"
-              - "    echo \"ASG is already tagged with NEO4J_VERSION\"\n"
-              - "  fi\n"
-              - "  /opt/aws/bin/cfn-signal -e $? --stack \"${stackName}\" --resource Neo4jAutoScalingGroup --region \"${region}\"\n"
-              - "}\n"
-
-              - "add_cypher_ip_blocklist() {\n"
-              - "  echo \"internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8\" >> /etc/neo4j/neo4j.conf\n"
               - "}\n"
 
               - "install_neo4j_from_yum\n"
@@ -465,7 +423,6 @@ Resources:
               - "build_neo4j_conf_file\n"
               - "add_cypher_ip_blocklist\n"
               - "start_neo4j\n"
-              - "tag_asg_with_neo4j_version\n"
 
   Neo4jInstanceProfile:
     Type: AWS::IAM::InstanceProfile

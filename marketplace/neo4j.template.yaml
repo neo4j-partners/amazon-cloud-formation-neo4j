@@ -36,8 +36,9 @@ Parameters:
   InstanceType:
     Description: EC2 instance type
     Type: String
-    Default: r8i.large
+    Default: t3.medium
     AllowedValues:
+    - t3.medium
     - r8i.large
     - r8i.xlarge
     - r8i.2xlarge
@@ -354,9 +355,6 @@ Resources:
               - "install_neo4j_from_yum() {\n"
               - "  echo \"Installing Graph Database...\"\n"
               - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
-              - "  if [[ \"$LicenseType\" == \"Evaluation\" ]]; then\n"
-              - "    export NEO4J_ACCEPT_LICENSE_AGREEMENT=eval\n"
-              - "  fi\n"
               - "  ASG_NAME=$(aws --region $region cloudformation describe-stack-resources --stack-name $stackName --query 'StackResources[?ResourceType==`AWS::AutoScaling::AutoScalingGroup` && LogicalResourceId==`Neo4jAutoScalingGroup`].PhysicalResourceId' --output text)\n"
               - "  NEO4J_VERSION_ASG_TAG=$(aws --region $region autoscaling describe-auto-scaling-groups --auto-scaling-group-names $ASG_NAME --query 'AutoScalingGroups[0].Tags[?Key==`NEO4J_VERSION`].Value' --output text)\n"
               - "  if [[ ! -z $NEO4J_VERSION_ASG_TAG ]]; then\n"
@@ -381,11 +379,6 @@ Resources:
               - "  if [[ \"$PACKAGE_VERSION\" == \"latest\" ]]; then\n"
               - "    PACKAGE_VERSION=$(/usr/share/neo4j/bin/neo4j --version)\n"
               - "  fi\n"
-              - "}\n"
-
-              - "install_apoc_plugin() {\n"
-              - "  echo \"Installing APOC...\"\n"
-              - "  mv /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins\n"
               - "}\n"
 
               - "extension_config() {\n"
@@ -443,34 +436,6 @@ Resources:
               - "  fi\n"
               - "}\n"
 
-              - "configure_graph_data_science() {\n"
-              - "  if [[ \"${installGraphDataScience}\" == Yes && \"${nodeCount}\" == 1 ]]; then\n"
-              - "    echo \"Installing Graph Data Science...\"\n"
-              - "    cp -p /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins\n"
-              - "  fi\n"
-              - "  if [[ $graphDataScienceLicenseKey != None ]]; then\n"
-              - "    echo \"Writing GDS license key...\"\n"
-              - "    mkdir -p /etc/neo4j/licenses\n"
-              - "    chown neo4j:neo4j /etc/neo4j/licenses\n"
-              - "    echo \"${graphDataScienceLicenseKey}\" > /etc/neo4j/licenses/neo4j-gds.license\n"
-              - "    sed -i '$a gds.enterprise.license_file=/etc/neo4j/licenses/neo4j-gds.license' /etc/neo4j/neo4j.conf\n"
-              - "  fi\n"
-              - "}\n"
-
-              - "configure_bloom() {\n"
-              - "  if [[ $installBloom == Yes ]]; then\n"
-              - "    echo \"Installing Bloom...\"\n"
-              - "    cp -p /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins\n"
-              - "  fi\n"
-              - "  if [[ $bloomLicenseKey != None ]]; then\n"
-              - "    echo \"Writing Bloom license key...\"\n"
-              - "    mkdir -p /etc/neo4j/licenses\n"
-              - "    chown neo4j:neo4j /etc/neo4j/licenses\n"
-              - "    echo \"${bloomLicenseKey}\" > /etc/neo4j/licenses/neo4j-bloom.license\n"
-              - "    sed -i '$a dbms.bloom.license_file=/etc/neo4j/licenses/neo4j-bloom.license' /etc/neo4j/neo4j.conf\n"
-              - "  fi\n"
-              - "}\n"
-
               - "start_neo4j() {\n"
               - "  echo \"Starting Neo4j...\"\n"
               - "  service neo4j start\n"
@@ -496,11 +461,8 @@ Resources:
               - "}\n"
 
               - "install_neo4j_from_yum\n"
-              - "install_apoc_plugin\n"
               - "extension_config\n"
               - "build_neo4j_conf_file\n"
-              - "configure_graph_data_science\n"
-              - "configure_bloom\n"
               - "add_cypher_ip_blocklist\n"
               - "start_neo4j\n"
               - "tag_asg_with_neo4j_version\n"

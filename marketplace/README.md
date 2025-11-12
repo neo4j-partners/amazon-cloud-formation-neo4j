@@ -1,13 +1,9 @@
 # marketplace
-This template is used by the Neo4j AWS Marketplace offer. 
+This template is used by the Neo4j AWS Marketplace offer.  You can deploy it [here](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4).  It can also be useful to fork this repo and customize the template to meet your needs.
 
-## Deploying through Marketplace
-The template is listed in the AWS Marketplace.  You can deploy it [here](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4).  It can also be useful to fork this repo and customize the template to meet your needs.
-
-## Deploying via the CLI
 To deploy this template from the command line, follow these instructions.
 
-### Environment Setup
+## Environment Setup
 First we need to install and configure the AWS CLI.  Follow the instructions Amazon provides [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).  Basically all you need to do is:
 
     curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
@@ -27,19 +23,19 @@ Then you'll want to clone this repo.  You can do that with the command:
     cd amazon-cloud-formation-neo4j
     cd marketplace
 
-### Creating a Stack
+## Creating a Stack
 The AWS word for a deployment is a stack.  [deploy.sh](deploy.sh) is a helper script to deploy a stack.  Take a look at it and modify any variables, then run it as:
 
     ./deploy.sh <STACK_NAME>
 
-When complete you can access the Neo4j console on port 7474 of any node.
+When complete you can access the Neo4j Browser at the Neo4jBrowserURL given in the stack outputs.
 
-### Deleting a Stack
+## Deleting a Stack
 To delete your deployment you can either run the command below or use the GUI in the web console [here](https://console.aws.amazon.com/cloudformation/home).
 
     aws cloudformation delete-stack --stack-name <STACK_NAME>
 
-### Debugging
+## Debugging
 If the Neo4j Browser isn't coming up, there's a good chance something isn't right in your deployment.  One thing to investigate is the cloud-init logs.  `/var/log/cloud-init-output.log` is probably the best starting point.  If that looks good, the next place to check out is `/var/log/neo4j/debug.log`.
 
 ## Updating the AMI

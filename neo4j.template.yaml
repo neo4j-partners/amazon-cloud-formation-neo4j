@@ -28,6 +28,7 @@ Parameters:
     Description: Password for Neo4j
     Type: String
     MinLength: 8
+    NoEcho: true
   NumberOfServers:
     Description: Number of EC2 instances to deploy
     Type: Number
@@ -533,6 +534,3 @@ Outputs:
   Username:
     Description: 'The username is neo4j.'
     Value: 'neo4j'
-  Password:
-    Description: 'The password was generated automatically.'
-    Value: !Ref Password

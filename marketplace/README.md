@@ -14,4 +14,7 @@ This seems to have changed --- We've been using the AMI builder with the [build.
 ## Updating the CFT
 With the AMI updated, you can update the CFT.  That is done by adding a new version in the portal.  You'll also need to update the ImageID parameter in the CFT.
 
-The IAM access role ARN should be set to the ARN for aws_marketplace_ami_ingestion.
+* AMI ID - Should be the AMI you made earlier.
+* IAM access role ARN - arn:aws:iam::385155106615:role/aws_marketplace_ami_ingestion
+* CloudFormation template linke - The form requires that the template be in S3.  You can upload it to https://us-east-1.console.aws.amazon.com/s3/buckets/neo4j-marketplace-templates?region=us-east-1&tab=objects
+* Architecture diagram link - While in this repo, it's also in a bucket here: https://awsmp-cf-af-612309067705-1556123774245.s3.us-east-1.amazonaws.com/69d11d88-b455-4cec-9daa-fa16dc86ff8b/69d11d88-b455-4cec-9daa-fa16dc86ff8b/513a3a85-20f7-4809-bb9f-aab293ce1e1d/712fd49d-894a-40bd-8f8d-ea99b87828b9/aws-3-instance-cluster.png

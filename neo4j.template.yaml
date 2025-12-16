@@ -355,8 +355,6 @@ Resources:
               - "gpgcheck=1\n\" > /etc/yum.repos.d/neo4j.repo\n"
               - "  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes\n"
               - "  yum -y install neo4j-enterprise\n"
-              - "  yum -y install aws-cfn-bootstrap\n"
-              - "  yum update -y aws-cfn-bootstrap\n"
               - "  systemctl enable neo4j\n"
               - "}\n"
 

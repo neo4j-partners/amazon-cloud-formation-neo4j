@@ -1,24 +1,17 @@
 # Marketplace
 These are instructions to update the marketplace listing.  Unless you are a Neo4j employee doing so, you should not need to do any of this.
 
+## Updating the Listing
+The listing is managed in the portal [here](https://aws.amazon.com/marketplace/management/products/server).  You can update listing copy in that portal.
+
 ## Updating the AMI
-If you're a Neo4j employee updating the AWS Marketplace listing, you're first going to have to get a new AMI ID.  First off, make extra special sure you do this work in the AWS account associated with our publisher.  It's seems AMI sharing across accounts has bugs, so you want to avoid needing to use that. 
+The CFT depends on an AMI.  That AMI should be updated regularly to bring on patches.
 
-We've been using the AMI builder with the [build.sh](build.sh) script in this directory.  Marketplace has a requirement to disable password access to Marketplace VMs even though the platform images have it enabled.  The builder creates an AMI in a special builder account.  We've had to then copy that AMI to the publisher account manually because something in the Marketplace pipeline is broken.  This process seems like it's changing daily, so it's probably best to check with the AWS Marketplace operations people as you work through the process.
+First off, login to the [AWS console in us-east-1](https://us-east-1.console.aws.amazon.com/console/home).  Make you are in the neo4j-marketplace account.  If you're not in the right account and region the AMI won't be visible to the MP publishing pipeline.
 
-You'll then want to take the AMI ID from that and stuff it both into the CFT and the product load form.  In addition, login to [Marketplace Portal](https://aws.amazon.com/marketplace/management/manage-products/?#/share) and add the AMI.
+This seems to have changed --- We've been using the AMI builder with the [build.sh](build.sh) script in this directory.  Marketplace has a requirement to disable password access to Marketplace VMs even though the platform images have it enabled.  The builder creates an AMI in a special builder account.  We've had to then copy that AMI to the publisher account manually because something in the Marketplace pipeline is broken.  This process seems like it's changing daily, so it's probably best to check with the AWS Marketplace operations people as you work through the process.
 
-## Updating the Marketplace Listing
-The listing is managed in the portal [here](Once the product load form is all up to date, you'll just need to resubmit it in the portal [here](https://aws.amazon.com/marketplace/management/products/server).
+## Updating the CFT
+With the AMI updated, you can update the CFT.  That is done by adding a new version in the portal.  You'll also need to update the ImageID parameter in the CFT.
 
-
-
-
-
-CFT deploys in AWS Marketplace aren't self service.  At some point that might change.  So, next up is updating the product load form.  That's stored [here](https://docs.google.com/spreadsheets/d/1Nmpw3etZX7xj6nQgS5w3K2B-i0gJevdQ/edit?usp=sharing&ouid=115505246243451814800&rtpof=true&sd=true).  Note that AWS will almost certainly continue to rev the product load form.  So, you might periodically be forced to grab a new copy from to publisher portal.
-
-You'll defintely want to update the version ID in the product load form.  You will need to update the AMI ID as well, if you built a new one.
-
-Once the product load form is all up to date, you'll just need to resubmit it in the portal [here](https://aws.amazon.com/marketplace/management/products/server).
-
-There is currently no API for any of this, so the process has to be manual.  If we didn't have a CFT we could automate.
+The IAM access role ARN should be set to the ARN for aws_marketplace_ami_ingestion.

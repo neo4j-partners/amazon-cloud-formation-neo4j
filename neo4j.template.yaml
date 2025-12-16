@@ -4,6 +4,10 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
+          default: "AWS Marketplace Parameters"
+        Parameters:
+          - ImageId
+      - Label:
           default: "Neo4j Configuration"
         Parameters:
           - Password
@@ -11,6 +15,8 @@ Metadata:
           - InstanceType
           - DiskSize
     ParameterLabels:
+      ImageId:
+        default: Image ID
       Password:
         default: Password
       NumberOfServers:
@@ -23,7 +29,7 @@ Metadata:
 Parameters:
   ImageId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/marketplace/prod-vwigx4rbvvb5s/2025.x
+    Default: /aws/service/marketplace/prod-vwigx4rbvvb5s/2025.12.0
   Password:
     Description: Password for Neo4j
     Type: String

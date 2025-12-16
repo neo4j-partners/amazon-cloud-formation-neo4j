@@ -45,7 +45,7 @@ Parameters:
   InstanceType:
     Description: EC2 instance type
     Type: String
-    Default: t3.medium
+    Default: r8i.xlarge
     AllowedValues:
     - t3.medium
     - r8i.large

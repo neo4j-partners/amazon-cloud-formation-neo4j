@@ -16,5 +16,5 @@ With the AMI updated, you can update the CFT.  That is done by adding a new vers
 
 * AMI ID - Should be the AMI you made earlier.
 * IAM access role ARN - arn:aws:iam::385155106615:role/aws_marketplace_ami_ingestion
-* CloudFormation template linke - The form requires that the template be in S3.  You can upload it to https://us-east-1.console.aws.amazon.com/s3/buckets/neo4j-marketplace-templates?region=us-east-1&tab=objects
-* Architecture diagram link - While in this repo, it's also in a bucket here: https://awsmp-cf-af-612309067705-1556123774245.s3.us-east-1.amazonaws.com/69d11d88-b455-4cec-9daa-fa16dc86ff8b/69d11d88-b455-4cec-9daa-fa16dc86ff8b/513a3a85-20f7-4809-bb9f-aab293ce1e1d/712fd49d-894a-40bd-8f8d-ea99b87828b9/aws-3-instance-cluster.png
+* CloudFormation template link - The form requires that the template be in S3.  You can upload it to https://marketplace-neo4j-enterprise-edition.s3.us-east-1.amazonaws.com/neo4j.template.yaml
+* Architecture diagram link - While in this repo, it's also in a bucket here: https://marketplace-neo4j-enterprise-edition.s3.us-east-1.amazonaws.com/arch.png

@@ -5,9 +5,7 @@ These are instructions to update the marketplace listing.  Unless you are a Neo4
 The listing is managed in the portal [here](https://aws.amazon.com/marketplace/management/products/server).  You can update listing copy in that portal.
 
 ## Updating the AMI
-The CFT depends on an AMI.  That AMI should be updated regularly to bring on patches.
-
-We could use the EC2 Image Builder for this.  However, it is very heavyweight for what we need.
+The CFT depends on an AMI.  That AMI should be updated regularly to bring on patches.  We could use the EC2 Image Builder for this.  However, it is very heavyweight for what we need.  Instead, we're building manually.
 
 Login to the [AWS console in us-east-1](https://us-east-1.console.aws.amazon.com/console/home).  Make you are in the neo4j-marketplace account.  If you're not in the right account and region the AMI won't be visible to the MP publishing pipeline.
 
@@ -15,6 +13,8 @@ Login to the [AWS console in us-east-1](https://us-east-1.console.aws.amazon.com
 2. Login
 3. Run build.sh
 4. Select Create AMI
+
+Make a note of the AMI ID as you'll need it for the next step.
 
 ## Updating the CFT
 With the AMI updated, you can update the CFT.  That is done by adding a new version in the portal.  You'll also need to update the ImageID parameter in the CFT.

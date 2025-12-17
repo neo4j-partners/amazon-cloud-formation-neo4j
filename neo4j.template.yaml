@@ -469,13 +469,9 @@ Resources:
   Neo4jExternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Enable SSH and Neo4j External Ports
+      GroupDescription: Enable Neo4j External Ports
       VpcId: !Ref Neo4jVPC
       SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: 7474
           ToPort: 7474

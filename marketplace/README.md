@@ -2,7 +2,7 @@
 These are instructions to update the marketplace listing.  Unless you are a Neo4j employee doing so, you should not need to do any of this.
 
 ## Updating the Listing
-The listing is managed in the portal [here](https://aws.amazon.com/marketplace/management/products/server).  You can update listing copy in that portal.
+The listing is managed in Partner Central.
 
 ## Updating the AMI
 The CFT depends on an AMI.  That AMI should be updated regularly to bring on patches.  We could use the EC2 Image Builder for this.  However, it is very heavyweight for what we need.  Instead, we're building manually.
@@ -21,5 +21,9 @@ With the AMI updated, you can update the CFT.  That is done by adding a new vers
 
 * AMI ID - Should be the AMI you made earlier.
 * IAM access role ARN - arn:aws:iam::385155106615:role/aws_marketplace_ami_ingestion
-* CloudFormation template link - The form requires that the template be in S3.  You can upload it to https://marketplace-neo4j-enterprise-edition.s3.us-east-1.amazonaws.com/neo4j.template.yaml
-* Architecture diagram link - While in this repo, it's also in a bucket here: https://marketplace-neo4j-enterprise-edition.s3.us-east-1.amazonaws.com/arch.png
+* CloudFormation template link - The form requires that the template be in S3.  You can upload it to 
+  * https://marketplace-neo4j-community-edition.s3.us-east-1.amazonaws.com/neo4j-ce.template.yaml
+  * https://marketplace-neo4j-enterprise-edition.s3.us-east-1.amazonaws.com/neo4j-ee.template.yaml
+* Architecture diagram link - While in this repo, it's also in a bucket here: 
+  * https://marketplace-neo4j-community-edition.s3.us-east-1.amazonaws.com/arch.png
+  * https://marketplace-neo4j-enterprise-edition.s3.us-east-1.amazonaws.com/arch.png

@@ -1,5 +1,5 @@
 # amazon-cloud-formation-neo4j
-This repo contains an Amazon CloudFormation Templates (CFT) that deploys Neo4j Enterprise Edition on AWS.   It is the template used in the [Neo4j Enterprise Edition AWS Marketplace listing](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4).  While deployable through the marketplace, it can also be useful to fork and customize the template to meet your needs.
+This repo contains an Amazon CloudFormation Templates (CFT) that deploys Neo4j on AWS.  There are templates for Enterprise Edition (EE) and Community Edition (CE). These templates are used in the [Neo4j Enterprise Edition AWS Marketplace listing](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4) and the Neo4j Community Edition AWS Marketplace Listing.  While deployable through the marketplace, it can also be useful to fork and customize the template to meet your needs.
 
 To deploy this template from the command line, follow these instructions.
 
@@ -23,7 +23,7 @@ Then you'll want to clone this repo.  You can do that with the command:
     cd amazon-cloud-formation-neo4j
 
 ## Creating a Stack
-The AWS word for a deployment is a stack.  [deploy.sh](deploy.sh) is a helper script to deploy a stack.  Take a look at it and modify any variables, then run it as:
+The AWS word for a deployment is a stack.  [deploy.sh](deploy.sh) is a helper script to deploy a stack.  Pick whether you would like EE or CE.  cd into the appropriate directory.  Then take a look at it and modify any variables, then run it as:
 
     ./deploy.sh <STACK_NAME>
 

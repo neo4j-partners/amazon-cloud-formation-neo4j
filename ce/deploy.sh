@@ -1,7 +1,7 @@
 #!/bin/bash
 
 STACK_NAME=$1
-TEMPLATE_BODY="file://neo4j-ee.template.yaml"
+TEMPLATE_BODY="file://neo4j-ce.template.yaml"
 REGION="us-east-1"
 Password="foobar123"
 

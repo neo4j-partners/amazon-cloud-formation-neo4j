@@ -1,2 +1,477 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Neo4j Community Edition
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "AWS Marketplace Parameters"
+        Parameters:
+          - ImageId
+      - Label:
+          default: "Neo4j Configuration"
+        Parameters:
+          - Password
+          - InstanceType
+          - DiskSize
+          - InstallAPOC
+    ParameterLabels:
+      ImageId:
+        default: Image ID
+      Password:
+        default: Password
+      InstanceType:
+        default: Instance Type
+      DiskSize:
+        default: Disk Size
+      InstallAPOC:
+        default: Install APOC Plugin
+
+Parameters:
+  ImageId:
+    Description: Neo4j Community Edition Marketplace AMI
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    # TODO: Replace prod-XXXXX with the actual Marketplace product code once the listing is created.
+    Default: /aws/service/marketplace/prod-XXXXX/2025.12.0
+
+  Password:
+    Description: >
+      Password for the neo4j admin user. Minimum 8 characters.
+    Type: String
+    MinLength: 8
+    NoEcho: true
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      # Burstable — dev, testing, learning
+      - t3.medium       # 2 vCPU,   4 GB
+      - t3.large        # 2 vCPU,   8 GB
+      - t3.xlarge       # 4 vCPU,  16 GB
+      - t3.2xlarge      # 8 vCPU,  32 GB
+      # General purpose (AMD gen 6) — steady production workloads
+      - m6a.large       # 2 vCPU,   8 GB
+      - m6a.xlarge      # 4 vCPU,  16 GB
+      - m6a.2xlarge     # 8 vCPU,  32 GB
+      # Memory optimized (AMD gen 6) — large graph production workloads
+      - r6a.large       # 2 vCPU,  16 GB
+      - r6a.xlarge      # 4 vCPU,  32 GB
+      - r6a.2xlarge     # 8 vCPU,  64 GB
+
+  DiskSize:
+    Description: Size in GB of the EBS volume
+    Type: Number
+    Default: 30
+    MinValue: 10
+
+  InstallAPOC:
+    Description: Whether to install the APOC plugin
+    Type: String
+    Default: "yes"
+    AllowedValues:
+      - "yes"
+      - "no"
+
+# =============================================================================
+# Resources
+#
+# ~15 resources total (down from 26 in the EE template):
+#   - Single subnet (no clustering, so no Subnet2/Subnet3)
+#   - Single security group (no internal cluster ports)
+#   - ASG fixed at 1 instance
+#   - No IAM policies needed (no ASG peer discovery)
+# =============================================================================
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # Networking — VPC, Subnet, Route Table, Internet Gateway
+  # ---------------------------------------------------------------------------
+
+  Neo4jVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRoute:
+    Type: AWS::EC2::Route
+    # The route must wait for the IGW to be attached to the VPC.
+    DependsOn: Neo4jInternetGatewayAttachment
+    Properties:
+      GatewayId: !Ref Neo4jInternetGateway
+      RouteTableId: !Ref Neo4jRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  Neo4jSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet1
+
+  Neo4jInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref Neo4jInternetGateway
+      VpcId: !Ref Neo4jVPC
+
+  # ---------------------------------------------------------------------------
+  # Load Balancing — Network Load Balancer, Listeners, Target Groups
+  # ---------------------------------------------------------------------------
+
+  Neo4jNetworkLoadBalancer:
+    # The NLB must wait for the IGW attachment so it can resolve its public DNS.
+    DependsOn: Neo4jInternetGatewayAttachment
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      # Name is intentionally omitted — CloudFormation generates a unique physical ID.
+      # NLB names have a 32-char max; a hardcoded ${StackName}-nlb would fail for
+      # stack names longer than 28 characters.
+      Scheme: internet-facing
+      Subnets:
+        - !Ref Neo4jSubnet1
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      Type: network
+
+  Neo4jHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7474
+      Protocol: TCP
+
+  Neo4jBoltListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jBoltTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7687
+      Protocol: TCP
+
+  Neo4jHTTPTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      # Name intentionally omitted — target group names have a 32-char max.
+      # CloudFormation auto-generates a unique physical ID from the logical ID.
+      Port: 7474
+      Protocol: TCP
+      TargetType: instance
+      HealthCheckIntervalSeconds: 10
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jBoltTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      # Name intentionally omitted — see note on Neo4jHTTPTargetGroup.
+      Port: 7687
+      Protocol: TCP
+      TargetType: instance
+      HealthCheckIntervalSeconds: 10
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  # ---------------------------------------------------------------------------
+  # Compute — Auto Scaling Group and Launch Template
+  #
+  # ASG is fixed at 1 instance. Marketplace recommends ASG even for
+  # single-instance products for automatic replacement on failure.
+  # ---------------------------------------------------------------------------
+
+  Neo4jAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      # Use ELB health checks so the ASG replaces instances that stop responding
+      # on ports 7474/7687 (not just EC2 system-level checks).
+      HealthCheckType: ELB
+      # Give Neo4j 120s to start before the ASG marks the instance unhealthy.
+      # neo4j-admin set-initial-password + systemctl start typically takes 15-30s,
+      # but memory-recommendation and APOC setup add time on larger instances.
+      HealthCheckGracePeriod: 120
+      VPCZoneIdentifier:
+        - !Ref Neo4jSubnet1
+      TargetGroupARNs:
+        - !Ref Neo4jHTTPTargetGroup
+        - !Ref Neo4jBoltTargetGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        # TODO: ImageId resolves via SSM. Replace the prod-XXXXX placeholder in the
+        # ImageId parameter default once the Marketplace listing is created.
+        ImageId: !Ref ImageId
+        InstanceType: !Ref InstanceType
+        SecurityGroupIds:
+          - !Ref Neo4jExternalSecurityGroup
+        EbsOptimized: true
+        IamInstanceProfile:
+          Arn: !GetAtt Neo4jInstanceProfile.Arn
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: !Ref DiskSize
+              VolumeType: gp3
+              Encrypted: true
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+        UserData:
+          Fn::Base64:
+            Fn::Sub: |
+              #!/bin/bash
+              set -euo pipefail
+              echo "Running Neo4j Community Edition startup script..."
+
+              # ---------------------------------------------------------------
+              # Variables injected by CloudFormation
+              # ---------------------------------------------------------------
+              password="${Password}"
+              loadBalancerDNSName="${Neo4jNetworkLoadBalancer.DNSName}"
+              installAPOC="${InstallAPOC}"
+
+              # ---------------------------------------------------------------
+              # Install APOC plugin (optional)
+              #
+              # APOC is bundled with Neo4j but must be moved to the plugins
+              # directory to activate. The jar location varies by Neo4j version:
+              #   - 2025.01+: /var/lib/neo4j/products/
+              #   - Earlier:  /var/lib/neo4j/labs/
+              # ---------------------------------------------------------------
+              if [ "${!installAPOC}" == "yes" ]; then
+                echo "Installing APOC plugin..."
+                cp /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || \
+                  cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true
+                echo "dbms.security.procedures.allowlist=apoc.*" >> /etc/neo4j/neo4j.conf
+              fi
+
+              # ---------------------------------------------------------------
+              # Configure network
+              #
+              # Bind to 0.0.0.0 so the NLB health checks and client connections
+              # work. Advertise the NLB DNS name so drivers/browsers connect via
+              # the stable endpoint rather than a private IP.
+              # ---------------------------------------------------------------
+              echo "Configuring network in neo4j.conf..."
+              sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf
+              sed -i "s/#server.default_advertised_address=localhost/server.default_advertised_address=${!loadBalancerDNSName}/g" /etc/neo4j/neo4j.conf
+              sed -i 's/#server.bolt.listen_address=:7687/server.bolt.listen_address=0.0.0.0:7687/g' /etc/neo4j/neo4j.conf
+              sed -i "s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=${!loadBalancerDNSName}:7687/g" /etc/neo4j/neo4j.conf
+              sed -i 's/#server.http.listen_address=:7474/server.http.listen_address=0.0.0.0:7474/g' /etc/neo4j/neo4j.conf
+              sed -i "s/#server.http.advertised_address=:7474/server.http.advertised_address=${!loadBalancerDNSName}:7474/g" /etc/neo4j/neo4j.conf
+
+              # ---------------------------------------------------------------
+              # Configure memory
+              #
+              # neo4j-admin server memory-recommendation inspects available
+              # system RAM and writes appropriate heap and page cache settings.
+              # ---------------------------------------------------------------
+              echo "Configuring memory..."
+              neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
+
+              # ---------------------------------------------------------------
+              # Enable metrics
+              # ---------------------------------------------------------------
+              echo "Enabling metrics..."
+              echo "server.metrics.enabled=true" >> /etc/neo4j/neo4j.conf
+              echo "server.metrics.jmx.enabled=true" >> /etc/neo4j/neo4j.conf
+              echo "server.metrics.prefix=neo4j" >> /etc/neo4j/neo4j.conf
+              echo "server.metrics.filter=*" >> /etc/neo4j/neo4j.conf
+              echo "server.metrics.csv.interval=5s" >> /etc/neo4j/neo4j.conf
+
+              # ---------------------------------------------------------------
+              # Cypher IP blocklist
+              #
+              # Prevent Cypher queries from reaching internal AWS infrastructure
+              # (VPC ranges, link-local/IMDS, IPv6 private ranges).
+              # ---------------------------------------------------------------
+              echo "Configuring Cypher IP blocklist..."
+              echo "internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8" >> /etc/neo4j/neo4j.conf
+
+              # ---------------------------------------------------------------
+              # Set admin password and start Neo4j
+              #
+              # Password is set before starting so the default password is
+              # never active on the network.
+              # ---------------------------------------------------------------
+              echo "Setting initial password..."
+              neo4j-admin dbms set-initial-password "${!password}"
+
+              echo "Starting Neo4j..."
+              systemctl start neo4j
+              echo "Neo4j Community Edition startup complete."
+
+  # ---------------------------------------------------------------------------
+  # IAM — Instance Profile and Role
+  #
+  # CE does not need ASG peer-discovery permissions (no clustering). The role
+  # is present so the instance profile exists — add policies here if future
+  # requirements arise (e.g. CloudWatch agent, SSM Session Manager).
+  # ---------------------------------------------------------------------------
+
+  Neo4jInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref Neo4jRole
+
+  Neo4jRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
+  # Security — Security Group
+  #
+  # Ports 7474 (HTTP/Browser) and 7687 (Bolt) only. No internal cluster ports
+  # needed for CE. Post-deployment hardening: restrict CIDRs from 0.0.0.0/0
+  # to your IP ranges, and enable HTTPS (7473) once TLS is configured.
+  # ---------------------------------------------------------------------------
+
+  Neo4jExternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Neo4j HTTP (7474) and Bolt (7687) access
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 7474
+          ToPort: 7474
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+# =============================================================================
+# Outputs
+# =============================================================================
+Outputs:
+  Neo4jBrowserURL:
+    Description: URL for Neo4j Browser
+    Value: !Sub "http://${Neo4jNetworkLoadBalancer.DNSName}:7474"
+  Neo4jURI:
+    Description: Neo4j Bolt connection URI
+    Value: !Sub "neo4j://${Neo4jNetworkLoadBalancer.DNSName}:7687"
+  Username:
+    Description: The username is neo4j.
+    Value: neo4j
+  Edition:
+    Description: Neo4j edition deployed
+    Value: Community Edition (GPLv3)

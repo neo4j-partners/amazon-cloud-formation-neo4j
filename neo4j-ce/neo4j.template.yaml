@@ -410,17 +410,6 @@ Resources:
                 neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
 
                 # ---------------------------------------------------------------
-                # Enable metrics (CSV + JMX)
-                #
-                # Only settings valid for Community Edition are used here.
-                # Graphite/Prometheus exporters require Enterprise Edition.
-                # ---------------------------------------------------------------
-                echo "Enabling metrics..."
-                echo "server.metrics.csv.enabled=true" >> /etc/neo4j/neo4j.conf
-                echo "server.metrics.csv.interval=5s" >> /etc/neo4j/neo4j.conf
-                echo "server.metrics.jmx.enabled=true" >> /etc/neo4j/neo4j.conf
-
-                # ---------------------------------------------------------------
                 # Cypher IP blocklist
                 #
                 # Prevent Cypher queries from reaching internal AWS infrastructure

@@ -81,7 +81,7 @@ Parameters:
 #   - Single subnet (no clustering, so no Subnet2/Subnet3)
 #   - Single security group (no internal cluster ports)
 #   - ASG fixed at 1 instance
-#   - No IAM policies needed (no ASG peer discovery)
+#   - Minimal IAM policy (cfn-signal only, no ASG peer discovery)
 # =============================================================================
 Resources:
 
@@ -258,6 +258,16 @@ Resources:
 
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT10M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: 1
+        MinInstancesInService: 0
+        WaitOnResourceSignals: true
+        PauseTime: PT10M
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref Neo4jLaunchTemplate
@@ -315,20 +325,50 @@ Resources:
             Fn::Sub:
               - |
                 #!/bin/bash
+                exec > >(tee /var/log/neo4j-userdata.log) 2>&1
                 set -euo pipefail
                 echo "Running Neo4j Community Edition startup script..."
+
+                # ---------------------------------------------------------------
+                # Signal helper — notify CloudFormation of success or failure
+                #
+                # Uses the AWS CLI (pre-installed on Amazon Linux 2023) to call
+                # cloudformation:SignalResource via IMDSv2 for the instance ID.
+                # The ERR trap ensures failure is reported if any command exits
+                # non-zero (due to set -e).
+                # ---------------------------------------------------------------
+                signal_cfn() {
+                  local status="$1"
+                  TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+                    -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+                  INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+                    http://169.254.169.254/latest/meta-data/instance-id)
+                  aws cloudformation signal-resource \
+                    --stack-name "${STACK_NAME}" \
+                    --logical-resource-id Neo4jAutoScalingGroup \
+                    --unique-id "$INSTANCE_ID" \
+                    --status "$status" \
+                    --region "${REGION}" 2>/dev/null || true
+                }
+                trap 'signal_cfn FAILURE' ERR
 
                 # ---------------------------------------------------------------
                 # Stop Neo4j if it auto-started
                 #
                 # The AMI has "systemctl enable neo4j", so systemd may start
                 # Neo4j before this UserData script runs. We must stop it and
-                # clear any auto-created auth state so set-initial-password
-                # works. All configuration must happen before the first real
-                # start.
+                # delete the system database (which holds auth in Neo4j 2025+)
+                # so set-initial-password works. All configuration must happen
+                # before the first real start.
                 # ---------------------------------------------------------------
                 systemctl stop neo4j 2>/dev/null || true
-                rm -rf /var/lib/neo4j/data/dbms/auth.db 2>/dev/null || true
+                # Clear all auth state so set-initial-password works cleanly:
+                #   - data/dbms/       auth.ini (consumed on first start)
+                #   - databases/system/ system database (stores auth after first start)
+                #   - transactions/system/ system database transaction logs
+                rm -rf /var/lib/neo4j/data/dbms/ 2>/dev/null || true
+                rm -rf /var/lib/neo4j/data/databases/system/ 2>/dev/null || true
+                rm -rf /var/lib/neo4j/data/transactions/system/ 2>/dev/null || true
 
                 # ---------------------------------------------------------------
                 # Install APOC plugin (optional)
@@ -370,14 +410,15 @@ Resources:
                 neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
 
                 # ---------------------------------------------------------------
-                # Enable metrics
+                # Enable metrics (CSV + JMX)
+                #
+                # Only settings valid for Community Edition are used here.
+                # Graphite/Prometheus exporters require Enterprise Edition.
                 # ---------------------------------------------------------------
                 echo "Enabling metrics..."
-                echo "server.metrics.enabled=true" >> /etc/neo4j/neo4j.conf
-                echo "server.metrics.jmx.enabled=true" >> /etc/neo4j/neo4j.conf
-                echo "server.metrics.prefix=neo4j" >> /etc/neo4j/neo4j.conf
-                echo "server.metrics.filter=*" >> /etc/neo4j/neo4j.conf
+                echo "server.metrics.csv.enabled=true" >> /etc/neo4j/neo4j.conf
                 echo "server.metrics.csv.interval=5s" >> /etc/neo4j/neo4j.conf
+                echo "server.metrics.jmx.enabled=true" >> /etc/neo4j/neo4j.conf
 
                 # ---------------------------------------------------------------
                 # Cypher IP blocklist
@@ -399,6 +440,8 @@ Resources:
 
                 echo "Starting Neo4j..."
                 systemctl start neo4j
+
+                signal_cfn SUCCESS
                 echo "Neo4j Community Edition startup complete."
               # Variable map: Fn::Sub resolves these names in the script above.
               # Using the two-argument form avoids bash escaping issues — see
@@ -406,13 +449,15 @@ Resources:
               - NEO4J_PASSWORD: !Ref Password
                 NLB_DNS: !GetAtt Neo4jNetworkLoadBalancer.DNSName
                 APOC: !Ref InstallAPOC
+                STACK_NAME: !Ref 'AWS::StackName'
+                REGION: !Ref 'AWS::Region'
 
   # ---------------------------------------------------------------------------
   # IAM — Instance Profile and Role
   #
   # CE does not need ASG peer-discovery permissions (no clustering). The role
-  # is present so the instance profile exists — add policies here if future
-  # requirements arise (e.g. CloudWatch agent, SSM Session Manager).
+  # grants cloudformation:SignalResource so UserData can report success/failure
+  # back to the CreationPolicy on the ASG.
   # ---------------------------------------------------------------------------
 
   Neo4jInstanceProfile:
@@ -433,6 +478,15 @@ Resources:
                 - ec2.amazonaws.com
             Action:
               - sts:AssumeRole
+      Policies:
+        - PolicyName: Neo4jCFNSignal
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:SignalResource
+                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'

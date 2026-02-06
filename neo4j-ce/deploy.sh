@@ -65,6 +65,7 @@ aws cloudformation create-stack \
   --stack-name "$STACK_NAME" \
   --template-body "$TEMPLATE_BODY" \
   --region "$REGION" \
+  --disable-rollback \
   --parameters $PARAMS
 
 echo "Waiting for stack to complete (this takes a few minutes)..."

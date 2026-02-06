@@ -74,6 +74,8 @@ aws cloudformation wait stack-create-complete \
 
 echo "Stack created. Writing outputs to stack-outputs.txt..."
 OUTPUTS_FILE="${SCRIPT_DIR}/stack-outputs.txt"
+
+# CloudFormation outputs
 aws cloudformation describe-stacks \
   --stack-name "$STACK_NAME" \
   --region "$REGION" \
@@ -82,9 +84,18 @@ aws cloudformation describe-stacks \
     printf "%-20s = %s\n" "$key" "$value"
   done | tee "${OUTPUTS_FILE}"
 
+# Deploy context (values not in CloudFormation outputs)
+{
+  printf "%-20s = %s\n" "StackName" "$STACK_NAME"
+  printf "%-20s = %s\n" "Region" "$REGION"
+  printf "%-20s = %s\n" "Password" "$Password"
+  printf "%-20s = %s\n" "InstallAPOC" "$InstallAPOC"
+  printf "%-20s = %s\n" "SSMParamPath" "$SSM_PARAM_PATH"
+  printf "%-20s = %s\n" "AmiId" "$AMI_ID"
+} | tee -a "${OUTPUTS_FILE}"
+
 echo ""
 echo "Outputs saved to ${OUTPUTS_FILE}"
 echo ""
-echo "Note: SSM parameter ${SSM_PARAM_PATH} was created for this deploy."
-echo "It will be needed if the stack is updated. To clean up after deleting the stack:"
-echo "  aws ssm delete-parameter --region ${REGION} --name ${SSM_PARAM_PATH}"
+echo "To test:     ./test-stack.sh"
+echo "To tear down: ./teardown.sh"

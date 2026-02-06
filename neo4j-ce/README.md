@@ -37,19 +37,25 @@ The script reads the AMI ID from `marketplace/ami-id.txt` automatically. You can
 ./deploy.sh <stack-name> ami-089ef8c9f4da68869
 ```
 
-The script waits for the stack to complete, then writes connection details to `stack-outputs.txt`:
+The script waits for the stack to complete, then writes connection details and deploy context to `stack-outputs.txt`.
 
-```
-Neo4jBrowserURL = http://<NLB-DNS>:7474
-Neo4jURI        = neo4j://<NLB-DNS>:7687
-Username        = neo4j
-```
-
-### 4. Tear Down
+### 4. Test the Stack
 
 ```bash
-aws cloudformation delete-stack --stack-name <stack-name> --region us-east-1
+./test-stack.sh
 ```
+
+Requires `cypher-shell` installed locally. The script reads `stack-outputs.txt` (written by `deploy.sh`), waits for the NLB endpoint to become reachable, then runs HTTP, authentication, Bolt, and APOC tests.
+
+To override the password: `./test-stack.sh --password <password>`
+
+### 5. Tear Down
+
+```bash
+./teardown.sh
+```
+
+Deletes the CloudFormation stack, the SSM parameter created by `deploy.sh`, and removes `stack-outputs.txt`.
 
 ## What Gets Deployed
 
@@ -65,6 +71,8 @@ aws cloudformation delete-stack --stack-name <stack-name> --region us-east-1
 |---|---|
 | `neo4j.template.yaml` | CloudFormation template |
 | `deploy.sh` | Local deploy helper — creates stack, waits, writes outputs |
+| `test-stack.sh` | Validates a deployed stack (HTTP, Bolt, auth, APOC) |
+| `teardown.sh` | Deletes the stack, SSM parameter, and local outputs |
 | `marketplace/` | AMI build scripts and Marketplace publishing instructions |
 | `marketplace/ami-id.txt` | AMI ID from last build (gitignored) |
-| `stack-outputs.txt` | Connection details from last deploy (gitignored) |
+| `stack-outputs.txt` | Connection details and deploy context from last deploy (gitignored) |

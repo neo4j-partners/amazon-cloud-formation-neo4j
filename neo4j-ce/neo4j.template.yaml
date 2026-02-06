@@ -312,88 +312,100 @@ Resources:
           HttpEndpoint: enabled
         UserData:
           Fn::Base64:
-            Fn::Sub: |
-              #!/bin/bash
-              set -euo pipefail
-              echo "Running Neo4j Community Edition startup script..."
+            Fn::Sub:
+              - |
+                #!/bin/bash
+                set -euo pipefail
+                echo "Running Neo4j Community Edition startup script..."
 
-              # ---------------------------------------------------------------
-              # Variables injected by CloudFormation
-              # ---------------------------------------------------------------
-              password="${Password}"
-              loadBalancerDNSName="${Neo4jNetworkLoadBalancer.DNSName}"
-              installAPOC="${InstallAPOC}"
+                # ---------------------------------------------------------------
+                # Stop Neo4j if it auto-started
+                #
+                # The AMI has "systemctl enable neo4j", so systemd may start
+                # Neo4j before this UserData script runs. We must stop it and
+                # clear any auto-created auth state so set-initial-password
+                # works. All configuration must happen before the first real
+                # start.
+                # ---------------------------------------------------------------
+                systemctl stop neo4j 2>/dev/null || true
+                rm -rf /var/lib/neo4j/data/dbms/auth.db 2>/dev/null || true
 
-              # ---------------------------------------------------------------
-              # Install APOC plugin (optional)
-              #
-              # APOC is bundled with Neo4j but must be moved to the plugins
-              # directory to activate. The jar location varies by Neo4j version:
-              #   - 2025.01+: /var/lib/neo4j/products/
-              #   - Earlier:  /var/lib/neo4j/labs/
-              # ---------------------------------------------------------------
-              if [ "${!installAPOC}" == "yes" ]; then
-                echo "Installing APOC plugin..."
-                cp /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || \
-                  cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true
-                echo "dbms.security.procedures.allowlist=apoc.*" >> /etc/neo4j/neo4j.conf
-              fi
+                # ---------------------------------------------------------------
+                # Install APOC plugin (optional)
+                #
+                # APOC is bundled with Neo4j but must be moved to the plugins
+                # directory to activate. The jar location varies by Neo4j version:
+                #   - 2025.01+: /var/lib/neo4j/products/
+                #   - Earlier:  /var/lib/neo4j/labs/
+                # ---------------------------------------------------------------
+                if [ "${APOC}" == "yes" ]; then
+                  echo "Installing APOC plugin..."
+                  cp /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || \
+                    cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true
+                  echo "dbms.security.procedures.allowlist=apoc.*" >> /etc/neo4j/neo4j.conf
+                fi
 
-              # ---------------------------------------------------------------
-              # Configure network
-              #
-              # Bind to 0.0.0.0 so the NLB health checks and client connections
-              # work. Advertise the NLB DNS name so drivers/browsers connect via
-              # the stable endpoint rather than a private IP.
-              # ---------------------------------------------------------------
-              echo "Configuring network in neo4j.conf..."
-              sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf
-              sed -i "s/#server.default_advertised_address=localhost/server.default_advertised_address=${!loadBalancerDNSName}/g" /etc/neo4j/neo4j.conf
-              sed -i 's/#server.bolt.listen_address=:7687/server.bolt.listen_address=0.0.0.0:7687/g' /etc/neo4j/neo4j.conf
-              sed -i "s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=${!loadBalancerDNSName}:7687/g" /etc/neo4j/neo4j.conf
-              sed -i 's/#server.http.listen_address=:7474/server.http.listen_address=0.0.0.0:7474/g' /etc/neo4j/neo4j.conf
-              sed -i "s/#server.http.advertised_address=:7474/server.http.advertised_address=${!loadBalancerDNSName}:7474/g" /etc/neo4j/neo4j.conf
+                # ---------------------------------------------------------------
+                # Configure network
+                #
+                # Bind to 0.0.0.0 so the NLB health checks and client connections
+                # work. Advertise the NLB DNS name so drivers/browsers connect via
+                # the stable endpoint rather than a private IP.
+                # ---------------------------------------------------------------
+                echo "Configuring network in neo4j.conf..."
+                sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf
+                sed -i "s/#server.default_advertised_address=localhost/server.default_advertised_address=${NLB_DNS}/g" /etc/neo4j/neo4j.conf
+                sed -i 's/#server.bolt.listen_address=:7687/server.bolt.listen_address=0.0.0.0:7687/g' /etc/neo4j/neo4j.conf
+                sed -i "s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=${NLB_DNS}:7687/g" /etc/neo4j/neo4j.conf
+                sed -i 's/#server.http.listen_address=:7474/server.http.listen_address=0.0.0.0:7474/g' /etc/neo4j/neo4j.conf
+                sed -i "s/#server.http.advertised_address=:7474/server.http.advertised_address=${NLB_DNS}:7474/g" /etc/neo4j/neo4j.conf
 
-              # ---------------------------------------------------------------
-              # Configure memory
-              #
-              # neo4j-admin server memory-recommendation inspects available
-              # system RAM and writes appropriate heap and page cache settings.
-              # ---------------------------------------------------------------
-              echo "Configuring memory..."
-              neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
+                # ---------------------------------------------------------------
+                # Configure memory
+                #
+                # neo4j-admin server memory-recommendation inspects available
+                # system RAM and writes appropriate heap and page cache settings.
+                # ---------------------------------------------------------------
+                echo "Configuring memory..."
+                neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
 
-              # ---------------------------------------------------------------
-              # Enable metrics
-              # ---------------------------------------------------------------
-              echo "Enabling metrics..."
-              echo "server.metrics.enabled=true" >> /etc/neo4j/neo4j.conf
-              echo "server.metrics.jmx.enabled=true" >> /etc/neo4j/neo4j.conf
-              echo "server.metrics.prefix=neo4j" >> /etc/neo4j/neo4j.conf
-              echo "server.metrics.filter=*" >> /etc/neo4j/neo4j.conf
-              echo "server.metrics.csv.interval=5s" >> /etc/neo4j/neo4j.conf
+                # ---------------------------------------------------------------
+                # Enable metrics
+                # ---------------------------------------------------------------
+                echo "Enabling metrics..."
+                echo "server.metrics.enabled=true" >> /etc/neo4j/neo4j.conf
+                echo "server.metrics.jmx.enabled=true" >> /etc/neo4j/neo4j.conf
+                echo "server.metrics.prefix=neo4j" >> /etc/neo4j/neo4j.conf
+                echo "server.metrics.filter=*" >> /etc/neo4j/neo4j.conf
+                echo "server.metrics.csv.interval=5s" >> /etc/neo4j/neo4j.conf
 
-              # ---------------------------------------------------------------
-              # Cypher IP blocklist
-              #
-              # Prevent Cypher queries from reaching internal AWS infrastructure
-              # (VPC ranges, link-local/IMDS, IPv6 private ranges).
-              # ---------------------------------------------------------------
-              echo "Configuring Cypher IP blocklist..."
-              echo "internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8" >> /etc/neo4j/neo4j.conf
+                # ---------------------------------------------------------------
+                # Cypher IP blocklist
+                #
+                # Prevent Cypher queries from reaching internal AWS infrastructure
+                # (VPC ranges, link-local/IMDS, IPv6 private ranges).
+                # ---------------------------------------------------------------
+                echo "Configuring Cypher IP blocklist..."
+                echo "internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8" >> /etc/neo4j/neo4j.conf
 
-              # ---------------------------------------------------------------
-              # Set admin password and start Neo4j
-              #
-              # Password is set before starting so the default password is
-              # never active on the network.
-              # ---------------------------------------------------------------
-              echo "Setting initial password..."
-              neo4j-admin dbms set-initial-password "${!password}"
+                # ---------------------------------------------------------------
+                # Set admin password and start Neo4j
+                #
+                # Password is set before starting so the default password is
+                # never active on the network.
+                # ---------------------------------------------------------------
+                echo "Setting initial password..."
+                neo4j-admin dbms set-initial-password "${NEO4J_PASSWORD}"
 
-              echo "Starting Neo4j..."
-              systemctl start neo4j
-              echo "Neo4j Community Edition startup complete."
+                echo "Starting Neo4j..."
+                systemctl start neo4j
+                echo "Neo4j Community Edition startup complete."
+              # Variable map: Fn::Sub resolves these names in the script above.
+              # Using the two-argument form avoids bash escaping issues — see
+              # PWD.md and the Fn::Sub docs for details.
+              - NEO4J_PASSWORD: !Ref Password
+                NLB_DNS: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+                APOC: !Ref InstallAPOC
 
   # ---------------------------------------------------------------------------
   # IAM — Instance Profile and Role

@@ -66,8 +66,8 @@ Parameters:
   DiskSize:
     Description: Size in GB of the root EBS volume (OS and Neo4j binaries only)
     Type: Number
-    Default: 10
-    MinValue: 10
+    Default: 20
+    MinValue: 20
 
   DataDiskSize:
     Description: >
@@ -461,8 +461,14 @@ Resources:
                 mount -o noatime,nodiratime "$DATA_DEV" /data
                 chown neo4j:neo4j /data
 
-                # Point Neo4j at the persistent data volume
-                echo "server.directories.data=/data" >> /etc/neo4j/neo4j.conf
+                # Point Neo4j at the persistent data volume.
+                # The default neo4j.conf already contains server.directories.data
+                # so we must replace it (not append) to avoid a "declared multiple
+                # times" startup error.
+                sed -i 's|^server.directories.data=.*|server.directories.data=/data|' /etc/neo4j/neo4j.conf
+                if ! grep -q '^server.directories.data=/data' /etc/neo4j/neo4j.conf; then
+                  echo "server.directories.data=/data" >> /etc/neo4j/neo4j.conf
+                fi
 
                 # On first boot, clear auth state so set-initial-password works.
                 # On subsequent boots (data volume already has databases) the

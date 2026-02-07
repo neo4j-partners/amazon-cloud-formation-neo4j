@@ -169,7 +169,8 @@ Implemented. Changes made to `neo4j.template.yaml`:
 
 - Added `DataDiskSize` parameter (default 30 GB, min 20 GB) with SSD
   over-provisioning guidance in the description.
-- Reduced root `DiskSize` default from 30 GB to 10 GB (OS + binaries only).
+- Reduced root `DiskSize` default from 30 GB to 20 GB (OS + binaries only;
+  20 GB is the minimum because the AMI snapshot is 20 GB).
 - Added `Neo4jDataVolume` (`AWS::EC2::Volume`) with `DeletionPolicy: Retain`
   and `UpdateReplacePolicy: Retain` so it survives stack updates and instance
   replacement.

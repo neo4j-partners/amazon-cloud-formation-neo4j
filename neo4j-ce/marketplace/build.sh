@@ -42,7 +42,16 @@ REPO
 dnf install -y neo4j
 systemctl enable neo4j
 
-# --- Step 4: SSH Hardening ---
+# --- Step 4: Raise file descriptor limit ---
+# Neo4j Operations Manual recommends 60000. Linux default (1024) is too low.
+# Reference: https://neo4j.com/docs/operations-manual/current/installation/linux/
+mkdir -p /etc/systemd/system/neo4j.service.d
+cat > /etc/systemd/system/neo4j.service.d/override.conf <<'CONF'
+[Service]
+LimitNOFILE=60000
+CONF
+
+# --- Step 5: SSH Hardening ---
 # Required by AWS Marketplace AMI security policies.
 # Reference: https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html
 
@@ -61,7 +70,7 @@ shred -u /etc/ssh/*_key /etc/ssh/*_key.pub
 # Remove any authorized keys
 rm -f /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys
 
-# --- Step 5: Clean up ---
+# --- Step 6: Clean up ---
 # Remove yum cache to reduce AMI size
 dnf clean all
 rm -rf /var/cache/dnf

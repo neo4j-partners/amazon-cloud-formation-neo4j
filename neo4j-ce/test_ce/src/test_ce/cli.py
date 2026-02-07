@@ -75,7 +75,7 @@ def main() -> None:
     log.info("=== Neo4j CE Stack Tester ===")
     log.info("")
     log.info("  Stack:    %s", config.stack_name)
-    log.info("  NLB:      %s", config.nlb_host)
+    log.info("  Host:     %s", config.host)
     log.info("  Mode:     %s", mode)
     log.info("")
 
@@ -110,6 +110,6 @@ def main() -> None:
     # Print summary and exit
     exit_code = reporter.summary(
         stack_name=config.stack_name,
-        endpoint=config.nlb_host,
+        endpoint=config.host,
     )
     sys.exit(exit_code)

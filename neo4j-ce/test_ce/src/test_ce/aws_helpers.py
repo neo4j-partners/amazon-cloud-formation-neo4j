@@ -1,4 +1,4 @@
-"""AWS operations via boto3: ASG lookup, instance termination, NLB health polling."""
+"""AWS operations via boto3: ASG lookup, instance termination, replacement polling."""
 
 from __future__ import annotations
 
@@ -52,17 +52,6 @@ def get_asg_instance_id(
     )
 
 
-def get_http_target_group_arn(
-    stack_name: str,
-    resource_map: dict[str, str],
-) -> str:
-    """Return the ARN of the HTTP target group from the stack resources."""
-    arn = resource_map.get("Neo4jHTTPTargetGroup")
-    if not arn:
-        raise RuntimeError(f"Neo4jHTTPTargetGroup not found in stack {stack_name}")
-    return arn
-
-
 def terminate_instance(session: boto3.Session, instance_id: str) -> None:
     """Terminate an EC2 instance. The ASG will launch a replacement."""
     ec2 = session.client("ec2")
@@ -70,52 +59,58 @@ def terminate_instance(session: boto3.Session, instance_id: str) -> None:
     log.info("  Terminated instance %s", instance_id)
 
 
-def wait_for_healthy_target(
+def wait_for_replacement_instance(
     session: boto3.Session,
-    target_group_arn: str,
+    stack_name: str,
+    resource_map: dict[str, str],
     *,
     exclude_instance: str | None = None,
     timeout: int = 600,
     interval: int = 15,
 ) -> str:
-    """Poll the NLB target group until a target is healthy. Return its instance ID.
+    """Poll the ASG until a new InService instance appears. Return its instance ID.
 
     If *exclude_instance* is given, ignore that ID (the just-terminated instance
-    may linger as "healthy" in the target group briefly after termination).
+    may briefly remain in the ASG).
     """
-    elbv2 = session.client("elbv2")
+    asg_name = resource_map.get("Neo4jAutoScalingGroup")
+    if not asg_name:
+        raise RuntimeError(f"Neo4jAutoScalingGroup not found in stack {stack_name}")
+
+    asg_client = session.client("autoscaling")
     deadline = time.monotonic() + timeout
 
     while True:
         try:
-            resp = elbv2.describe_target_health(TargetGroupArn=target_group_arn)
+            groups = asg_client.describe_auto_scaling_groups(
+                AutoScalingGroupNames=[asg_name]
+            )["AutoScalingGroups"]
+
+            if groups:
+                for instance in groups[0]["Instances"]:
+                    iid = instance["InstanceId"]
+                    state = instance["LifecycleState"]
+                    if state == "InService" and iid != exclude_instance:
+                        elapsed = timeout - (deadline - time.monotonic())
+                        log.info(
+                            "  Replacement %s is InService (%.0fs elapsed)", iid, elapsed
+                        )
+                        return iid
+
+                # Show current state for visibility
+                elapsed = timeout - (deadline - time.monotonic())
+                states = [
+                    f"{i['InstanceId']}={i['LifecycleState']}"
+                    for i in groups[0]["Instances"]
+                ]
+                if states:
+                    log.info("  Instances: %s (%.0fs elapsed)", ", ".join(states), elapsed)
+                else:
+                    log.info("  No instances in ASG yet (%.0fs elapsed)", elapsed)
+
         except Exception as exc:
-            # Transient network/auth errors during polling — log and retry
             elapsed = timeout - (deadline - time.monotonic())
             log.info("  API call failed (%.0fs elapsed): %s — retrying", elapsed, exc)
-            if time.monotonic() >= deadline:
-                break
-            time.sleep(interval)
-            continue
-
-        for desc in resp["TargetHealthDescriptions"]:
-            instance_id = desc["Target"]["Id"]
-            if desc["TargetHealth"]["State"] == "healthy" and instance_id != exclude_instance:
-                elapsed = timeout - (deadline - time.monotonic())
-                log.info("  Target %s is healthy (%.0fs elapsed)", instance_id, elapsed)
-                return instance_id
-
-        elapsed = timeout - (deadline - time.monotonic())
-
-        # Show current state for visibility
-        states = [
-            f"{d['Target']['Id']}={d['TargetHealth']['State']}"
-            for d in resp["TargetHealthDescriptions"]
-        ]
-        if states:
-            log.info("  Targets: %s (%.0fs elapsed)", ", ".join(states), elapsed)
-        else:
-            log.info("  No targets registered yet (%.0fs elapsed)", elapsed)
 
         if time.monotonic() >= deadline:
             break
@@ -123,6 +118,6 @@ def wait_for_healthy_target(
         time.sleep(interval)
 
     raise TimeoutError(
-        f"No healthy target in {target_group_arn} after {timeout}s. "
+        f"No InService replacement instance in ASG {asg_name} after {timeout}s. "
         "Check ASG activity and instance logs."
     )

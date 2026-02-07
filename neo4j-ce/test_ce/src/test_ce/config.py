@@ -24,14 +24,14 @@ _REQUIRED_FIELDS = (
 class StackConfig:
     """Immutable configuration parsed from deploy.sh's stack-outputs.txt."""
 
-    browser_url: str  # e.g. http://<nlb>:7474
-    neo4j_uri: str  # e.g. neo4j://<nlb>:7687
+    browser_url: str  # e.g. http://<eip>:7474
+    neo4j_uri: str  # e.g. neo4j://<eip>:7687
     username: str
     password: str
     stack_name: str
     region: str
     install_apoc: bool
-    nlb_host: str  # bare hostname extracted from browser_url
+    host: str  # bare hostname (EIP) extracted from browser_url
 
     @contextlib.contextmanager
     def driver(self) -> Iterator[Driver]:
@@ -86,7 +86,7 @@ def load_config(outputs_path: Path, password_override: str | None = None) -> Sta
             f"{outputs_path.name}."
         )
 
-    nlb_host = urlparse(browser_url).hostname or browser_url
+    host = urlparse(browser_url).hostname or browser_url
 
     return StackConfig(
         browser_url=browser_url,
@@ -96,5 +96,5 @@ def load_config(outputs_path: Path, password_override: str | None = None) -> Sta
         stack_name=fields["StackName"],
         region=fields["Region"],
         install_apoc=install_apoc,
-        nlb_host=nlb_host,
+        host=host,
     )

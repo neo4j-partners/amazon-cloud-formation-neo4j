@@ -1,8 +1,8 @@
 #!/bin/bash
 # test-stack.sh — Verify a deployed Neo4j CE CloudFormation stack
 #
-# Connects to the NLB endpoint and validates HTTP, Bolt, authentication,
-# Cypher execution, and (optionally) APOC availability.
+# Connects to the Elastic IP endpoint and validates HTTP, Bolt,
+# authentication, Cypher execution, and (optionally) APOC availability.
 #
 # Prerequisites:
 #   - cypher-shell installed locally (for Bolt tests)
@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUTPUTS_FILE="${SCRIPT_DIR}/stack-outputs.txt"
 
 # Readiness polling configuration
-READY_TIMEOUT=300    # seconds — total time to wait for NLB + Neo4j
+READY_TIMEOUT=300    # seconds — total time to wait for Neo4j
 READY_INTERVAL=10    # seconds — time between polling attempts
 
 # ---------------------------------------------------------------------------
@@ -106,14 +106,14 @@ else
   PASSWORD=$(read_field "${OUTPUTS_FILE}" "Password")
 fi
 
-# Extract the NLB hostname from the browser URL (strip http:// and :7474)
-NLB_HOST=$(echo "${BROWSER_URL}" | sed 's|http://||' | sed 's|:7474||')
+# Extract the host (EIP) from the browser URL (strip http:// and :7474)
+NEO4J_HOST=$(echo "${BROWSER_URL}" | sed 's|http://||' | sed 's|:7474||')
 HTTP_ENDPOINT="${BROWSER_URL}"
 BOLT_ENDPOINT="${NEO4J_URI}"
 
 echo "  Stack:        ${STACK_NAME}"
 echo "  Region:       ${REGION}"
-echo "  NLB:          ${NLB_HOST}"
+echo "  Host:         ${NEO4J_HOST}"
 echo "  HTTP:         ${HTTP_ENDPOINT}"
 echo "  Bolt:         ${BOLT_ENDPOINT}"
 echo "  Username:     ${USERNAME}"
@@ -121,7 +121,7 @@ echo "  InstallAPOC:  ${INSTALL_APOC}"
 echo ""
 
 # ---------------------------------------------------------------------------
-# Wait for NLB + Neo4j to become reachable
+# Wait for Neo4j to become reachable
 # ---------------------------------------------------------------------------
 echo "Waiting for Neo4j to become reachable (timeout: ${READY_TIMEOUT}s)..."
 
@@ -381,7 +381,7 @@ echo "  Stack Test Results"
 echo "============================================="
 echo ""
 echo "  Stack:     ${STACK_NAME}"
-echo "  Endpoint:  ${NLB_HOST}"
+echo "  Endpoint:  ${NEO4J_HOST}"
 echo ""
 
 if [ "${FAILURES}" -gt 0 ]; then

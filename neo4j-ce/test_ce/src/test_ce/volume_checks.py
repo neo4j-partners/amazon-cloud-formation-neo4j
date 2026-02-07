@@ -1,7 +1,6 @@
 """Verify EBS volume layout via CloudFormation and EC2 APIs.
 
-Checks that Neo4jDataVolume and Neo4jTxLogVolume are separate EBS volumes,
-both in-use, and attached to the running instance.
+Checks that Neo4jDataVolume is in-use and attached to the running instance.
 """
 
 from __future__ import annotations
@@ -74,42 +73,21 @@ def _check_volume(
             return None
 
 
-def check_volumes_separate(
-    reporter: TestReporter,
-    data_volume_id: str,
-    txlog_volume_id: str,
-) -> None:
-    """Verify the data and txlog volume IDs are different resources."""
-    with reporter.test("Data and txlog are separate volumes") as ctx:
-        if data_volume_id == txlog_volume_id:
-            ctx.fail(
-                f"Data and txlog point to the same volume: {data_volume_id}"
-            )
-        else:
-            ctx.pass_(f"Data ({data_volume_id}) and txlog ({txlog_volume_id}) are separate")
-
-
 def run_volume_checks(
     config: StackConfig,
     reporter: TestReporter,
     session: boto3.Session,
     resource_map: dict[str, str],
 ) -> None:
-    """Verify EBS volume layout using CloudFormation resource IDs and EC2 APIs."""
+    """Verify EBS data volume is attached using CloudFormation resource IDs and EC2 APIs."""
     instance_id = get_asg_instance_id(session, config.stack_name, resource_map)
     log.info("  Checking volumes on instance: %s\n", instance_id)
 
     data_vol_id = resource_map.get("Neo4jDataVolume")
-    txlog_vol_id = resource_map.get("Neo4jTxLogVolume")
 
     if not data_vol_id:
         with reporter.test("EBS data volume") as ctx:
             ctx.fail("Neo4jDataVolume not found in CloudFormation stack resources")
-        return
-
-    if not txlog_vol_id:
-        with reporter.test("EBS txlog volume") as ctx:
-            ctx.fail("Neo4jTxLogVolume not found in CloudFormation stack resources")
         return
 
     _check_volume(
@@ -119,13 +97,3 @@ def run_volume_checks(
         test_name="EBS data volume",
         volume_id=data_vol_id,
     )
-
-    _check_volume(
-        reporter,
-        session,
-        instance_id,
-        test_name="EBS txlog volume",
-        volume_id=txlog_vol_id,
-    )
-
-    check_volumes_separate(reporter, data_vol_id, txlog_vol_id)

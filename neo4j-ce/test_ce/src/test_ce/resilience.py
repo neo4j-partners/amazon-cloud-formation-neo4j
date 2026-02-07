@@ -8,10 +8,9 @@ from typing import TYPE_CHECKING
 
 from test_ce.aws_helpers import (
     get_asg_instance_id,
-    get_http_target_group_arn,
     get_stack_resources,
     terminate_instance,
-    wait_for_healthy_target,
+    wait_for_replacement_instance,
 )
 from test_ce.config import StackConfig
 from test_ce.movies_dataset import (
@@ -77,15 +76,15 @@ def _terminate_and_wait(
 
     with reporter.test("Wait for ASG replacement") as ctx:
         try:
-            tg_arn = get_http_target_group_arn(config.stack_name, resource_map)
-            new_instance_id = wait_for_healthy_target(
+            new_instance_id = wait_for_replacement_instance(
                 session,
-                tg_arn,
+                config.stack_name,
+                resource_map,
                 exclude_instance=original_instance_id,
                 timeout=replacement_timeout,
             )
             ctx.pass_(
-                f"Replacement {new_instance_id} is healthy "
+                f"Replacement {new_instance_id} is InService "
                 f"(was {original_instance_id})"
             )
         except Exception as exc:
@@ -150,7 +149,7 @@ def run_resilience_tests(
     # Fetch stack resources once for all AWS lookups
     resource_map = get_stack_resources(session, config.stack_name)
 
-    # Verify volume layout on the original instance (data + txlogs separate)
+    # Verify data volume is attached on the original instance
     run_volume_checks(config, reporter, session, resource_map)
 
     # Write sentinel + Movies dataset before killing the instance

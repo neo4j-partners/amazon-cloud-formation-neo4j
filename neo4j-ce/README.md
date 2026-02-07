@@ -57,7 +57,7 @@ The Python test suite in `test_ce/` reads `stack-outputs.txt` (written by `deplo
 **Full mode** (default) — connectivity + EBS persistence:
 5. **Write sentinel data** — create a `Sentinel` node with a unique test ID
 6. **Terminate EC2 instance** — kill the running instance via the ASG
-7. **Wait for ASG replacement** — poll the NLB target group until a new instance is healthy
+7. **Wait for ASG replacement** — poll the ASG until a new instance is InService
 8. **Re-run connectivity tests** — verify HTTP, Auth, Bolt, and APOC on the replacement
 9. **Verify sentinel data persisted** — confirm the sentinel node survived instance replacement (proves the EBS volume was reattached)
 
@@ -81,9 +81,9 @@ Deletes the CloudFormation stack, the SSM parameter created by `deploy.sh`, and 
 ## What Gets Deployed
 
 - VPC with a single public subnet
-- Internet-facing Network Load Balancer (ports 7474, 7687)
-- Auto Scaling Group (fixed at 1 instance) with ELB health checks
-- GP3 EBS volume (encrypted)
+- Elastic IP (stable public address, re-associated on instance replacement)
+- Auto Scaling Group (fixed at 1 instance) with EC2 health checks
+- GP3 EBS data volume (encrypted, persists across instance replacement)
 - Security group allowing inbound on 7474 and 7687
 
 ## Files

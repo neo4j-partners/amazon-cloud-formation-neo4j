@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
+from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import urlparse
+
+from neo4j import Driver, GraphDatabase
 
 
 _REQUIRED_FIELDS = (
@@ -28,6 +32,18 @@ class StackConfig:
     region: str
     install_apoc: bool
     nlb_host: str  # bare hostname extracted from browser_url
+
+    @contextlib.contextmanager
+    def driver(self) -> Iterator[Driver]:
+        """Yield a Neo4j driver connected with this config's credentials."""
+        drv = GraphDatabase.driver(
+            self.neo4j_uri,
+            auth=(self.username, self.password),
+        )
+        try:
+            yield drv
+        finally:
+            drv.close()
 
 
 def _parse_outputs(path: Path) -> dict[str, str]:

@@ -33,7 +33,6 @@ def _check_volume(
     *,
     test_name: str,
     volume_id: str,
-    expected_name_suffix: str,
 ) -> dict | None:
     """Verify a volume exists, is in-use, and is attached to the expected instance.
 
@@ -119,7 +118,6 @@ def run_volume_checks(
         instance_id,
         test_name="EBS data volume",
         volume_id=data_vol_id,
-        expected_name_suffix="-data",
     )
 
     _check_volume(
@@ -128,7 +126,6 @@ def run_volume_checks(
         instance_id,
         test_name="EBS txlog volume",
         volume_id=txlog_vol_id,
-        expected_name_suffix="-txlogs",
     )
 
     check_volumes_separate(reporter, data_vol_id, txlog_vol_id)

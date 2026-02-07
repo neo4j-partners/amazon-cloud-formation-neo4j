@@ -6,8 +6,6 @@ import logging
 import uuid
 from typing import TYPE_CHECKING
 
-from neo4j import GraphDatabase
-
 from test_ce.aws_helpers import (
     get_asg_instance_id,
     get_http_target_group_arn,
@@ -36,10 +34,7 @@ def _write_sentinel(config: StackConfig, reporter: TestReporter, test_run_id: st
     """Create a sentinel node and verify it was written. Return True on success."""
     with reporter.test("Write sentinel data") as ctx:
         try:
-            with GraphDatabase.driver(
-                config.neo4j_uri,
-                auth=(config.username, config.password),
-            ) as driver:
+            with config.driver() as driver:
                 driver.execute_query(
                     "CREATE (s:Sentinel {test_id: $tid, value: $val})",
                     tid=test_run_id,
@@ -93,7 +88,7 @@ def _terminate_and_wait(
                 f"Replacement {new_instance_id} is healthy "
                 f"(was {original_instance_id})"
             )
-        except TimeoutError as exc:
+        except Exception as exc:
             ctx.fail(str(exc))
             return False
 
@@ -109,10 +104,7 @@ def _verify_sentinel(config: StackConfig, reporter: TestReporter, test_run_id: s
     """Check that the sentinel node survived instance replacement."""
     with reporter.test("Verify sentinel data persisted") as ctx:
         try:
-            with GraphDatabase.driver(
-                config.neo4j_uri,
-                auth=(config.username, config.password),
-            ) as driver:
+            with config.driver() as driver:
                 records, _, _ = driver.execute_query(
                     "MATCH (s:Sentinel {test_id: $tid}) RETURN s.value AS value",
                     tid=test_run_id,
@@ -136,10 +128,7 @@ def _verify_sentinel(config: StackConfig, reporter: TestReporter, test_run_id: s
 def _cleanup_sentinel(config: StackConfig, test_run_id: str) -> None:
     """Delete the sentinel node (best-effort, does not affect test results)."""
     try:
-        with GraphDatabase.driver(
-            config.neo4j_uri,
-            auth=(config.username, config.password),
-        ) as driver:
+        with config.driver() as driver:
             driver.execute_query(
                 "MATCH (s:Sentinel {test_id: $tid}) DELETE s",
                 tid=test_run_id,

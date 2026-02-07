@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 
 import requests
-from neo4j import GraphDatabase
 
 from test_ce.config import StackConfig
 from test_ce.reporting import TestReporter
@@ -60,10 +59,7 @@ def check_bolt(config: StackConfig, reporter: TestReporter) -> None:
     """Connect via the Bolt protocol and execute RETURN 1."""
     with reporter.test("Bolt connectivity") as ctx:
         try:
-            with GraphDatabase.driver(
-                config.neo4j_uri,
-                auth=(config.username, config.password),
-            ) as driver:
+            with config.driver() as driver:
                 records, _, _ = driver.execute_query("RETURN 1 AS result")
                 value = records[0]["result"]
                 if value == 1:
@@ -82,10 +78,7 @@ def check_apoc(config: StackConfig, reporter: TestReporter) -> None:
 
     with reporter.test("APOC plugin") as ctx:
         try:
-            with GraphDatabase.driver(
-                config.neo4j_uri,
-                auth=(config.username, config.password),
-            ) as driver:
+            with config.driver() as driver:
                 records, _, _ = driver.execute_query(
                     "RETURN apoc.version() AS version"
                 )

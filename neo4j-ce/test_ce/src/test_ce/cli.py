@@ -7,8 +7,6 @@ import logging
 import sys
 from pathlib import Path
 
-import boto3
-
 from test_ce.config import load_config
 from test_ce.movies_dataset import (
     cleanup_movies_dataset,
@@ -104,6 +102,8 @@ def main() -> None:
             cleanup_movies_dataset(config)
     else:
         # Full mode: volume checks, Movies dataset persistence, instance replacement
+        import boto3  # noqa: PLC0415 — only needed for full mode
+
         session = boto3.Session(region_name=config.region)
         run_resilience_tests(config, reporter, session, replacement_timeout=args.timeout)
 

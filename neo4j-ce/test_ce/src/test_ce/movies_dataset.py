@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from neo4j import GraphDatabase
-
 from test_ce.config import StackConfig
 from test_ce.reporting import TestReporter
 
@@ -65,10 +63,7 @@ def create_movies_dataset(config: StackConfig, reporter: TestReporter) -> bool:
     """Create the Movies dataset. Return True on success."""
     with reporter.test("Create Movies dataset") as ctx:
         try:
-            with GraphDatabase.driver(
-                config.neo4j_uri,
-                auth=(config.username, config.password),
-            ) as driver:
+            with config.driver() as driver:
                 driver.execute_query(MOVIES_CYPHER)
                 ctx.pass_("Movies dataset created (3 movies, 8 people)")
                 return True
@@ -81,10 +76,7 @@ def verify_movies_dataset(config: StackConfig, reporter: TestReporter) -> bool:
     """Verify the Movies dataset exists by counting nodes. Return True on success."""
     with reporter.test("Verify Movies dataset") as ctx:
         try:
-            with GraphDatabase.driver(
-                config.neo4j_uri,
-                auth=(config.username, config.password),
-            ) as driver:
+            with config.driver() as driver:
                 records, _, _ = driver.execute_query(
                     "MATCH (n) WHERE n:Movie OR n:Person RETURN count(n) AS cnt"
                 )
@@ -106,10 +98,7 @@ def verify_movies_dataset(config: StackConfig, reporter: TestReporter) -> bool:
 def cleanup_movies_dataset(config: StackConfig) -> None:
     """Delete all Movie and Person nodes (best-effort, does not affect test results)."""
     try:
-        with GraphDatabase.driver(
-            config.neo4j_uri,
-            auth=(config.username, config.password),
-        ) as driver:
+        with config.driver() as driver:
             driver.execute_query("MATCH (n) WHERE n:Movie OR n:Person DETACH DELETE n")
         log.info("  Cleaned up Movies dataset.\n")
     except Exception:

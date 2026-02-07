@@ -87,7 +87,17 @@ def wait_for_healthy_target(
     deadline = time.monotonic() + timeout
 
     while True:
-        resp = elbv2.describe_target_health(TargetGroupArn=target_group_arn)
+        try:
+            resp = elbv2.describe_target_health(TargetGroupArn=target_group_arn)
+        except Exception as exc:
+            # Transient network/auth errors during polling — log and retry
+            elapsed = timeout - (deadline - time.monotonic())
+            log.info("  API call failed (%.0fs elapsed): %s — retrying", elapsed, exc)
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(interval)
+            continue
+
         for desc in resp["TargetHealthDescriptions"]:
             instance_id = desc["Target"]["Id"]
             if desc["TargetHealth"]["State"] == "healthy" and instance_id != exclude_instance:

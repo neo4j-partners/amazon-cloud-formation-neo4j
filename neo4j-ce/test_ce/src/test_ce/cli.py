@@ -10,6 +10,11 @@ from pathlib import Path
 import boto3
 
 from test_ce.config import load_config
+from test_ce.movies_dataset import (
+    cleanup_movies_dataset,
+    create_movies_dataset,
+    verify_movies_dataset,
+)
 from test_ce.neo4j_checks import run_simple_tests
 from test_ce.reporting import TestReporter
 from test_ce.resilience import run_resilience_tests
@@ -91,8 +96,14 @@ def main() -> None:
     # Run simple tests (always)
     run_simple_tests(config, reporter)
 
-    # Run resilience tests (unless --simple)
-    if not args.simple:
+    if args.simple:
+        # In simple mode, validate Cypher write/read with the Movies dataset
+        # (in full mode, resilience tests handle this with persistence verification)
+        if create_movies_dataset(config, reporter):
+            verify_movies_dataset(config, reporter)
+            cleanup_movies_dataset(config)
+    else:
+        # Full mode: volume checks, Movies dataset persistence, instance replacement
         session = boto3.Session(region_name=config.region)
         run_resilience_tests(config, reporter, session, replacement_timeout=args.timeout)
 

@@ -16,8 +16,14 @@ from test_ce.aws_helpers import (
     wait_for_healthy_target,
 )
 from test_ce.config import StackConfig
+from test_ce.movies_dataset import (
+    cleanup_movies_dataset,
+    create_movies_dataset,
+    verify_movies_dataset,
+)
 from test_ce.neo4j_checks import run_simple_tests
 from test_ce.reporting import TestReporter
+from test_ce.volume_checks import run_volume_checks
 from test_ce.wait import wait_for_neo4j
 
 if TYPE_CHECKING:
@@ -155,7 +161,14 @@ def run_resilience_tests(
     # Fetch stack resources once for all AWS lookups
     resource_map = get_stack_resources(session, config.stack_name)
 
+    # Verify volume layout on the original instance (data + txlogs separate)
+    run_volume_checks(config, reporter, session, resource_map)
+
+    # Write sentinel + Movies dataset before killing the instance
     if not _write_sentinel(config, reporter, test_run_id):
+        return
+
+    if not create_movies_dataset(config, reporter):
         return
 
     if not _terminate_and_wait(config, reporter, session, resource_map, replacement_timeout):
@@ -164,5 +177,10 @@ def run_resilience_tests(
     # Re-run connectivity tests against the replacement
     run_simple_tests(config, reporter)
 
+    # Verify both sentinel and Movies dataset survived the restart
     _verify_sentinel(config, reporter, test_run_id)
+    verify_movies_dataset(config, reporter)
+
+    # Cleanup
     _cleanup_sentinel(config, test_run_id)
+    cleanup_movies_dataset(config)

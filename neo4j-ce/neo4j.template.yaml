@@ -609,7 +609,7 @@ Resources:
                 # (VPC ranges, link-local/IMDS, IPv6 private ranges).
                 # ---------------------------------------------------------------
                 echo "Configuring Cypher IP blocklist..."
-                echo "internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8" >> /etc/neo4j/neo4j.conf
+                echo "internal.dbms.cypher_ip_blocklist=10.0.0.0/8,100.64.0.0/10,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8" >> /etc/neo4j/neo4j.conf
 
                 # ---------------------------------------------------------------
                 # OS hardening — disable swap and raise file descriptor limit

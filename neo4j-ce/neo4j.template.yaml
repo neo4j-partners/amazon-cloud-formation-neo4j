@@ -272,6 +272,8 @@ Resources:
       DesiredCapacity: 1
       # EC2 health checks: replaces instances that fail hardware/network status
       # checks. For CE (single instance + EIP) this is sufficient.
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 600
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet1
       Tags:
@@ -392,8 +394,8 @@ Resources:
                 # Neo4j 2026's strict config validation (see PITFALLS.md #1).
                 #
                 # NOTE: This script lives inside Fn::Sub, which intercepts
-                # ${...} syntax. We use $1/$2 directly (not local vars with
-                # ${var}) to avoid Fn::Sub/bash escaping issues.
+                # dollar-brace syntax. We use $1/$2 directly (not local vars)
+                # to avoid Fn::Sub/bash escaping issues.
                 # ---------------------------------------------------------------
                 set_neo4j_conf() {
                   local conf=/etc/neo4j/neo4j.conf
@@ -519,7 +521,9 @@ Resources:
                 # system RAM and writes appropriate heap and page cache settings.
                 # ---------------------------------------------------------------
                 echo "Configuring memory..."
-                neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
+                neo4j-admin server memory-recommendation | grep -E '^[a-z].*=' | while IFS='=' read -r key value; do
+                  set_neo4j_conf "$key" "$value"
+                done
 
                 # ---------------------------------------------------------------
                 # Cypher IP blocklist

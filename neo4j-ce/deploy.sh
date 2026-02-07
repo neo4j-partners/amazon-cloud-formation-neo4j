@@ -3,10 +3,13 @@
 # Deploy the Neo4j Community Edition CloudFormation stack for local testing.
 #
 # Usage:
-#   ./deploy.sh <stack-name> [ami-id]
+#   ./deploy.sh [ami-id]
+#
+# Stack name is auto-generated as test-standalone-<timestamp>.
+# Password is randomly generated and saved to stack-outputs.txt.
 #
 # AMI resolution order:
-#   1. Second argument (ami-id)
+#   1. First argument (ami-id)
 #   2. marketplace/ami-id.txt (written by create-ami.sh)
 #   3. Error — an AMI ID is required for local testing
 #
@@ -17,29 +20,24 @@
 
 set -euo pipefail
 
-if [ -z "${1:-}" ]; then
-  echo "Usage: $0 <stack-name> [ami-id]" >&2
-  exit 1
-fi
-
-STACK_NAME="$1"
+STACK_NAME="test-standalone-$(date +%s)"
 TEMPLATE_BODY="file://neo4j.template.yaml"
 REGION="us-east-1"
-Password="foobar123"
+Password="$(openssl rand -base64 12)"
 InstallAPOC="yes"
 
 # Resolve the AMI ID: CLI arg > ami-id.txt > error
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AMI_ID_FILE="${SCRIPT_DIR}/marketplace/ami-id.txt"
 
-if [ -n "${2:-}" ]; then
-  AMI_ID="$2"
+if [ -n "${1:-}" ]; then
+  AMI_ID="$1"
 elif [ -f "${AMI_ID_FILE}" ]; then
   AMI_ID="$(cat "${AMI_ID_FILE}")"
   echo "Using AMI from ${AMI_ID_FILE}: ${AMI_ID}"
 else
   echo "ERROR: No AMI ID provided and ${AMI_ID_FILE} not found." >&2
-  echo "Either pass an AMI ID as the second argument or run create-ami.sh first." >&2
+  echo "Either pass an AMI ID as an argument or run create-ami.sh first." >&2
   exit 1
 fi
 

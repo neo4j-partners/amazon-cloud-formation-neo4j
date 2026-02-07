@@ -31,7 +31,7 @@ export AWS_PROFILE=marketplace
 The script verifies the account before proceeding and overrides the region to `us-east-1`:
 
 ```bash
-./create-ami.sh 2025.12.0
+./create-ami.sh 2026.01.3
 ```
 
 The script writes the AMI ID to `ami-id.txt` for use by downstream scripts. Then test and scan:

@@ -13,7 +13,7 @@
 #   AWS_PROFILE=marketplace ./create-ami.sh <neo4j-version>
 #
 # Example:
-#   AWS_PROFILE=marketplace ./create-ami.sh 2025.12.0
+#   AWS_PROFILE=marketplace ./create-ami.sh 2026.01.3
 
 set -euo pipefail
 
@@ -22,7 +22,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 REGION="us-east-1"
 EXPECTED_ACCOUNT="385155106615"
-NEO4J_VERSION="${1:?Usage: AWS_PROFILE=marketplace $0 <neo4j-version>  (e.g. 2025.12.0)}"
+NEO4J_VERSION="${1:?Usage: AWS_PROFILE=marketplace $0 <neo4j-version>  (e.g. 2026.01.3)}"
 AMI_NAME="neo4j-community-${NEO4J_VERSION}"
 INSTANCE_TYPE="t3.medium"
 

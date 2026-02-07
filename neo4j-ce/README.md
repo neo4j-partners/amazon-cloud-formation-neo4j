@@ -13,7 +13,7 @@ export AWS_PROFILE=marketplace
 ### 1. Build the AMI
 
 ```bash
-./marketplace/create-ami.sh 2025.12.0
+./marketplace/create-ami.sh 2026.01.3
 ```
 
 This builds the AMI and writes the ID to `marketplace/ami-id.txt`. See [marketplace/README.md](marketplace/README.md) for details.

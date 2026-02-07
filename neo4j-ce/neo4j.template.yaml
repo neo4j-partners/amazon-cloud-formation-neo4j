@@ -41,7 +41,7 @@ Parameters:
     Description: Neo4j Community Edition Marketplace AMI
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     # TODO: Replace prod-XXXXX with the actual Marketplace product code once the listing is created.
-    Default: /aws/service/marketplace/prod-XXXXX/2025.12.0
+    Default: /aws/service/marketplace/prod-XXXXX/2026.01.3
 
   Password:
     Description: >
@@ -390,13 +390,16 @@ Resources:
                 # Replaces an existing setting (commented or uncommented) or
                 # appends if missing. Prevents duplicates that would trigger
                 # Neo4j 2026's strict config validation (see PITFALLS.md #1).
+                #
+                # NOTE: This script lives inside Fn::Sub, which intercepts
+                # ${...} syntax. We use $1/$2 directly (not local vars with
+                # ${var}) to avoid Fn::Sub/bash escaping issues.
                 # ---------------------------------------------------------------
                 set_neo4j_conf() {
-                  local key="$1" value="$2"
                   local conf=/etc/neo4j/neo4j.conf
-                  sed -i "s|^#\?${key}=.*|${key}=${value}|" "$conf"
-                  if ! grep -q "^${key}=" "$conf"; then
-                    echo "${key}=${value}" >> "$conf"
+                  sed -i "s|^#\?$1=.*|$1=$2|" "$conf"
+                  if ! grep -q "^$1=" "$conf"; then
+                    echo "$1=$2" >> "$conf"
                   fi
                 }
 

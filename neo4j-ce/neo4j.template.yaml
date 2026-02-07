@@ -14,6 +14,7 @@ Metadata:
           - Password
           - InstanceType
           - DiskSize
+          - DataDiskSize
           - InstallAPOC
     ParameterLabels:
       ImageId:
@@ -23,7 +24,9 @@ Metadata:
       InstanceType:
         default: Instance Type
       DiskSize:
-        default: Disk Size
+        default: Root Disk Size
+      DataDiskSize:
+        default: Data Disk Size
       InstallAPOC:
         default: Install APOC Plugin
 
@@ -61,10 +64,20 @@ Parameters:
       - r6a.2xlarge     # 8 vCPU,  64 GB
 
   DiskSize:
-    Description: Size in GB of the EBS volume
+    Description: Size in GB of the root EBS volume (OS and Neo4j binaries only)
+    Type: Number
+    Default: 10
+    MinValue: 10
+
+  DataDiskSize:
+    Description: >
+      Size in GB of the dedicated Neo4j data EBS volume. This volume persists
+      independently of the EC2 instance, so data survives instance replacement.
+      Provision at least 20% more than your expected data footprint to avoid
+      SSD wear under sustained writes.
     Type: Number
     Default: 30
-    MinValue: 10
+    MinValue: 20
 
   InstallAPOC:
     Description: Whether to install the APOC plugin
@@ -77,11 +90,12 @@ Parameters:
 # =============================================================================
 # Resources
 #
-# ~15 resources total (down from 26 in the EE template):
+# ~16 resources total (down from 26 in the EE template):
 #   - Single subnet (no clustering, so no Subnet2/Subnet3)
 #   - Single security group (no internal cluster ports)
 #   - ASG fixed at 1 instance
-#   - Minimal IAM policy (cfn-signal only, no ASG peer discovery)
+#   - Persistent EBS data volume (survives instance replacement)
+#   - IAM policy: cfn-signal + volume attach (no ASG peer discovery)
 # =============================================================================
 Resources:
 
@@ -250,6 +264,34 @@ Resources:
       VpcId: !Ref Neo4jVPC
 
   # ---------------------------------------------------------------------------
+  # Storage — Persistent Data Volume
+  #
+  # A standalone EBS volume for Neo4j data (/data). Because it is a separate
+  # CloudFormation resource it is NOT destroyed when the ASG replaces the
+  # instance. UserData attaches, formats (first boot only), and mounts it.
+  # ---------------------------------------------------------------------------
+
+  Neo4jDataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      VolumeType: gp3
+      Size: !Ref DataDiskSize
+      Encrypted: true
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-data"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
   # Compute — Auto Scaling Group and Launch Template
   #
   # ASG is fixed at 1 instance. Marketplace recommends ASG even for
@@ -362,13 +404,73 @@ Resources:
                 # before the first real start.
                 # ---------------------------------------------------------------
                 systemctl stop neo4j 2>/dev/null || true
-                # Clear all auth state so set-initial-password works cleanly:
-                #   - data/dbms/       auth.ini (consumed on first start)
-                #   - databases/system/ system database (stores auth after first start)
-                #   - transactions/system/ system database transaction logs
-                rm -rf /var/lib/neo4j/data/dbms/ 2>/dev/null || true
-                rm -rf /var/lib/neo4j/data/databases/system/ 2>/dev/null || true
-                rm -rf /var/lib/neo4j/data/transactions/system/ 2>/dev/null || true
+
+                # ---------------------------------------------------------------
+                # Attach and mount the persistent data EBS volume
+                #
+                # The Neo4jDataVolume is a standalone CloudFormation resource
+                # that survives instance replacement. On first boot the volume
+                # is unformatted so we create an ext4 filesystem; on subsequent
+                # boots (after ASG replacement) blkid detects the existing FS
+                # and we skip formatting to preserve data.
+                #
+                # The volume must be in the same AZ as the subnet (both use
+                # index 0 of GetAZs). We wait for the device to appear because
+                # attach-volume returns before the kernel sees the block device.
+                # ---------------------------------------------------------------
+                echo "Attaching persistent data volume..."
+                TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+                  -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+                INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+                  http://169.254.169.254/latest/meta-data/instance-id)
+
+                aws ec2 attach-volume \
+                  --volume-id "${DATA_VOLUME_ID}" \
+                  --instance-id "$INSTANCE_ID" \
+                  --device /dev/xvdf \
+                  --region "${REGION}"
+
+                echo "Waiting for data volume device to appear..."
+                aws ec2 wait volume-in-use \
+                  --volume-ids "${DATA_VOLUME_ID}" \
+                  --region "${REGION}"
+
+                # The kernel may name the device /dev/xvdf or /dev/nvme1n1
+                # depending on instance type. Wait up to 30s for either to appear.
+                DATA_DEV=""
+                for i in $(seq 1 30); do
+                  if [ -b /dev/xvdf ]; then DATA_DEV=/dev/xvdf; break; fi
+                  if [ -b /dev/nvme1n1 ]; then DATA_DEV=/dev/nvme1n1; break; fi
+                  sleep 1
+                done
+                if [ -z "$DATA_DEV" ]; then
+                  echo "ERROR: data volume device never appeared"
+                  exit 1
+                fi
+                echo "Data volume device: $DATA_DEV"
+
+                # Format only on first boot (no existing filesystem)
+                if ! blkid "$DATA_DEV"; then
+                  echo "First boot — formatting data volume as ext4..."
+                  mkfs.ext4 "$DATA_DEV"
+                else
+                  echo "Existing filesystem detected — skipping format."
+                fi
+
+                mkdir -p /data
+                mount -o noatime,nodiratime "$DATA_DEV" /data
+                chown neo4j:neo4j /data
+
+                # Point Neo4j at the persistent data volume
+                echo "server.directories.data=/data" >> /etc/neo4j/neo4j.conf
+
+                # On first boot, clear auth state so set-initial-password works.
+                # On subsequent boots (data volume already has databases) the
+                # password and system DB are already initialized.
+                if [ ! -d /data/databases/system ]; then
+                  echo "First boot — clearing auth state for initial password setup..."
+                  rm -rf /data/dbms/ 2>/dev/null || true
+                fi
 
                 # ---------------------------------------------------------------
                 # Install APOC plugin (optional)
@@ -422,10 +524,16 @@ Resources:
                 # Set admin password and start Neo4j
                 #
                 # Password is set before starting so the default password is
-                # never active on the network.
+                # never active on the network. On subsequent boots (ASG
+                # replacement) the system database already exists on the
+                # persistent volume with the password set, so we skip this.
                 # ---------------------------------------------------------------
-                echo "Setting initial password..."
-                neo4j-admin dbms set-initial-password "${NEO4J_PASSWORD}"
+                if [ ! -d /data/databases/system ]; then
+                  echo "Setting initial password..."
+                  neo4j-admin dbms set-initial-password "${NEO4J_PASSWORD}"
+                else
+                  echo "Persistent data volume detected — skipping password setup."
+                fi
 
                 echo "Starting Neo4j..."
                 systemctl start neo4j
@@ -440,13 +548,15 @@ Resources:
                 APOC: !Ref InstallAPOC
                 STACK_NAME: !Ref 'AWS::StackName'
                 REGION: !Ref 'AWS::Region'
+                DATA_VOLUME_ID: !Ref Neo4jDataVolume
 
   # ---------------------------------------------------------------------------
   # IAM — Instance Profile and Role
   #
   # CE does not need ASG peer-discovery permissions (no clustering). The role
   # grants cloudformation:SignalResource so UserData can report success/failure
-  # back to the CreationPolicy on the ASG.
+  # back to the CreationPolicy on the ASG, and ec2:AttachVolume /
+  # ec2:DescribeVolumes so UserData can attach the persistent data volume.
   # ---------------------------------------------------------------------------
 
   Neo4jInstanceProfile:
@@ -476,6 +586,24 @@ Resources:
                 Action:
                   - cloudformation:SignalResource
                 Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+        - PolicyName: Neo4jVolumeAttach
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:AttachVolume
+                  - ec2:DetachVolume
+                Resource:
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+                  - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                Condition:
+                  StringEquals:
+                    "aws:ResourceTag/StackID": !Ref 'AWS::StackId'
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeVolumes
+                Resource: "*"
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'

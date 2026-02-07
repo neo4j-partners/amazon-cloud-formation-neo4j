@@ -106,7 +106,7 @@ Parameters:
 #   - Single subnet (no clustering, so no Subnet2/Subnet3)
 #   - Single security group (no internal cluster ports)
 #   - ASG fixed at 1 instance
-#   - Persistent EBS data volume (survives instance replacement)
+#   - Persistent EBS data volume + txlog volume (survive instance replacement)
 #   - IAM policy: cfn-signal + volume attach (no ASG peer discovery)
 # =============================================================================
 Resources:
@@ -516,6 +516,54 @@ Resources:
                 fi
 
                 # ---------------------------------------------------------------
+                # Attach and mount the persistent transaction log EBS volume
+                #
+                # Same approach as the data volume. Transaction logs go on a
+                # separate device to avoid I/O contention — data access is
+                # random reads while txlogs are sequential writes.
+                # ---------------------------------------------------------------
+                echo "Attaching persistent txlog volume..."
+                aws ec2 attach-volume \
+                  --volume-id "${TXLOG_VOLUME_ID}" \
+                  --instance-id "$INSTANCE_ID" \
+                  --device /dev/xvdg \
+                  --region "${REGION}"
+
+                echo "Waiting for txlog volume device to appear..."
+                aws ec2 wait volume-in-use \
+                  --volume-ids "${TXLOG_VOLUME_ID}" \
+                  --region "${REGION}"
+
+                # The kernel may name the device /dev/xvdg or /dev/nvme2n1
+                # depending on instance type. Wait up to 30s for either to appear.
+                TXLOG_DEV=""
+                for i in $(seq 1 30); do
+                  if [ -b /dev/xvdg ]; then TXLOG_DEV=/dev/xvdg; break; fi
+                  if [ -b /dev/nvme2n1 ]; then TXLOG_DEV=/dev/nvme2n1; break; fi
+                  sleep 1
+                done
+                if [ -z "$TXLOG_DEV" ]; then
+                  echo "ERROR: txlog volume device never appeared"
+                  exit 1
+                fi
+                echo "Txlog volume device: $TXLOG_DEV"
+
+                # Format only on first boot (no existing filesystem)
+                if ! blkid "$TXLOG_DEV"; then
+                  echo "First boot — formatting txlog volume as ext4..."
+                  mkfs.ext4 "$TXLOG_DEV"
+                else
+                  echo "Existing filesystem detected on txlog volume — skipping format."
+                fi
+
+                mkdir -p /txlogs
+                mount -o noatime,nodiratime "$TXLOG_DEV" /txlogs
+                chown neo4j:neo4j /txlogs
+
+                # Point Neo4j transaction logs at the persistent txlog volume.
+                echo "server.directories.transaction.logs.root=/txlogs" >> /etc/neo4j/neo4j.conf
+
+                # ---------------------------------------------------------------
                 # Install APOC plugin (optional)
                 #
                 # APOC is bundled with Neo4j but must be moved to the plugins
@@ -564,6 +612,24 @@ Resources:
                 echo "internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8" >> /etc/neo4j/neo4j.conf
 
                 # ---------------------------------------------------------------
+                # OS hardening — disable swap and raise file descriptor limit
+                #
+                # Neo4j uses memory-mapped I/O heavily; swap causes severe
+                # latency spikes. The default Linux ulimit of 1024 open files
+                # is too low — Neo4j recommends at least 40000.
+                # ---------------------------------------------------------------
+                echo "Applying OS hardening..."
+                swapoff -a
+                sed -i '/swap/d' /etc/fstab
+
+                mkdir -p /etc/systemd/system/neo4j.service.d
+                cat > /etc/systemd/system/neo4j.service.d/override.conf <<'CONF'
+                [Service]
+                LimitNOFILE=60000
+                CONF
+                systemctl daemon-reload
+
+                # ---------------------------------------------------------------
                 # Set admin password and start Neo4j
                 #
                 # Password is set before starting so the default password is
@@ -592,6 +658,7 @@ Resources:
                 STACK_NAME: !Ref 'AWS::StackName'
                 REGION: !Ref 'AWS::Region'
                 DATA_VOLUME_ID: !Ref Neo4jDataVolume
+                TXLOG_VOLUME_ID: !Ref Neo4jTxLogVolume
 
   # ---------------------------------------------------------------------------
   # IAM — Instance Profile and Role
@@ -599,7 +666,8 @@ Resources:
   # CE does not need ASG peer-discovery permissions (no clustering). The role
   # grants cloudformation:SignalResource so UserData can report success/failure
   # back to the CreationPolicy on the ASG, and ec2:AttachVolume /
-  # ec2:DescribeVolumes so UserData can attach the persistent data volume.
+  # ec2:DescribeVolumes so UserData can attach the persistent data and txlog
+  # volumes.
   # ---------------------------------------------------------------------------
 
   Neo4jInstanceProfile:

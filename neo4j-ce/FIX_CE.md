@@ -184,21 +184,20 @@ Implemented. Changes made to `neo4j.template.yaml`:
   (`/data/databases/system` does not exist) so ASG replacement instances reuse
   the existing data and password.
 
-### Step 2 -- Add a Persistent Transaction Log EBS Volume
+### Step 2 -- Add a Persistent Transaction Log EBS Volume -- DONE
 
-**Goal:** Separate transaction log I/O from data I/O.
+Implemented. Changes made to `neo4j.template.yaml`:
 
-**Changes:**
-
-1. Add a new parameter `TxLogDiskSize` (default 20, min 10).
-2. Add a second `AWS::EC2::Volume` (`Neo4jTxLogVolume`), same AZ, gp3,
-   encrypted.
-3. In UserData, attach, format-if-needed, and mount at `/txlogs` with
-   `noatime,nodiratime`.
-4. Configure `neo4j.conf`:
-   ```
-   server.directories.transaction.logs.root=/txlogs
-   ```
+- Added `TxLogDiskSize` parameter (default 20 GB, min 10 GB) with a
+  description explaining the I/O separation rationale.
+- Added `Neo4jTxLogVolume` (`AWS::EC2::Volume`) with `DeletionPolicy: Retain`
+  and `UpdateReplacePolicy: Retain`, same AZ, gp3, encrypted.
+- UserData attaches the volume (`/dev/xvdg`), waits for the device (handles
+  both `/dev/xvdg` and `/dev/nvme2n1` naming), formats as ext4 only on first
+  boot, mounts at `/txlogs` with `noatime,nodiratime`, and sets
+  `server.directories.transaction.logs.root=/txlogs`.
+- No IAM changes needed — the existing `Neo4jVolumeAttach` policy covers all
+  volumes tagged with the stack's `StackID`.
 
 ### Step 3 -- OS Hardening in UserData
 
@@ -222,9 +221,9 @@ systemctl daemon-reload
 
 ### Step 4 -- Update IAM Policy -- DONE (completed in Step 1)
 
-### Step 5 -- Update DiskSize Parameter -- DONE (completed in Step 1)
+### Step 5 -- Update DiskSize Parameter -- DONE (completed in Steps 1 & 2)
 
-Remaining: add `TxLogDiskSize` parameter when Step 2 is implemented.
+`DiskSize` updated in Step 1. `TxLogDiskSize` added in Step 2.
 
 ### Step 6 -- Add c6a Instance Types and Memory Guidance
 
@@ -267,7 +266,7 @@ AMI to be built for `arm64`, so this step depends on AMI availability.
    lsblk
    df -h /data /txlogs
    ```
-3. Verify neo4j.conf has correct directory settings:
+3. Verify neo4j.conf has correct directory settings (data + txlogs):
    ```bash
    grep server.directories /etc/neo4j/neo4j.conf
    ```

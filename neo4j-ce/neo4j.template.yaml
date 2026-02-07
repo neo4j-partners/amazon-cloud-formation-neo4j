@@ -15,6 +15,7 @@ Metadata:
           - InstanceType
           - DiskSize
           - DataDiskSize
+          - TxLogDiskSize
           - InstallAPOC
     ParameterLabels:
       ImageId:
@@ -27,6 +28,8 @@ Metadata:
         default: Root Disk Size
       DataDiskSize:
         default: Data Disk Size
+      TxLogDiskSize:
+        default: Transaction Log Disk Size
       InstallAPOC:
         default: Install APOC Plugin
 
@@ -78,6 +81,15 @@ Parameters:
     Type: Number
     Default: 30
     MinValue: 20
+
+  TxLogDiskSize:
+    Description: >
+      Size in GB of the dedicated transaction log EBS volume. Separating
+      transaction logs from data optimizes for Neo4j's access patterns —
+      many small random reads (data) vs. sequential writes (logs).
+    Type: Number
+    Default: 20
+    MinValue: 10
 
   InstallAPOC:
     Description: Whether to install the APOC plugin
@@ -264,11 +276,16 @@ Resources:
       VpcId: !Ref Neo4jVPC
 
   # ---------------------------------------------------------------------------
-  # Storage — Persistent Data Volume
+  # Storage — Persistent Data Volume + Transaction Log Volume
   #
-  # A standalone EBS volume for Neo4j data (/data). Because it is a separate
-  # CloudFormation resource it is NOT destroyed when the ASG replaces the
-  # instance. UserData attaches, formats (first boot only), and mounts it.
+  # Standalone EBS volumes for Neo4j data (/data) and transaction logs
+  # (/txlogs). Because they are separate CloudFormation resources they are
+  # NOT destroyed when the ASG replaces the instance. UserData attaches,
+  # formats (first boot only), and mounts them.
+  #
+  # Separating data and transaction logs onto different devices optimizes
+  # for Neo4j's access patterns — many small random reads (data) vs.
+  # sequential writes (logs).
   # ---------------------------------------------------------------------------
 
   Neo4jDataVolume:
@@ -288,6 +305,26 @@ Resources:
           Value: !Ref 'AWS::StackId'
         - Key: Name
           Value: !Sub "${AWS::StackName}-data"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jTxLogVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      VolumeType: gp3
+      Size: !Ref TxLogDiskSize
+      Encrypted: true
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-txlogs"
         - Key: "aws-apn-id"
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
 

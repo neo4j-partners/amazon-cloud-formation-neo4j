@@ -78,13 +78,11 @@ def _terminate_and_wait(
         try:
             tg_arn = get_http_target_group_arn(config.stack_name, resource_map)
             new_instance_id = wait_for_healthy_target(
-                session, tg_arn, timeout=replacement_timeout
+                session,
+                tg_arn,
+                exclude_instance=original_instance_id,
+                timeout=replacement_timeout,
             )
-            if new_instance_id == original_instance_id:
-                ctx.fail(
-                    f"Target {new_instance_id} is the same as the terminated instance"
-                )
-                return False
             ctx.pass_(
                 f"Replacement {new_instance_id} is healthy "
                 f"(was {original_instance_id})"

@@ -73,18 +73,24 @@ def terminate_instance(session: boto3.Session, instance_id: str) -> None:
 def wait_for_healthy_target(
     session: boto3.Session,
     target_group_arn: str,
+    *,
+    exclude_instance: str | None = None,
     timeout: int = 600,
     interval: int = 15,
 ) -> str:
-    """Poll the NLB target group until a target is healthy. Return its instance ID."""
+    """Poll the NLB target group until a target is healthy. Return its instance ID.
+
+    If *exclude_instance* is given, ignore that ID (the just-terminated instance
+    may linger as "healthy" in the target group briefly after termination).
+    """
     elbv2 = session.client("elbv2")
     deadline = time.monotonic() + timeout
 
     while True:
         resp = elbv2.describe_target_health(TargetGroupArn=target_group_arn)
         for desc in resp["TargetHealthDescriptions"]:
-            if desc["TargetHealth"]["State"] == "healthy":
-                instance_id = desc["Target"]["Id"]
+            instance_id = desc["Target"]["Id"]
+            if desc["TargetHealth"]["State"] == "healthy" and instance_id != exclude_instance:
                 elapsed = timeout - (deadline - time.monotonic())
                 log.info("  Target %s is healthy (%.0fs elapsed)", instance_id, elapsed)
                 return instance_id

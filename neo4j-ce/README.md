@@ -42,12 +42,33 @@ The script waits for the stack to complete, then writes connection details and d
 ### 4. Test the Stack
 
 ```bash
-./test-stack.sh
+cd test_ce
+uv run test-ce
 ```
 
-Requires `cypher-shell` installed locally. The script reads `stack-outputs.txt` (written by `deploy.sh`), waits for the NLB endpoint to become reachable, then runs HTTP, authentication, Bolt, and APOC tests.
+The Python test suite in `test_ce/` reads `stack-outputs.txt` (written by `deploy.sh`) and runs two levels of testing:
 
-To override the password: `./test-stack.sh --password <password>`
+**Simple mode** (`--simple`) — connectivity only:
+1. **HTTP API** — GET the discovery endpoint, verify `neo4j_version` is present
+2. **Authentication** — POST a Cypher statement with Basic Auth, expect HTTP 200
+3. **Bolt connectivity** — connect via the Neo4j driver and execute `RETURN 1`
+4. **APOC plugin** — call `apoc.version()` (skipped if APOC not installed)
+
+**Full mode** (default) — connectivity + EBS persistence:
+5. **Write sentinel data** — create a `Sentinel` node with a unique test ID
+6. **Terminate EC2 instance** — kill the running instance via the ASG
+7. **Wait for ASG replacement** — poll the NLB target group until a new instance is healthy
+8. **Re-run connectivity tests** — verify HTTP, Auth, Bolt, and APOC on the replacement
+9. **Verify sentinel data persisted** — confirm the sentinel node survived instance replacement (proves the EBS volume was reattached)
+
+```bash
+uv run test-ce                # full mode (connectivity + EBS resilience)
+uv run test-ce --simple       # connectivity only
+uv run test-ce --password pw  # override password from stack-outputs.txt
+uv run test-ce --timeout 900  # ASG replacement timeout in seconds (default: 600)
+```
+
+> The legacy `test-stack.sh` script is equivalent to `uv run test-ce --simple`.
 
 ### 5. Tear Down
 
@@ -71,7 +92,8 @@ Deletes the CloudFormation stack, the SSM parameter created by `deploy.sh`, and 
 |---|---|
 | `neo4j.template.yaml` | CloudFormation template |
 | `deploy.sh` | Local deploy helper — creates stack, waits, writes outputs |
-| `test-stack.sh` | Validates a deployed stack (HTTP, Bolt, auth, APOC) |
+| `test-stack.sh` | Legacy connectivity tests (HTTP, Bolt, auth, APOC) |
+| `test_ce/` | Python test suite — connectivity + EBS resilience testing |
 | `teardown.sh` | Deletes the stack, SSM parameter, and local outputs |
 | `marketplace/` | AMI build scripts and Marketplace publishing instructions |
 | `marketplace/ami-id.txt` | AMI ID from last build (gitignored) |

@@ -623,10 +623,7 @@ Resources:
                 sed -i '/swap/d' /etc/fstab
 
                 mkdir -p /etc/systemd/system/neo4j.service.d
-                cat > /etc/systemd/system/neo4j.service.d/override.conf <<'CONF'
-                [Service]
-                LimitNOFILE=60000
-                CONF
+                printf '[Service]\nLimitNOFILE=60000\n' > /etc/systemd/system/neo4j.service.d/override.conf
                 systemctl daemon-reload
 
                 # ---------------------------------------------------------------

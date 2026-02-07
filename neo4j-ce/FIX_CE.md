@@ -199,25 +199,16 @@ Implemented. Changes made to `neo4j.template.yaml`:
 - No IAM changes needed — the existing `Neo4jVolumeAttach` policy covers all
   volumes tagged with the stack's `StackID`.
 
-### Step 3 -- OS Hardening in UserData
+### Step 3 -- OS Hardening in UserData -- DONE
 
-**Goal:** Apply Operations Manual production recommendations.
+Implemented. Changes made to `neo4j.template.yaml` UserData:
 
-Add the following to UserData before starting Neo4j:
-
-```bash
-# Disable swap
-swapoff -a
-sed -i '/swap/d' /etc/fstab
-
-# File descriptor limits
-mkdir -p /etc/systemd/system/neo4j.service.d
-cat > /etc/systemd/system/neo4j.service.d/override.conf <<CONF
-[Service]
-LimitNOFILE=60000
-CONF
-systemctl daemon-reload
-```
+- Added `swapoff -a` and removal of swap entries from `/etc/fstab` to
+  prevent swap-induced latency spikes during memory-mapped I/O.
+- Added a systemd override (`LimitNOFILE=60000`) for the neo4j service
+  to raise the file descriptor limit from the Linux default of 1024.
+- `systemctl daemon-reload` runs after the override is written and
+  before Neo4j starts.
 
 ### Step 4 -- Update IAM Policy -- DONE (completed in Step 1)
 

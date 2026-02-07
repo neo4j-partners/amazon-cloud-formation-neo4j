@@ -240,7 +240,95 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Test 4: APOC — Verify apoc.version() is callable (if installed)
+# Test 4: Sample data — Create Movies dataset via Cypher
+# ---------------------------------------------------------------------------
+run_test "Create Movies dataset"
+
+MOVIES_CYPHER="
+CREATE (TheMatrix:Movie {title:'The Matrix', released:1999, tagline:'Welcome to the Real World'})
+CREATE (Keanu:Person {name:'Keanu Reeves', born:1964})
+CREATE (Carrie:Person {name:'Carrie-Anne Moss', born:1967})
+CREATE (Laurence:Person {name:'Laurence Fishburne', born:1961})
+CREATE (Hugo:Person {name:'Hugo Weaving', born:1960})
+CREATE (LillyW:Person {name:'Lilly Wachowski', born:1967})
+CREATE (LanaW:Person {name:'Lana Wachowski', born:1965})
+CREATE (JoelS:Person {name:'Joel Silver', born:1952})
+CREATE
+(Keanu)-[:ACTED_IN {roles:['Neo']}]->(TheMatrix),
+(Carrie)-[:ACTED_IN {roles:['Trinity']}]->(TheMatrix),
+(Laurence)-[:ACTED_IN {roles:['Morpheus']}]->(TheMatrix),
+(Hugo)-[:ACTED_IN {roles:['Agent Smith']}]->(TheMatrix),
+(LillyW)-[:DIRECTED]->(TheMatrix),
+(LanaW)-[:DIRECTED]->(TheMatrix),
+(JoelS)-[:PRODUCED]->(TheMatrix)
+
+CREATE (Emil:Person {name:'Emil Eifrem', born:1978})
+CREATE (Emil)-[:ACTED_IN {roles:['Emil']}]->(TheMatrix)
+
+CREATE (TheMatrixReloaded:Movie {title:'The Matrix Reloaded', released:2003, tagline:'Free your mind'})
+CREATE
+(Keanu)-[:ACTED_IN {roles:['Neo']}]->(TheMatrixReloaded),
+(Carrie)-[:ACTED_IN {roles:['Trinity']}]->(TheMatrixReloaded),
+(Laurence)-[:ACTED_IN {roles:['Morpheus']}]->(TheMatrixReloaded),
+(Hugo)-[:ACTED_IN {roles:['Agent Smith']}]->(TheMatrixReloaded),
+(LillyW)-[:DIRECTED]->(TheMatrixReloaded),
+(LanaW)-[:DIRECTED]->(TheMatrixReloaded),
+(JoelS)-[:PRODUCED]->(TheMatrixReloaded)
+
+CREATE (TheMatrixRevolutions:Movie {title:'The Matrix Revolutions', released:2003, tagline:'Everything that has a beginning has an end'})
+CREATE
+(Keanu)-[:ACTED_IN {roles:['Neo']}]->(TheMatrixRevolutions),
+(Carrie)-[:ACTED_IN {roles:['Trinity']}]->(TheMatrixRevolutions),
+(Laurence)-[:ACTED_IN {roles:['Morpheus']}]->(TheMatrixRevolutions),
+(Hugo)-[:ACTED_IN {roles:['Agent Smith']}]->(TheMatrixRevolutions),
+(LillyW)-[:DIRECTED]->(TheMatrixRevolutions),
+(LanaW)-[:DIRECTED]->(TheMatrixRevolutions),
+(JoelS)-[:PRODUCED]->(TheMatrixRevolutions)
+
+WITH Keanu AS a
+MATCH (a)-[:ACTED_IN]->(m)<-[:DIRECTED]-(d) RETURN a,m,d LIMIT 10;
+"
+
+CREATE_EXIT=0
+CREATE_RESULT=$(cypher-shell \
+  -a "${BOLT_ENDPOINT}" \
+  -u "${USERNAME}" \
+  -p "${PASSWORD}" \
+  --format plain \
+  "${MOVIES_CYPHER}" 2>&1) || CREATE_EXIT=$?
+
+if [ "${CREATE_EXIT}" -eq 0 ]; then
+  pass "Movies dataset created successfully"
+else
+  fail "Failed to create Movies dataset (exit ${CREATE_EXIT}): ${CREATE_RESULT}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 5: Verify Movies dataset — Query nodes and relationships
+# ---------------------------------------------------------------------------
+run_test "Verify Movies dataset"
+
+VERIFY_EXIT=0
+VERIFY_RESULT=$(cypher-shell \
+  -a "${BOLT_ENDPOINT}" \
+  -u "${USERNAME}" \
+  -p "${PASSWORD}" \
+  --format plain \
+  "MATCH (n) RETURN count(n) AS nodeCount;" 2>&1) || VERIFY_EXIT=$?
+
+if [ "${VERIFY_EXIT}" -eq 0 ]; then
+  NODE_COUNT=$(echo "${VERIFY_RESULT}" | tail -1 | tr -d ' ')
+  if [ "${NODE_COUNT}" -gt 0 ] 2>/dev/null; then
+    pass "Verified Movies dataset: ${NODE_COUNT} nodes found"
+  else
+    fail "Movies dataset appears empty (count: ${NODE_COUNT})"
+  fi
+else
+  fail "Failed to verify Movies dataset (exit ${VERIFY_EXIT}): ${VERIFY_RESULT}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 6: APOC — Verify apoc.version() is callable (if installed)
 # ---------------------------------------------------------------------------
 if [ "${INSTALL_APOC}" = "yes" ]; then
   run_test "APOC plugin"
@@ -263,6 +351,27 @@ else
   echo "--- Skipping APOC test (InstallAPOC=${INSTALL_APOC}) ---"
   echo ""
 fi
+
+# ---------------------------------------------------------------------------
+# Cleanup: Remove Movies dataset
+# ---------------------------------------------------------------------------
+echo "--- Cleanup: Removing Movies dataset ---"
+
+CLEANUP_EXIT=0
+CLEANUP_RESULT=$(cypher-shell \
+  -a "${BOLT_ENDPOINT}" \
+  -u "${USERNAME}" \
+  -p "${PASSWORD}" \
+  --format plain \
+  "MATCH (n) DETACH DELETE n;" 2>&1) || CLEANUP_EXIT=$?
+
+if [ "${CLEANUP_EXIT}" -eq 0 ]; then
+  echo "  Cleanup successful — test data removed."
+else
+  echo "  WARNING: Cleanup failed (exit ${CLEANUP_EXIT}): ${CLEANUP_RESULT}"
+  echo "  You may need to manually remove test data."
+fi
+echo ""
 
 # ---------------------------------------------------------------------------
 # Results

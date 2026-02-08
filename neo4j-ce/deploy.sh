@@ -11,8 +11,7 @@
 #
 # Instance family (optional, default: t3):
 #   t3  -> t3.medium   (burstable)
-#   m6a -> m6a.large   (general purpose)
-#   r6a -> r6a.large   (memory optimized)
+#   r8i -> r8i.large   (memory optimized)
 #
 # When deployed through the Marketplace console the ImageId parameter is
 # resolved automatically via SSM. For local testing this script creates a
@@ -37,11 +36,10 @@ INSTANCE_FAMILY="${1:-t3}"
 
 case "${INSTANCE_FAMILY}" in
   t3)  INSTANCE_TYPE="t3.medium" ;;
-  m6a) INSTANCE_TYPE="m6a.large" ;;
-  r6a) INSTANCE_TYPE="r6a.large" ;;
+  r8i) INSTANCE_TYPE="r8i.large" ;;
   *)
     echo "ERROR: Unsupported instance family '${INSTANCE_FAMILY}'." >&2
-    echo "Supported families: t3, m6a, r6a" >&2
+    echo "Supported families: t3, r8i" >&2
     exit 1
     ;;
 esac

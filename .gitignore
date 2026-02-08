@@ -44,3 +44,4 @@ ENV/
 .mcp.json
 ami-id.txt
 stack-outputs.txt
+deploy-values.md

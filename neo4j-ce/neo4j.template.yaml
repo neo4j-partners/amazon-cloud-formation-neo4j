@@ -61,16 +61,12 @@ Parameters:
       # Burstable — dev, testing, learning
       - t3.medium       # 2 vCPU,   4 GB
       - t3.large        # 2 vCPU,   8 GB
-      - t3.xlarge       # 4 vCPU,  16 GB
-      - t3.2xlarge      # 8 vCPU,  32 GB
-      # General purpose (AMD gen 6) — steady production workloads
-      - m6a.large       # 2 vCPU,   8 GB
-      - m6a.xlarge      # 4 vCPU,  16 GB
-      - m6a.2xlarge     # 8 vCPU,  32 GB
-      # Memory optimized (AMD gen 6) — large graph production workloads
-      - r6a.large       # 2 vCPU,  16 GB
-      - r6a.xlarge      # 4 vCPU,  32 GB
-      - r6a.2xlarge     # 8 vCPU,  64 GB
+      # Memory optimized (Intel gen 8) — production workloads
+      - r8i.large       # 2 vCPU,  16 GB
+      - r8i.xlarge      # 4 vCPU,  32 GB
+      - r8i.2xlarge     # 8 vCPU,  64 GB
+      - r8i.4xlarge     # 16 vCPU, 128 GB
+      - r8i.8xlarge     # 32 vCPU, 256 GB
 
   DiskSize:
     Description: Size in GB of the root EBS volume (OS and Neo4j binaries only)

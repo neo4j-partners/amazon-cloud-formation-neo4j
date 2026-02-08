@@ -29,8 +29,7 @@ This builds the AMI and writes the ID to `marketplace/ami-id.txt`. See [marketpl
 
 ```bash
 ./deploy.sh              # default instance family (t3.medium)
-./deploy.sh m6a          # general purpose (m6a.large)
-./deploy.sh r6a          # memory optimized (r6a.large)
+./deploy.sh r8i          # memory optimized (r8i.large)
 ```
 
 The script reads the AMI ID from `marketplace/ami-id.txt` (written by `create-ami.sh`), deploys the smallest instance in the given family, waits for the stack to complete, then writes connection details and deploy context to `stack-outputs.txt`.

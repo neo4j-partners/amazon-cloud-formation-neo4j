@@ -427,6 +427,24 @@ Resources:
                 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
                   http://169.254.169.254/latest/meta-data/instance-id)
 
+                # Wait for the volume to become available. After an ASG
+                # replacement the old instance may still be detaching the
+                # volume. Poll for up to 90 seconds before giving up.
+                echo "Waiting for data volume to become available..."
+                for attempt in $(seq 1 18); do
+                  VOL_STATE=$(aws ec2 describe-volumes \
+                    --volume-ids "${DATA_VOLUME_ID}" \
+                    --region "${REGION}" \
+                    --query "Volumes[0].State" --output text)
+                  [ "$VOL_STATE" == "available" ] && break
+                  echo "  Volume state: $VOL_STATE (attempt $attempt/18, waiting 5s...)"
+                  sleep 5
+                done
+                if [ "$VOL_STATE" != "available" ]; then
+                  echo "ERROR: data volume ${DATA_VOLUME_ID} not available (state: $VOL_STATE)"
+                  exit 1
+                fi
+
                 aws ec2 attach-volume \
                   --volume-id "${DATA_VOLUME_ID}" \
                   --instance-id "$INSTANCE_ID" \

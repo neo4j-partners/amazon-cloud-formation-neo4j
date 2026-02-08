@@ -8,6 +8,32 @@ Description: >-
   and no customer data is exported.
 
 Metadata:
+  # -------------------------------------------------------------------------
+  # External Connectivity Disclosure (AWS Marketplace Policy Compliance)
+  #
+  # This template's UserData script makes ONLY the following network calls:
+  #
+  #   1. EC2 Instance Metadata Service (IMDS) — http://169.254.169.254
+  #      Link-local address (not an external endpoint). Used to retrieve the
+  #      instance ID and IMDSv2 session token. Required for EBS attachment,
+  #      Elastic IP association, and CloudFormation signaling.
+  #
+  #   2. AWS EC2 API (via AWS CLI)
+  #      - ec2:DescribeVolumes  — poll data volume state before attaching
+  #      - ec2:AttachVolume     — attach the persistent EBS data volume
+  #      - ec2:AssociateAddress — associate the Elastic IP with the instance
+  #      All calls route to the regional EC2 endpoint within AWS.
+  #
+  #   3. AWS CloudFormation API (via AWS CLI)
+  #      - cloudformation:SignalResource — report success/failure to the
+  #        CreationPolicy on the Auto Scaling Group.
+  #
+  # NO external code is downloaded. Neo4j and Java (Corretto 21) are
+  # pre-installed on the AMI. The APOC plugin, if enabled, is copied from
+  # the local filesystem (/var/lib/neo4j/labs/ or /var/lib/neo4j/products/).
+  #
+  # NO customer data is collected, exported, or sent to any endpoint.
+  # -------------------------------------------------------------------------
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
@@ -329,6 +355,20 @@ Resources:
                 set -euo pipefail
                 echo "Running Neo4j Community Edition startup script..."
 
+                # ==============================================================
+                # EXTERNAL CONNECTIVITY DISCLOSURE
+                #
+                # This script contacts ONLY AWS service endpoints:
+                #   - IMDS 169.254.169.254 (link-local, instance metadata)
+                #   - AWS EC2 API          (DescribeVolumes, AttachVolume,
+                #                           AssociateAddress)
+                #   - AWS CloudFormation API (SignalResource)
+                #
+                # All software (Neo4j, Java 21, APOC) is pre-installed on the
+                # AMI. No packages are downloaded from the internet. No customer
+                # data is collected or exported.
+                # ==============================================================
+
                 # ---------------------------------------------------------------
                 # Signal helper — notify CloudFormation of success or failure
                 #
@@ -339,10 +379,12 @@ Resources:
                 # ---------------------------------------------------------------
                 signal_cfn() {
                   local status="$1"
+                  # IMDS (link-local 169.254.169.254) — not an external endpoint
                   TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
                     -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
                   INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
                     http://169.254.169.254/latest/meta-data/instance-id)
+                  # AWS CloudFormation API — regional service endpoint
                   aws cloudformation signal-resource \
                     --stack-name "${STACK_NAME}" \
                     --logical-resource-id Neo4jAutoScalingGroup \
@@ -430,6 +472,7 @@ Resources:
                 # attach-volume returns before the kernel sees the block device.
                 # ---------------------------------------------------------------
                 echo "Attaching persistent data volume..."
+                # IMDS (link-local 169.254.169.254) — not an external endpoint
                 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
                   -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
                 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
@@ -438,6 +481,7 @@ Resources:
                 # Wait for the volume to become available. After an ASG
                 # replacement the old instance may still be detaching the
                 # volume. Poll for up to 90 seconds before giving up.
+                # AWS EC2 API — regional service endpoint (DescribeVolumes)
                 echo "Waiting for data volume to become available..."
                 for attempt in $(seq 1 18); do
                   VOL_STATE=$(aws ec2 describe-volumes \
@@ -453,12 +497,14 @@ Resources:
                   exit 1
                 fi
 
+                # AWS EC2 API — regional service endpoint (AttachVolume)
                 aws ec2 attach-volume \
                   --volume-id "${DATA_VOLUME_ID}" \
                   --instance-id "$INSTANCE_ID" \
                   --device /dev/xvdf \
                   --region "${REGION}"
 
+                # AWS EC2 API — regional service endpoint (DescribeVolumes waiter)
                 echo "Waiting for data volume device to appear..."
                 aws ec2 wait volume-in-use \
                   --volume-ids "${DATA_VOLUME_ID}" \
@@ -507,6 +553,7 @@ Resources:
                 # or ASG replacement) the instance claims it so the public
                 # address follows the instance.
                 # ---------------------------------------------------------------
+                # AWS EC2 API — regional service endpoint (AssociateAddress)
                 echo "Associating Elastic IP..."
                 aws ec2 associate-address \
                   --allocation-id "${EIP_ALLOC_ID}" \
@@ -522,6 +569,7 @@ Resources:
                 # as a forward-compatibility measure in case the location changes.
                 # ---------------------------------------------------------------
                 if [ "${APOC}" == "yes" ]; then
+                  # LOCAL FILESYSTEM ONLY — no download; jar is pre-installed on the AMI
                   echo "Installing APOC plugin..."
                   cp /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || \
                     cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true

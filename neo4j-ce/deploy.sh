@@ -20,10 +20,15 @@
 
 set -euo pipefail
 
+export AWS_PROFILE="${AWS_PROFILE:-marketplace}"
+
 STACK_NAME="test-standalone-$(date +%s)"
 TEMPLATE_BODY="file://neo4j.template.yaml"
 REGION="us-east-1"
-Password="$(openssl rand -base64 12)"
+# Password must satisfy the template AllowedPattern (letters + numbers).
+# openssl rand -base64 occasionally produces all-letter output, so append
+# a random digit to guarantee the pattern matches.
+Password="$(openssl rand -base64 12)$(( RANDOM % 10 ))"
 InstallAPOC="yes"
 
 # Resolve the AMI ID: CLI arg > ami-id.txt > error

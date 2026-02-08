@@ -45,9 +45,12 @@ Parameters:
 
   Password:
     Description: >
-      Password for the neo4j admin user. Minimum 8 characters.
+      Password for the neo4j admin user. Must be at least 8 characters
+      and contain both letters and numbers.
     Type: String
     MinLength: 8
+    AllowedPattern: ^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$
+    ConstraintDescription: Must be at least 8 characters and contain both letters and numbers.
     NoEcho: true
 
   InstanceType:
@@ -703,3 +706,10 @@ Outputs:
   Edition:
     Description: Neo4j edition deployed
     Value: Community Edition (GPLv3)
+  DataVolumeId:
+    Description: >
+      EBS volume holding Neo4j data. This volume is RETAINED when the stack is
+      deleted to protect your data. You must manually delete it via the EC2
+      console (EBS > Volumes) when it is no longer needed to avoid ongoing
+      storage charges.
+    Value: !Ref Neo4jDataVolume

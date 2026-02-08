@@ -22,18 +22,22 @@ All commands run from the edition directory (e.g., `neo4j-ce/`):
 # Test AMI (SSM-based, no SSH)
 ./marketplace/test-ami.sh
 
-# Deploy stack (reads marketplace/ami-id.txt, writes stack-outputs.txt)
-./deploy.sh              # default: t3.medium
-./deploy.sh r8i          # memory optimized: r8i.large
+# Deploy stack (reads marketplace/ami-id.txt, writes .deploy/<stack-name>.txt)
+./deploy.sh                        # default: t3.medium, random region
+./deploy.sh r8i                    # memory optimized: r8i.large
+./deploy.sh --region eu-west-1     # specific region (AMI auto-copied)
+./deploy.sh r8i --region us-east-2 # both
 
-# Test stack (reads stack-outputs.txt)
+# Test stack (reads .deploy/<stack-name>.txt)
 cd test_ce
-uv run test-ce                # full: connectivity + EBS resilience
-uv run test-ce --simple       # connectivity only
-uv run test-ce --timeout 900  # custom ASG replacement timeout (default 600s)
+uv run test-ce                           # full: latest deploy
+uv run test-ce --stack <stack-name>      # specific deploy
+uv run test-ce --simple                  # connectivity only
+uv run test-ce --timeout 900             # custom ASG replacement timeout (default 600s)
 
-# Tear down (deletes stack, SSM parameter, stack-outputs.txt)
-./teardown.sh
+# Tear down (deletes stack, SSM parameter, copied AMI, .deploy/<stack>.txt)
+./teardown.sh                  # latest deploy
+./teardown.sh <stack-name>     # specific deploy
 ```
 
 ## Architecture
@@ -59,7 +63,7 @@ Nitro instances expose EBS as NVMe devices with non-deterministic names. The Use
 
 ### Key File Flow
 
-`create-ami.sh` → writes `marketplace/ami-id.txt` → `deploy.sh` reads it, deploys stack, writes `stack-outputs.txt` → `test_ce/` reads `stack-outputs.txt` → `teardown.sh` cleans up.
+`create-ami.sh` → writes `marketplace/ami-id.txt` → `deploy.sh` reads it, deploys stack (random region, copies AMI if needed), writes `.deploy/<stack-name>.txt` → `test_ce/` and `test-stack.sh` read from `.deploy/` (newest by default, or `--stack <name>`) → `teardown.sh` cleans up (stack, SSM param, copied AMI, output file).
 
 ## Test Suite (test_ce/)
 

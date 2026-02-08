@@ -36,13 +36,16 @@ This builds the base OS AMI (Neo4j is installed at deploy time from yum) and wri
 
 The script reads the AMI ID from `marketplace/ami-id.txt` (written by `create-ami.sh`), picks a random region (or uses `--region`), copies the AMI cross-region if needed, deploys the stack, waits for completion, then writes connection details and deploy context to `.deploy/<stack-name>.txt`.
 
+Cross-region AMI copies can take 10-20+ minutes (especially to distant regions like `ap-southeast-*`). For a quick test, use `--region us-east-1` to skip the copy.
+
 Multiple deployments can coexist — each gets its own output file in `.deploy/`.
 
 ### 4. Test the Stack
 
 ```bash
 cd test_ce
-uv run test-ce
+uv run test-ce                     # tests the most recent deployment in .deploy/
+uv run test-ce --stack <stack-name> # tests a specific deployment
 ```
 
 The Python test suite in `test_ce/` reads from `.deploy/` (most recently modified file by default) and runs two levels of testing:

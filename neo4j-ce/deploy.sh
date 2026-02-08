@@ -72,6 +72,7 @@ PARAMS="ParameterKey=Password,ParameterValue=${Password}"
 PARAMS="${PARAMS} ParameterKey=InstallAPOC,ParameterValue=${InstallAPOC}"
 PARAMS="${PARAMS} ParameterKey=ImageId,ParameterValue=${SSM_PARAM_PATH}"
 PARAMS="${PARAMS} ParameterKey=InstanceType,ParameterValue=${INSTANCE_TYPE}"
+PARAMS="${PARAMS} ParameterKey=AllowedCIDR,ParameterValue=0.0.0.0/0"
 
 echo "Creating stack ${STACK_NAME}..."
 echo "Instance type: ${INSTANCE_TYPE} (family: ${INSTANCE_FAMILY})"

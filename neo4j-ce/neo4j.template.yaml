@@ -1,43 +1,73 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
-  Neo4j Community Edition. During deployment, the instance UserData script
-  installs Neo4j from yum.neo4j.com, contacts AWS service endpoints (EC2,
-  CloudFormation) via the AWS CLI to attach an EBS data volume, associate
-  an Elastic IP, and signal stack completion. The APOC plugin, if enabled,
-  is copied from the local filesystem (bundled with Neo4j). No customer
-  data is exported.
+  Neo4j Community Edition deployed on a single EC2 instance with Auto Scaling
+  Group resilience, persistent EBS data volume, and Elastic IP.
+  This product requires an internet connection to deploy properly. The
+  following packages are downloaded on deployment: Neo4j Community Edition
+  and Java runtime dependencies (from https://yum.neo4j.com/stable/latest
+  via dnf), and the Neo4j GPG signing key (from
+  https://debian.neo4j.com/neotechnology.gpg.key). The deployment script
+  also contacts the following AWS service endpoints via the AWS CLI:
+  EC2 API (DescribeVolumes, AttachVolume, AssociateAddress) and
+  CloudFormation API (SignalResource). The EC2 Instance Metadata Service
+  (IMDS, link-local 169.254.169.254) is used to retrieve instance identity.
+  The APOC plugin, if enabled, is copied from the local filesystem
+  (bundled with the Neo4j package) and is not downloaded externally. No
+  customer data is collected, exported, or sent to any external endpoint.
 
 Metadata:
-  # -------------------------------------------------------------------------
-  # External Connectivity Disclosure (AWS Marketplace Policy Compliance)
-  #
-  # This template's UserData script makes the following network calls:
-  #
-  #   1. EC2 Instance Metadata Service (IMDS) — http://169.254.169.254
-  #      Link-local address (not an external endpoint). Used to retrieve the
-  #      instance ID and IMDSv2 session token. Required for EBS attachment,
-  #      Elastic IP association, and CloudFormation signaling.
-  #
-  #   2. Neo4j yum repository — https://yum.neo4j.com/stable/latest
-  #      Downloads and installs the Neo4j Community Edition package and its
-  #      dependencies (including Java) at deploy time via dnf.
-  #      GPG key imported from https://debian.neo4j.com/neotechnology.gpg.key.
-  #
-  #   3. AWS EC2 API (via AWS CLI)
-  #      - ec2:DescribeVolumes  — poll data volume state before attaching
-  #      - ec2:AttachVolume     — attach the persistent EBS data volume
-  #      - ec2:AssociateAddress — associate the Elastic IP with the instance
-  #      All calls route to the regional EC2 endpoint within AWS.
-  #
-  #   4. AWS CloudFormation API (via AWS CLI)
-  #      - cloudformation:SignalResource — report success/failure to the
-  #        CreationPolicy on the Auto Scaling Group.
-  #
-  # The APOC plugin, if enabled, is copied from the local filesystem
-  # (/var/lib/neo4j/labs/ or /var/lib/neo4j/products/).
-  #
-  # NO customer data is collected, exported, or sent to any endpoint.
-  # -------------------------------------------------------------------------
+  ExternalConnectivityDisclosure:
+    Description: >-
+      This product requires an internet connection to deploy properly. The
+      following packages are downloaded on deployment: Neo4j Community Edition
+      and Java runtime dependencies (from https://yum.neo4j.com/stable/latest
+      via dnf), and the Neo4j GPG signing key (from
+      https://debian.neo4j.com/neotechnology.gpg.key). No customer data is
+      collected, exported, or sent to any external endpoint.
+    DeployTimeExternalDependencies:
+      - Endpoint: https://yum.neo4j.com/stable/latest
+        Purpose: >-
+          Downloads and installs the Neo4j Community Edition package and its
+          dependencies (including Java) at deploy time via dnf.
+        Protocol: HTTPS
+        DataSent: None
+      - Endpoint: https://debian.neo4j.com/neotechnology.gpg.key
+        Purpose: >-
+          Imports the Neo4j GPG signing key for package verification.
+        Protocol: HTTPS
+        DataSent: None
+    AWSServiceEndpoints:
+      - Service: EC2 Instance Metadata Service (IMDS)
+        Endpoint: http://169.254.169.254 (link-local, not an external endpoint)
+        Purpose: >-
+          Retrieves instance ID and IMDSv2 session token. Required for EBS
+          attachment, Elastic IP association, and CloudFormation signaling.
+        DataSent: None
+      - Service: Amazon EC2 API (via AWS CLI)
+        Actions:
+          - ec2:DescribeVolumes (poll data volume state before attaching)
+          - ec2:AttachVolume (attach the persistent EBS data volume)
+          - ec2:AssociateAddress (associate the Elastic IP with the instance)
+        Purpose: >-
+          Manage instance storage and networking within the customer's own
+          AWS account. All calls route to the regional EC2 endpoint.
+        DataSent: None
+      - Service: AWS CloudFormation API (via AWS CLI)
+        Actions:
+          - cloudformation:SignalResource
+        Purpose: >-
+          Reports deployment success or failure to the CreationPolicy on the
+          Auto Scaling Group.
+        DataSent: None
+    LocalOperations:
+      - Operation: APOC plugin installation (if enabled)
+        Source: /var/lib/neo4j/labs/ or /var/lib/neo4j/products/
+        Purpose: >-
+          Copies the APOC plugin jar from the local filesystem (bundled with
+          the Neo4j package) to the plugins directory. No external download.
+    CustomerDataPolicy: >-
+      No customer data is collected, exported, or sent to any endpoint.
+      The software does not phone home or transmit usage telemetry.
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:

@@ -1,16 +1,18 @@
 #!/bin/bash
-# teardown.sh — Delete the Neo4j CE CloudFormation stack and clean up resources
+# teardown.sh — Delete a Neo4j CE CloudFormation stack and clean up resources
 #
-# Reads stack-outputs.txt (written by deploy.sh) to determine the stack name,
-# region, and SSM parameter path, then deletes everything.
+# Reads .deploy/<stack-name>.txt (written by deploy.sh) to determine the stack
+# name, region, SSM parameter path, and any copied AMI to clean up.
 #
 # Usage:
-#   ./teardown.sh
+#   ./teardown.sh [stack-name]
+#
+# If stack-name is omitted, uses the most recently modified file in .deploy/.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OUTPUTS_FILE="${SCRIPT_DIR}/stack-outputs.txt"
+DEPLOY_DIR="${SCRIPT_DIR}/.deploy"
 
 # ---------------------------------------------------------------------------
 # Helper: read a value from a "Key = Value" file
@@ -22,17 +24,36 @@ read_field() {
 }
 
 # ---------------------------------------------------------------------------
-# Load configuration
+# Resolve the outputs file
 # ---------------------------------------------------------------------------
-if [ ! -f "${OUTPUTS_FILE}" ]; then
-  echo "ERROR: ${OUTPUTS_FILE} not found." >&2
-  echo "Nothing to tear down (no deploy.sh output found)." >&2
+if [ $# -ge 1 ]; then
+  # Explicit stack name given
+  OUTPUTS_FILE="${DEPLOY_DIR}/$1.txt"
+elif [ -d "${DEPLOY_DIR}" ]; then
+  # Find most recently modified .txt in .deploy/
+  OUTPUTS_FILE=$(ls -t "${DEPLOY_DIR}"/*.txt 2>/dev/null | head -1 || true)
+else
+  OUTPUTS_FILE=""
+fi
+
+if [ -z "${OUTPUTS_FILE}" ] || [ ! -f "${OUTPUTS_FILE}" ]; then
+  echo "ERROR: No deployment found." >&2
+  if [ $# -ge 1 ]; then
+    echo "File not found: ${DEPLOY_DIR}/$1.txt" >&2
+  else
+    echo "No .txt files in ${DEPLOY_DIR}/" >&2
+  fi
+  echo "Usage: $0 [stack-name]" >&2
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Load configuration
+# ---------------------------------------------------------------------------
 STACK_NAME=$(read_field "${OUTPUTS_FILE}" "StackName")
 REGION=$(read_field "${OUTPUTS_FILE}" "Region")
 SSM_PARAM_PATH=$(read_field "${OUTPUTS_FILE}" "SSMParamPath")
+COPIED_AMI_ID=$(read_field "${OUTPUTS_FILE}" "CopiedAmiId" 2>/dev/null || true)
 
 if [ -z "${STACK_NAME}" ] || [ -z "${REGION}" ]; then
   echo "ERROR: Could not read StackName or Region from ${OUTPUTS_FILE}." >&2
@@ -44,6 +65,9 @@ echo ""
 echo "  Stack:     ${STACK_NAME}"
 echo "  Region:    ${REGION}"
 echo "  SSM Param: ${SSM_PARAM_PATH}"
+if [ -n "${COPIED_AMI_ID}" ]; then
+  echo "  Copied AMI: ${COPIED_AMI_ID}"
+fi
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -74,7 +98,31 @@ if [ -n "${SSM_PARAM_PATH}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3: Clean up local files
+# Step 3: Clean up copied AMI (cross-region deploys)
+# ---------------------------------------------------------------------------
+if [ -n "${COPIED_AMI_ID}" ]; then
+  echo ""
+  echo "Deregistering copied AMI ${COPIED_AMI_ID} in ${REGION}..."
+  aws ec2 deregister-image \
+    --region "${REGION}" \
+    --image-id "${COPIED_AMI_ID}" 2>/dev/null || true
+
+  echo "Deleting backing snapshots..."
+  aws ec2 describe-snapshots \
+    --region "${REGION}" \
+    --filters "Name=description,Values=*${COPIED_AMI_ID}*" \
+    --query "Snapshots[].SnapshotId" \
+    --output text 2>/dev/null | while read -r snap_id; do
+      if [ -n "${snap_id}" ]; then
+        echo "  Deleting snapshot ${snap_id}..."
+        aws ec2 delete-snapshot --region "${REGION}" --snapshot-id "${snap_id}" 2>/dev/null || true
+      fi
+    done
+  echo "Copied AMI cleaned up."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 4: Clean up local files
 # ---------------------------------------------------------------------------
 echo ""
 echo "Removing ${OUTPUTS_FILE}..."

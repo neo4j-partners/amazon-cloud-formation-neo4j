@@ -1,4 +1,4 @@
-"""Parse stack-outputs.txt and expose configuration as a typed dataclass."""
+"""Parse deploy output files and expose configuration as a typed dataclass."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ _REQUIRED_FIELDS = (
 
 @dataclasses.dataclass(frozen=True)
 class StackConfig:
-    """Immutable configuration parsed from deploy.sh's stack-outputs.txt."""
+    """Immutable configuration parsed from deploy.sh output (.deploy/<stack>.txt)."""
 
     browser_url: str  # e.g. http://<eip>:7474
     neo4j_uri: str  # e.g. neo4j://<eip>:7687

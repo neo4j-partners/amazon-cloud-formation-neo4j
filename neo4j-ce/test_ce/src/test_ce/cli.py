@@ -21,12 +21,30 @@ from test_ce.wait import wait_for_neo4j
 log = logging.getLogger(__name__)
 
 
-def _resolve_outputs_path(explicit: Path | None) -> Path:
-    """Return the path to stack-outputs.txt, defaulting to ../stack-outputs.txt from cwd."""
+def _resolve_outputs_path(explicit: Path | None, stack: str | None) -> Path:
+    """Return the path to the deployment outputs file.
+
+    Resolution order:
+    1. Explicit --outputs-file path
+    2. --stack <name> -> ../.deploy/<name>.txt
+    3. Most recently modified .txt in ../.deploy/
+    """
     if explicit:
         return explicit
-    # Convention: test_ce/ lives inside neo4j-ce/, so ../stack-outputs.txt
-    return Path.cwd().parent / "stack-outputs.txt"
+
+    deploy_dir = Path.cwd().parent / ".deploy"
+
+    if stack:
+        return deploy_dir / f"{stack}.txt"
+
+    # Find newest .txt in .deploy/
+    if deploy_dir.is_dir():
+        txt_files = sorted(deploy_dir.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if txt_files:
+            return txt_files[0]
+
+    # No deployment found — return a path that will fail with a clear FileNotFoundError
+    return deploy_dir / "no-deployment-found.txt"
 
 
 def main() -> None:
@@ -43,12 +61,16 @@ def main() -> None:
     )
     parser.add_argument(
         "--password",
-        help="Override the password from stack-outputs.txt",
+        help="Override the password from the outputs file",
+    )
+    parser.add_argument(
+        "--stack",
+        help="Stack name — resolves to ../.deploy/<stack-name>.txt",
     )
     parser.add_argument(
         "--outputs-file",
         type=Path,
-        help="Path to stack-outputs.txt (default: ../stack-outputs.txt)",
+        help="Explicit path to outputs file (overrides --stack)",
     )
     parser.add_argument(
         "--timeout",
@@ -61,7 +83,7 @@ def main() -> None:
     # Configure logging: plain messages to stdout, matching the bash script style
     logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 
-    outputs_path = _resolve_outputs_path(args.outputs_file)
+    outputs_path = _resolve_outputs_path(args.outputs_file, args.stack)
 
     try:
         config = load_config(outputs_path, args.password)

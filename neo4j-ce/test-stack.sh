@@ -6,17 +6,18 @@
 #
 # Prerequisites:
 #   - cypher-shell installed locally (for Bolt tests)
-#   - stack-outputs.txt (written by deploy.sh)
+#   - .deploy/<stack-name>.txt (written by deploy.sh)
 #
 # Usage:
-#   ./test-stack.sh [--password <password>]
+#   ./test-stack.sh [--stack <stack-name>] [--password <password>]
 #
-# If --password is omitted, reads the password from stack-outputs.txt.
+# If --stack is omitted, uses the most recently modified file in .deploy/.
+# If --password is omitted, reads the password from the outputs file.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OUTPUTS_FILE="${SCRIPT_DIR}/stack-outputs.txt"
+DEPLOY_DIR="${SCRIPT_DIR}/.deploy"
 
 # Readiness polling configuration
 READY_TIMEOUT=300    # seconds — total time to wait for Neo4j
@@ -35,15 +36,20 @@ read_field() {
 # Parse CLI arguments
 # ---------------------------------------------------------------------------
 PASSWORD_OVERRIDE=""
+STACK_NAME_ARG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --password)
       PASSWORD_OVERRIDE="$2"
       shift 2
       ;;
+    --stack)
+      STACK_NAME_ARG="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1" >&2
-      echo "Usage: $0 [--password <password>]" >&2
+      echo "Usage: $0 [--stack <stack-name>] [--password <password>]" >&2
       exit 1
       ;;
   esac
@@ -87,9 +93,18 @@ echo "  cypher-shell found: $(command -v cypher-shell)"
 echo ""
 echo "Loading stack configuration..."
 
-if [ ! -f "${OUTPUTS_FILE}" ]; then
-  echo "ERROR: ${OUTPUTS_FILE} not found." >&2
-  echo "Run deploy.sh first to create a stack." >&2
+# Resolve the outputs file: --stack <name> -> .deploy/<name>.txt, else newest in .deploy/
+if [ -n "${STACK_NAME_ARG}" ]; then
+  OUTPUTS_FILE="${DEPLOY_DIR}/${STACK_NAME_ARG}.txt"
+elif [ -d "${DEPLOY_DIR}" ]; then
+  OUTPUTS_FILE=$(ls -t "${DEPLOY_DIR}"/*.txt 2>/dev/null | head -1 || true)
+else
+  OUTPUTS_FILE=""
+fi
+
+if [ -z "${OUTPUTS_FILE}" ] || [ ! -f "${OUTPUTS_FILE}" ]; then
+  echo "ERROR: No deployment outputs found." >&2
+  echo "Run deploy.sh first or specify --stack <stack-name>." >&2
   exit 1
 fi
 

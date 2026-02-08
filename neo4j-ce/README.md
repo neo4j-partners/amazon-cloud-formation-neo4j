@@ -28,11 +28,15 @@ This builds the base OS AMI (Neo4j is installed at deploy time from yum) and wri
 ### 3. Deploy the Stack
 
 ```bash
-./deploy.sh              # default instance family (t3.medium)
-./deploy.sh r8i          # memory optimized (r8i.large)
+./deploy.sh                        # default: t3.medium, random region
+./deploy.sh r8i                    # memory optimized (r8i.large)
+./deploy.sh --region eu-west-1     # specific region (AMI auto-copied)
+./deploy.sh r8i --region us-east-2 # both
 ```
 
-The script reads the AMI ID from `marketplace/ami-id.txt` (written by `create-ami.sh`), deploys the smallest instance in the given family, waits for the stack to complete, then writes connection details and deploy context to `stack-outputs.txt`.
+The script reads the AMI ID from `marketplace/ami-id.txt` (written by `create-ami.sh`), picks a random region (or uses `--region`), copies the AMI cross-region if needed, deploys the stack, waits for completion, then writes connection details and deploy context to `.deploy/<stack-name>.txt`.
+
+Multiple deployments can coexist — each gets its own output file in `.deploy/`.
 
 ### 4. Test the Stack
 
@@ -41,7 +45,7 @@ cd test_ce
 uv run test-ce
 ```
 
-The Python test suite in `test_ce/` reads `stack-outputs.txt` (written by `deploy.sh`) and runs two levels of testing:
+The Python test suite in `test_ce/` reads from `.deploy/` (most recently modified file by default) and runs two levels of testing:
 
 **Simple mode** (`--simple`) — connectivity only:
 1. **HTTP API** — GET the discovery endpoint, verify `neo4j_version` is present
@@ -57,21 +61,23 @@ The Python test suite in `test_ce/` reads `stack-outputs.txt` (written by `deplo
 9. **Verify sentinel data persisted** — confirm the sentinel node survived instance replacement (proves the EBS volume was reattached)
 
 ```bash
-uv run test-ce                # full mode (connectivity + EBS resilience)
-uv run test-ce --simple       # connectivity only
-uv run test-ce --password pw  # override password from stack-outputs.txt
-uv run test-ce --timeout 900  # ASG replacement timeout in seconds (default: 600)
+uv run test-ce                              # full mode (connectivity + EBS resilience)
+uv run test-ce --simple                     # connectivity only
+uv run test-ce --stack <stack-name>         # test a specific deployment
+uv run test-ce --password pw                # override password from outputs file
+uv run test-ce --timeout 900                # ASG replacement timeout in seconds (default: 600)
 ```
 
-> The legacy `test-stack.sh` script is equivalent to `uv run test-ce --simple`.
+> The legacy `test-stack.sh` script is equivalent to `uv run test-ce --simple`. It also accepts `--stack <stack-name>`.
 
 ### 5. Tear Down
 
 ```bash
-./teardown.sh
+./teardown.sh                  # tears down the most recent deployment
+./teardown.sh <stack-name>     # tears down a specific deployment
 ```
 
-Deletes the CloudFormation stack, the SSM parameter created by `deploy.sh`, and removes `stack-outputs.txt`.
+Deletes the CloudFormation stack, the SSM parameter created by `deploy.sh`, any cross-region AMI copy, and removes the deployment file from `.deploy/`.
 
 ## What Gets Deployed
 
@@ -86,10 +92,10 @@ Deletes the CloudFormation stack, the SSM parameter created by `deploy.sh`, and 
 | File | Purpose |
 |---|---|
 | `neo4j.template.yaml` | CloudFormation template |
-| `deploy.sh` | Local deploy helper — creates stack, waits, writes outputs |
+| `deploy.sh` | Local deploy helper — creates stack, waits, writes outputs to `.deploy/` |
 | `test-stack.sh` | Legacy connectivity tests (HTTP, Bolt, auth, APOC) |
 | `test_ce/` | Python test suite — connectivity + EBS resilience testing |
-| `teardown.sh` | Deletes the stack, SSM parameter, and local outputs |
+| `teardown.sh` | Deletes the stack, SSM parameter, copied AMI, and deployment file |
 | `marketplace/` | AMI build scripts and Marketplace publishing instructions |
 | `marketplace/ami-id.txt` | AMI ID from last build (gitignored) |
-| `stack-outputs.txt` | Connection details and deploy context from last deploy (gitignored) |
+| `.deploy/` | Deployment output files — one per stack (gitignored) |

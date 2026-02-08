@@ -3,15 +3,16 @@
 # Deploy the Neo4j Community Edition CloudFormation stack for local testing.
 #
 # Usage:
-#   ./deploy.sh [ami-id]
+#   ./deploy.sh [instance-family]
 #
 # Stack name is auto-generated as test-standalone-<timestamp>.
 # Password is randomly generated and saved to stack-outputs.txt.
+# AMI ID is read from marketplace/ami-id.txt (written by create-ami.sh).
 #
-# AMI resolution order:
-#   1. First argument (ami-id)
-#   2. marketplace/ami-id.txt (written by create-ami.sh)
-#   3. Error — an AMI ID is required for local testing
+# Instance family (optional, default: t3):
+#   t3  -> t3.medium   (burstable)
+#   m6a -> m6a.large   (general purpose)
+#   r6a -> r6a.large   (memory optimized)
 #
 # When deployed through the Marketplace console the ImageId parameter is
 # resolved automatically via SSM. For local testing this script creates a
@@ -31,18 +32,29 @@ REGION="us-east-1"
 Password="$(openssl rand -base64 12)$(( RANDOM % 10 ))"
 InstallAPOC="yes"
 
-# Resolve the AMI ID: CLI arg > ami-id.txt > error
+# Resolve the instance type from the optional instance-family argument.
+INSTANCE_FAMILY="${1:-t3}"
+
+case "${INSTANCE_FAMILY}" in
+  t3)  INSTANCE_TYPE="t3.medium" ;;
+  m6a) INSTANCE_TYPE="m6a.large" ;;
+  r6a) INSTANCE_TYPE="r6a.large" ;;
+  *)
+    echo "ERROR: Unsupported instance family '${INSTANCE_FAMILY}'." >&2
+    echo "Supported families: t3, m6a, r6a" >&2
+    exit 1
+    ;;
+esac
+
+# Resolve the AMI ID from marketplace/ami-id.txt (written by create-ami.sh).
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AMI_ID_FILE="${SCRIPT_DIR}/marketplace/ami-id.txt"
 
-if [ -n "${1:-}" ]; then
-  AMI_ID="$1"
-elif [ -f "${AMI_ID_FILE}" ]; then
+if [ -f "${AMI_ID_FILE}" ]; then
   AMI_ID="$(cat "${AMI_ID_FILE}")"
-  echo "Using AMI from ${AMI_ID_FILE}: ${AMI_ID}"
+  echo "Using AMI: ${AMI_ID}"
 else
-  echo "ERROR: No AMI ID provided and ${AMI_ID_FILE} not found." >&2
-  echo "Either pass an AMI ID as an argument or run create-ami.sh first." >&2
+  echo "ERROR: ${AMI_ID_FILE} not found. Run create-ami.sh first." >&2
   exit 1
 fi
 
@@ -61,8 +73,10 @@ aws ssm put-parameter \
 PARAMS="ParameterKey=Password,ParameterValue=${Password}"
 PARAMS="${PARAMS} ParameterKey=InstallAPOC,ParameterValue=${InstallAPOC}"
 PARAMS="${PARAMS} ParameterKey=ImageId,ParameterValue=${SSM_PARAM_PATH}"
+PARAMS="${PARAMS} ParameterKey=InstanceType,ParameterValue=${INSTANCE_TYPE}"
 
 echo "Creating stack ${STACK_NAME}..."
+echo "Instance type: ${INSTANCE_TYPE} (family: ${INSTANCE_FAMILY})"
 aws cloudformation create-stack \
   --capabilities CAPABILITY_IAM \
   --stack-name "$STACK_NAME" \
@@ -94,6 +108,7 @@ aws cloudformation describe-stacks \
   printf "%-20s = %s\n" "Region" "$REGION"
   printf "%-20s = %s\n" "Password" "$Password"
   printf "%-20s = %s\n" "InstallAPOC" "$InstallAPOC"
+  printf "%-20s = %s\n" "InstanceType" "$INSTANCE_TYPE"
   printf "%-20s = %s\n" "SSMParamPath" "$SSM_PARAM_PATH"
   printf "%-20s = %s\n" "AmiId" "$AMI_ID"
 } | tee -a "${OUTPUTS_FILE}"

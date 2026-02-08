@@ -1,9 +1,14 @@
 #!/bin/bash
 # Neo4j Community Edition AMI Build Script
 #
-# This script prepares an Amazon Linux 2023 instance for use as a
-# Neo4j CE Marketplace AMI. It follows the hybrid AMI approach:
-# pre-bake Java and Neo4j into the image, configure at boot via UserData.
+# This script prepares an Amazon Linux 2023 instance as a base OS image
+# for the Neo4j CE Marketplace listing. Neo4j itself is installed at
+# deploy time from yum.neo4j.com via the CloudFormation UserData script.
+#
+# What this script does:
+#   - Patches the OS (required for Marketplace AMI security scanning)
+#   - Hardens SSH (required by AWS Marketplace AMI policies)
+#   - Cleans up caches to reduce AMI size
 #
 # Prerequisites:
 #   - Run on a fresh Amazon Linux 2023 EC2 instance in us-east-1
@@ -17,49 +22,26 @@
 
 set -euo pipefail
 
-echo "=== Neo4j CE AMI Build ==="
+echo "=== Neo4j CE Base AMI Build ==="
 
 # --- Step 1: Patch the OS ---
 # Required by Marketplace AMI scanning to ensure all CVEs are patched.
 echo "Patching OS..."
 dnf update -y
 
-# --- Step 2: Install Java 21 ---
-# Neo4j 2025.x requires Java 21. Amazon Corretto is the recommended JVM on Amazon Linux.
-echo "Installing Java 21 (Amazon Corretto)..."
-dnf install -y java-21-amazon-corretto-headless
-
-# --- Step 3: Install Neo4j Community Edition from yum ---
-echo "Installing Neo4j Community Edition..."
-rpm --import https://debian.neo4j.com/neotechnology.gpg.key
-cat > /etc/yum.repos.d/neo4j.repo <<'REPO'
-[neo4j]
-name=Neo4j RPM Repository
-baseurl=https://yum.neo4j.com/stable/latest
-enabled=1
-gpgcheck=1
-REPO
-dnf install -y neo4j
-systemctl enable neo4j
-
-# --- Step 4: Raise file descriptor limit ---
-# Neo4j Operations Manual recommends 60000. Linux default (1024) is too low.
-# Reference: https://neo4j.com/docs/operations-manual/current/installation/linux/
-mkdir -p /etc/systemd/system/neo4j.service.d
-cat > /etc/systemd/system/neo4j.service.d/override.conf <<'CONF'
-[Service]
-LimitNOFILE=60000
-CONF
-
-# --- Step 5: SSH Hardening ---
+# --- Step 2: SSH Hardening ---
 # Required by AWS Marketplace AMI security policies.
 # Reference: https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html
 
-# Disable password-based remote logins for root
-sed -i 's/#PermitRootLogin yes/PermitRootLogin without-password/g' /etc/ssh/sshd_config
+# Disable password-based remote logins for root.
+# AL2023 ships with "#PermitRootLogin prohibit-password" (commented).
+# We uncomment and set it explicitly so Marketplace scanning sees a clear value.
+# "prohibit-password" is the modern equivalent of "without-password".
+sed -i 's/^#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 
-# Ensure SSH password authentication is disabled
-sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config
+# Ensure SSH password authentication is disabled.
+# AL2023 may already have this set via cloud-init presets, but we make it explicit.
+sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 
 # Disable local root access
 passwd -l root
@@ -70,7 +52,7 @@ shred -u /etc/ssh/*_key /etc/ssh/*_key.pub
 # Remove any authorized keys
 rm -f /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys
 
-# --- Step 6: Clean up ---
+# --- Step 3: Clean up ---
 # Remove yum cache to reduce AMI size
 dnf clean all
 rm -rf /var/cache/dnf

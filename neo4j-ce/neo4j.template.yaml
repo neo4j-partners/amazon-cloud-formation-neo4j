@@ -1,36 +1,40 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   Neo4j Community Edition. During deployment, the instance UserData script
-  contacts AWS service endpoints (EC2, CloudFormation) via the AWS CLI to
-  attach an EBS data volume, associate an Elastic IP, and signal stack
-  completion. The APOC plugin, if enabled, is copied from the local
-  filesystem (pre-installed on the AMI). No external code is downloaded
-  and no customer data is exported.
+  installs Neo4j from yum.neo4j.com, contacts AWS service endpoints (EC2,
+  CloudFormation) via the AWS CLI to attach an EBS data volume, associate
+  an Elastic IP, and signal stack completion. The APOC plugin, if enabled,
+  is copied from the local filesystem (bundled with Neo4j). No customer
+  data is exported.
 
 Metadata:
   # -------------------------------------------------------------------------
   # External Connectivity Disclosure (AWS Marketplace Policy Compliance)
   #
-  # This template's UserData script makes ONLY the following network calls:
+  # This template's UserData script makes the following network calls:
   #
   #   1. EC2 Instance Metadata Service (IMDS) — http://169.254.169.254
   #      Link-local address (not an external endpoint). Used to retrieve the
   #      instance ID and IMDSv2 session token. Required for EBS attachment,
   #      Elastic IP association, and CloudFormation signaling.
   #
-  #   2. AWS EC2 API (via AWS CLI)
+  #   2. Neo4j yum repository — https://yum.neo4j.com/stable/latest
+  #      Downloads and installs the Neo4j Community Edition package and its
+  #      dependencies (including Java) at deploy time via dnf.
+  #      GPG key imported from https://debian.neo4j.com/neotechnology.gpg.key.
+  #
+  #   3. AWS EC2 API (via AWS CLI)
   #      - ec2:DescribeVolumes  — poll data volume state before attaching
   #      - ec2:AttachVolume     — attach the persistent EBS data volume
   #      - ec2:AssociateAddress — associate the Elastic IP with the instance
   #      All calls route to the regional EC2 endpoint within AWS.
   #
-  #   3. AWS CloudFormation API (via AWS CLI)
+  #   4. AWS CloudFormation API (via AWS CLI)
   #      - cloudformation:SignalResource — report success/failure to the
   #        CreationPolicy on the Auto Scaling Group.
   #
-  # NO external code is downloaded. Neo4j and Java (Corretto 21) are
-  # pre-installed on the AMI. The APOC plugin, if enabled, is copied from
-  # the local filesystem (/var/lib/neo4j/labs/ or /var/lib/neo4j/products/).
+  # The APOC plugin, if enabled, is copied from the local filesystem
+  # (/var/lib/neo4j/labs/ or /var/lib/neo4j/products/).
   #
   # NO customer data is collected, exported, or sent to any endpoint.
   # -------------------------------------------------------------------------
@@ -358,15 +362,16 @@ Resources:
                 # ==============================================================
                 # EXTERNAL CONNECTIVITY DISCLOSURE
                 #
-                # This script contacts ONLY AWS service endpoints:
+                # This script contacts the following endpoints:
+                #   - yum.neo4j.com        (Neo4j package repository)
+                #   - debian.neo4j.com     (GPG key for package verification)
                 #   - IMDS 169.254.169.254 (link-local, instance metadata)
                 #   - AWS EC2 API          (DescribeVolumes, AttachVolume,
                 #                           AssociateAddress)
                 #   - AWS CloudFormation API (SignalResource)
                 #
-                # All software (Neo4j, Java 21, APOC) is pre-installed on the
-                # AMI. No packages are downloaded from the internet. No customer
-                # data is collected or exported.
+                # Neo4j Community Edition is installed from yum at deploy time.
+                # No customer data is collected or exported.
                 # ==============================================================
 
                 # ---------------------------------------------------------------
@@ -393,6 +398,22 @@ Resources:
                     --region "${REGION}" 2>/dev/null || true
                 }
                 trap 'signal_cfn FAILURE' ERR
+
+                # ---------------------------------------------------------------
+                # Install Neo4j Community Edition from yum
+                #
+                # Adds the Neo4j yum repository and installs the latest calver
+                # release. This mirrors the EE deploy-time install pattern.
+                # ---------------------------------------------------------------
+                install_neo4j_from_yum() {
+                  echo "Installing Neo4j Community Edition from yum..."
+                  rpm --import https://debian.neo4j.com/neotechnology.gpg.key
+                  printf '[neo4j]\nname=Neo4j RPM Repository\nbaseurl=https://yum.neo4j.com/stable/latest\nenabled=1\ngpgcheck=1\n' > /etc/yum.repos.d/neo4j.repo
+                  dnf install -y neo4j
+                  systemctl enable neo4j
+                }
+
+                install_neo4j_from_yum
 
                 # ---------------------------------------------------------------
                 # NVMe device lookup helper
@@ -427,17 +448,6 @@ Resources:
                   done
                   return 1
                 }
-
-                # ---------------------------------------------------------------
-                # Stop Neo4j if it auto-started
-                #
-                # The AMI has "systemctl enable neo4j", so systemd may start
-                # Neo4j before this UserData script runs. We must stop it and
-                # delete the system database (which holds auth in Neo4j 2025+)
-                # so set-initial-password works. All configuration must happen
-                # before the first real start.
-                # ---------------------------------------------------------------
-                systemctl stop neo4j 2>/dev/null || true
 
                 # ---------------------------------------------------------------
                 # Config helper — idempotent neo4j.conf setter
@@ -569,7 +579,7 @@ Resources:
                 # as a forward-compatibility measure in case the location changes.
                 # ---------------------------------------------------------------
                 if [ "${APOC}" == "yes" ]; then
-                  # LOCAL FILESYSTEM ONLY — no download; jar is pre-installed on the AMI
+                  # LOCAL FILESYSTEM ONLY — no download; jar is bundled with the Neo4j package
                   echo "Installing APOC plugin..."
                   cp /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || \
                     cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true

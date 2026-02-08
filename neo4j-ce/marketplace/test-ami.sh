@@ -1,9 +1,13 @@
 #!/bin/bash
-# test-ami.sh — Verify a CE Marketplace AMI via SSM Run Command
+# test-ami.sh — Verify a CE Marketplace base AMI via SSM Run Command
 #
 # Launches a temporary instance from the AMI, runs verification commands
 # over SSM (no SSH key or port 22 required), reports pass/fail, and
 # cleans up.
+#
+# The CE AMI is a base OS image only (SSH hardening + OS patches).
+# Neo4j is installed at deploy time from yum.neo4j.com, so this script
+# only verifies the base image properties.
 #
 # Prerequisites:
 #   - AWS CLI configured with the marketplace profile (neo4j-marketplace account)
@@ -207,6 +211,11 @@ echo "SSM agent online."
 
 # ---------------------------------------------------------------------------
 # Step 5: Run verification commands via SSM Run Command
+#
+# The AMI is a base OS image only. We verify:
+#   - SSH password authentication is disabled
+#   - Root login is restricted
+#   - OS is Amazon Linux 2023
 # ---------------------------------------------------------------------------
 echo ""
 echo "Running verification commands..."
@@ -216,28 +225,16 @@ COMMAND_ID=$(aws ssm send-command \
   --region "${REGION}" \
   --instance-ids "${INSTANCE_ID}" \
   --document-name "AWS-RunShellScript" \
-  --comment "Neo4j CE AMI verification" \
+  --comment "Neo4j CE base AMI verification" \
   --parameters 'commands=[
-    "echo \"=== CHECK 1: Neo4j version ===\"",
-    "neo4j version 2>&1 || echo FAIL: neo4j not found",
-    "echo \"\"",
-    "echo \"=== CHECK 2: Java version ===\"",
-    "java -version 2>&1 || echo FAIL: java not found",
-    "echo \"\"",
-    "echo \"=== CHECK 3: SSH password authentication ===\"",
+    "echo \"=== CHECK 1: SSH password authentication ===\"",
     "grep -i PasswordAuthentication /etc/ssh/sshd_config | head -5",
     "echo \"\"",
-    "echo \"=== CHECK 4: Neo4j service enabled ===\"",
-    "systemctl is-enabled neo4j 2>&1 || echo FAIL: neo4j not enabled",
-    "echo \"\"",
-    "echo \"=== CHECK 5: Root login disabled ===\"",
+    "echo \"=== CHECK 2: Root login disabled ===\"",
     "grep -i PermitRootLogin /etc/ssh/sshd_config | head -5",
     "echo \"\"",
-    "echo \"=== CHECK 6: Neo4j config exists ===\"",
-    "ls -la /etc/neo4j/neo4j.conf 2>&1 || echo FAIL: neo4j.conf not found",
-    "echo \"\"",
-    "echo \"=== CHECK 7: APOC jar available ===\"",
-    "ls /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/products/apoc-*-core.jar 2>/dev/null || echo WARN: APOC jar not found in labs or products"
+    "echo \"=== CHECK 3: OS identity ===\"",
+    "cat /etc/os-release 2>&1 | head -5 || echo FAIL: cannot read os-release"
   ]' \
   --query "Command.CommandId" \
   --output text)
@@ -298,52 +295,29 @@ echo ""
 echo "============================================="
 FAILURES=0
 
-# Check Neo4j installed
-if echo "${COMMAND_OUTPUT}" | grep -q "FAIL: neo4j not found"; then
-  echo "  FAIL: Neo4j is not installed"
-  FAILURES=$((FAILURES + 1))
-else
-  echo "  PASS: Neo4j is installed"
-fi
-
-# Check Java installed
-if echo "${COMMAND_OUTPUT}" | grep -q "FAIL: java not found"; then
-  echo "  FAIL: Java is not installed"
-  FAILURES=$((FAILURES + 1))
-else
-  echo "  PASS: Java is installed"
-fi
-
-# Check SSH password auth disabled
-if echo "${COMMAND_OUTPUT}" | grep -qi "PasswordAuthentication no"; then
+# Check SSH password auth disabled (match explicit uncommented setting)
+if echo "${COMMAND_OUTPUT}" | grep -q "^PasswordAuthentication no"; then
   echo "  PASS: SSH password authentication is disabled"
 else
   echo "  FAIL: SSH password authentication may not be disabled"
   FAILURES=$((FAILURES + 1))
 fi
 
-# Check Neo4j service enabled
-if echo "${COMMAND_OUTPUT}" | grep -q "enabled"; then
-  echo "  PASS: Neo4j service is enabled"
-else
-  echo "  FAIL: Neo4j service is not enabled"
-  FAILURES=$((FAILURES + 1))
-fi
-
-# Check root login restricted
-if echo "${COMMAND_OUTPUT}" | grep -q "PermitRootLogin without-password"; then
+# Check root login restricted (match explicit uncommented setting).
+# "prohibit-password" is the modern name; "without-password" is the deprecated alias.
+if echo "${COMMAND_OUTPUT}" | grep -qE "^PermitRootLogin (prohibit-password|without-password)"; then
   echo "  PASS: Root login is restricted"
 else
   echo "  FAIL: Root login may not be properly restricted"
   FAILURES=$((FAILURES + 1))
 fi
 
-# Check neo4j.conf exists
-if echo "${COMMAND_OUTPUT}" | grep -q "FAIL: neo4j.conf not found"; then
-  echo "  FAIL: neo4j.conf not found"
-  FAILURES=$((FAILURES + 1))
+# Check OS identity (NAME and VERSION are on separate lines in os-release)
+if echo "${COMMAND_OUTPUT}" | grep -q 'VERSION_ID="2023"'; then
+  echo "  PASS: OS is Amazon Linux 2023"
 else
-  echo "  PASS: neo4j.conf exists"
+  echo "  FAIL: OS does not appear to be Amazon Linux 2023"
+  FAILURES=$((FAILURES + 1))
 fi
 
 echo "============================================="

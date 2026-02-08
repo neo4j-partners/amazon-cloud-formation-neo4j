@@ -10,13 +10,13 @@ All scripts use the `marketplace` AWS CLI profile. Export it once so every comma
 export AWS_PROFILE=marketplace
 ```
 
-### 1. Build the AMI
+### 1. Build the Base AMI
 
 ```bash
-./marketplace/create-ami.sh 2026.01.3
+./marketplace/create-ami.sh
 ```
 
-This builds the AMI and writes the ID to `marketplace/ami-id.txt`. See [marketplace/README.md](marketplace/README.md) for details.
+This builds the base OS AMI (Neo4j is installed at deploy time from yum) and writes the ID to `marketplace/ami-id.txt`. See [marketplace/README.md](marketplace/README.md) for details.
 
 ### 2. Test the AMI
 

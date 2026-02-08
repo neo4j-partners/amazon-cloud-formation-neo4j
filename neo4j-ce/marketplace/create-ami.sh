@@ -10,10 +10,10 @@
 #   - A key pair is NOT required — there is no SSH step
 #
 # Usage:
-#   AWS_PROFILE=marketplace ./create-ami.sh <neo4j-version>
+#   AWS_PROFILE=marketplace ./create-ami.sh
 #
-# Example:
-#   AWS_PROFILE=marketplace ./create-ami.sh 2026.01.3
+# Neo4j is installed at deploy time from yum.neo4j.com, so this script
+# no longer takes a version argument. The AMI is a base OS image only.
 
 set -euo pipefail
 
@@ -22,8 +22,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 REGION="us-east-1"
 EXPECTED_ACCOUNT="385155106615"
-NEO4J_VERSION="${1:?Usage: AWS_PROFILE=marketplace $0 <neo4j-version>  (e.g. 2026.01.3)}"
-AMI_NAME="neo4j-community-${NEO4J_VERSION}"
+AMI_NAME="neo4j-ce-base-$(date +%Y%m%d)"
 INSTANCE_TYPE="t3.medium"
 
 # Tags applied to all resources created by this script
@@ -43,7 +42,7 @@ echo "Verifying AWS identity..."
 CALLER_IDENTITY=$(aws sts get-caller-identity --output json 2>&1) || {
   echo "ERROR: Failed to call sts get-caller-identity."
   echo "Make sure you are authenticated. Usage:"
-  echo "  AWS_PROFILE=marketplace $0 ${NEO4J_VERSION}"
+  echo "  AWS_PROFILE=marketplace $0"
   exit 1
 }
 
@@ -56,7 +55,7 @@ if [ "${ACCOUNT_ID}" != "${EXPECTED_ACCOUNT}" ]; then
   echo "  Got:      ${ACCOUNT_ID}"
   echo ""
   echo "Switch to the marketplace profile:"
-  echo "  AWS_PROFILE=marketplace $0 ${NEO4J_VERSION}"
+  echo "  AWS_PROFILE=marketplace $0"
   exit 1
 fi
 
@@ -64,7 +63,6 @@ echo "  Account:  ${ACCOUNT_ID} (neo4j-marketplace)"
 echo "  Identity: ${CALLER_ARN}"
 echo "  Region:   ${REGION} (overrides profile default)"
 echo ""
-echo "Neo4j version: ${NEO4J_VERSION}"
 echo "AMI name:      ${AMI_NAME}"
 echo ""
 
@@ -140,32 +138,15 @@ USERDATA=$(cat <<'BUILDSCRIPT'
 #!/bin/bash
 set -euo pipefail
 
-echo "=== Neo4j CE AMI Build (via UserData) ==="
+echo "=== Neo4j CE Base AMI Build (via UserData) ==="
 
 # --- Patch the OS ---
 echo "Patching OS..."
 dnf update -y
 
-# --- Install Java 21 ---
-echo "Installing Java 21 (Amazon Corretto)..."
-dnf install -y java-21-amazon-corretto-headless
-
-# --- Install Neo4j Community Edition from yum ---
-echo "Installing Neo4j Community Edition..."
-rpm --import https://debian.neo4j.com/neotechnology.gpg.key
-cat > /etc/yum.repos.d/neo4j.repo <<'REPO'
-[neo4j]
-name=Neo4j RPM Repository
-baseurl=https://yum.neo4j.com/stable/latest
-enabled=1
-gpgcheck=1
-REPO
-dnf install -y neo4j
-systemctl enable neo4j
-
 # --- SSH Hardening ---
-sed -i 's/#PermitRootLogin yes/PermitRootLogin without-password/g' /etc/ssh/sshd_config
-sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config
+sed -i 's/^#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 passwd -l root
 shred -u /etc/ssh/*_key /etc/ssh/*_key.pub
 rm -f /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys
@@ -233,7 +214,7 @@ IMAGE_ID=$(aws ec2 create-image \
   --region "${REGION}" \
   --instance-id "${INSTANCE_ID}" \
   --name "${AMI_NAME}" \
-  --description "Neo4j Community Edition ${NEO4J_VERSION} on Amazon Linux 2023" \
+  --description "Neo4j CE base image on Amazon Linux 2023 (Neo4j installed at deploy time)" \
   --query "ImageId" \
   --output text)
 
@@ -265,8 +246,7 @@ aws ec2 create-tags \
   --resources "${IMAGE_ID}" \
   --tags \
     Key=Name,Value="${AMI_NAME}" \
-    Key=Neo4jVersion,Value="${NEO4J_VERSION}" \
-    Key=Neo4jEdition,Value="community" \
+    Key=Neo4jEdition,Value="community-base" \
     Key=BaseOS,Value="Amazon Linux 2023" \
     Key=IMDSv2,Value="enforced-by-launch-template" \
     Key=Purpose,Value="marketplace-ami"
@@ -294,7 +274,6 @@ echo ""
 echo "  AMI ID:        ${IMAGE_ID}"
 echo "  AMI Name:      ${AMI_NAME}"
 echo "  Region:        ${REGION}"
-echo "  Neo4j Version: ${NEO4J_VERSION}"
 echo ""
 echo "Next steps:"
 echo "  1. Test the AMI:"

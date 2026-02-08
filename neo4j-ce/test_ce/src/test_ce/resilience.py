@@ -92,9 +92,9 @@ def _terminate_and_wait(
             return False
 
     log.info("Waiting for Neo4j on the replacement instance...")
-    if not wait_for_neo4j(config, timeout=120, interval=10):
+    if not wait_for_neo4j(config, timeout=300, interval=10):
         with reporter.test("Post-recovery Neo4j readiness") as ctx:
-            ctx.fail("Neo4j did not become reachable on the replacement within 120s")
+            ctx.fail("Neo4j did not become reachable on the replacement within 300s")
         return False
     return True
 

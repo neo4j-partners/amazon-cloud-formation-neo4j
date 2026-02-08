@@ -16,8 +16,8 @@ All scripts expect `AWS_PROFILE=marketplace` (account 385155106615, neo4j-market
 All commands run from the edition directory (e.g., `neo4j-ce/`):
 
 ```bash
-# Build AMI (writes marketplace/ami-id.txt)
-./marketplace/create-ami.sh <neo4j-version>    # e.g., 2026.01.3
+# Build base AMI (writes marketplace/ami-id.txt)
+./marketplace/create-ami.sh
 
 # Test AMI (SSM-based, no SSH)
 ./marketplace/test-ami.sh
@@ -38,9 +38,9 @@ uv run test-ce --timeout 900  # custom ASG replacement timeout (default 600s)
 
 ## Architecture
 
-### Hybrid AMI Strategy
+### Deploy-time Install Strategy
 
-AMIs are pre-baked with Java 21 (Corretto) and Neo4j binaries via `marketplace/build.sh`. Runtime configuration (passwords, volumes, networking, APOC) happens in the CloudFormation UserData script at boot.
+The CE AMI is a base OS image (Amazon Linux 2023 with SSH hardening and OS patches). Neo4j Community Edition is installed from `yum.neo4j.com` at deploy time via the CloudFormation UserData script, which also handles runtime configuration (passwords, volumes, networking, APOC). This mirrors the EE pattern.
 
 ### CE Deployment Model
 
@@ -51,7 +51,7 @@ The CloudFormation template (`neo4j.template.yaml`) creates:
 - Elastic IP re-associated on each instance launch
 - IAM role with policies for CFN signaling, EBS attachment, EIP association
 
-**UserData boot sequence**: stop Neo4j → attach/mount EBS (format on first boot only) → associate EIP → install APOC (if enabled) → configure Neo4j → set password (first boot only) → start Neo4j → signal CloudFormation.
+**UserData boot sequence**: install Neo4j from yum → attach/mount EBS (format on first boot only) → associate EIP → install APOC (if enabled) → configure Neo4j → set password (first boot only) → start Neo4j → signal CloudFormation.
 
 ### NVMe Device Resolution
 

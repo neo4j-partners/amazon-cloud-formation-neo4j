@@ -75,30 +75,30 @@ def check_elastic_ip(
 ) -> None:
     """Verify the Elastic IP is allocated and associated with an instance."""
     with reporter.test("Elastic IP association") as ctx:
-        eip_alloc = resource_map.get("Neo4jElasticIP")
-        if not eip_alloc:
+        eip_ip = resource_map.get("Neo4jElasticIP")
+        if not eip_ip:
             ctx.fail("Neo4jElasticIP not found in stack resources")
             return
 
         try:
             ec2 = session.client("ec2")
-            resp = ec2.describe_addresses(AllocationIds=[eip_alloc])
+            resp = ec2.describe_addresses(PublicIps=[eip_ip])
             addr = resp["Addresses"][0]
             association = addr.get("AssociationId")
-            public_ip = addr.get("PublicIp", "unknown")
+            alloc_id = addr.get("AllocationId", "unknown")
 
             if association:
                 instance_id = addr.get("InstanceId", "unknown")
                 ctx.pass_(
-                    f"EIP {public_ip} ({eip_alloc}) associated with {instance_id}"
+                    f"EIP {eip_ip} ({alloc_id}) associated with {instance_id}"
                 )
             else:
                 ctx.fail(
-                    f"EIP {public_ip} ({eip_alloc}) is allocated but not associated "
+                    f"EIP {eip_ip} ({alloc_id}) is allocated but not associated "
                     "with any instance"
                 )
         except Exception as exc:
-            ctx.fail(f"Failed to describe Elastic IP {eip_alloc}: {exc}")
+            ctx.fail(f"Failed to describe Elastic IP {eip_ip}: {exc}")
 
 
 def check_asg_config(

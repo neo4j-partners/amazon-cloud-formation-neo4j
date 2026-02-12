@@ -142,12 +142,14 @@ def run_resilience_tests(
     reporter: TestReporter,
     session: boto3.Session,
     replacement_timeout: int = 600,
+    resource_map: dict[str, str] | None = None,
 ) -> None:
     """Orchestrate the full EBS persistence test cycle."""
     test_run_id = uuid.uuid4().hex
 
-    # Fetch stack resources once for all AWS lookups
-    resource_map = get_stack_resources(session, config.stack_name)
+    # Fetch stack resources once for all AWS lookups (reuse if already fetched)
+    if resource_map is None:
+        resource_map = get_stack_resources(session, config.stack_name)
 
     # Verify data volume is attached on the original instance
     run_volume_checks(config, reporter, session, resource_map)

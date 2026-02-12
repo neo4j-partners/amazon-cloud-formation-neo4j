@@ -121,6 +121,23 @@ else
   PASSWORD=$(read_field "${OUTPUTS_FILE}" "Password")
 fi
 
+# Interactive prompt fallback when no password is available
+if [ -z "${PASSWORD}" ]; then
+  if [ -t 0 ]; then
+    read -r -s -p "Enter neo4j password: " PASSWORD
+    echo ""
+  else
+    echo "ERROR: No password available." >&2
+    echo "Provide --password or ensure Password is in the outputs file." >&2
+    exit 1
+  fi
+fi
+
+if [ -z "${PASSWORD}" ]; then
+  echo "ERROR: Password cannot be empty." >&2
+  exit 1
+fi
+
 # Extract the host (EIP) from the browser URL (strip http:// and :7474)
 NEO4J_HOST=$(echo "${BROWSER_URL}" | sed 's|http://||' | sed 's|:7474||')
 HTTP_ENDPOINT="${BROWSER_URL}"
@@ -255,7 +272,114 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Test 4: Sample data — Create Movies dataset via Cypher
+# Test 4: CloudFormation stack status
+# ---------------------------------------------------------------------------
+if [ -n "${STACK_NAME}" ] && [ -n "${REGION}" ]; then
+  run_test "CloudFormation stack status"
+
+  STACK_STATUS=$(aws cloudformation describe-stacks \
+    --stack-name "${STACK_NAME}" \
+    --region "${REGION}" \
+    --query "Stacks[0].StackStatus" \
+    --output text 2>/dev/null || echo "UNKNOWN")
+
+  if [[ "${STACK_STATUS}" == "CREATE_COMPLETE" || "${STACK_STATUS}" == "UPDATE_COMPLETE" ]]; then
+    pass "Stack status is ${STACK_STATUS}"
+  else
+    fail "Stack status is ${STACK_STATUS} (expected CREATE_COMPLETE or UPDATE_COMPLETE)"
+  fi
+else
+  echo "--- Skipping CloudFormation stack status test (no StackName/Region) ---"
+  echo ""
+fi
+
+# ---------------------------------------------------------------------------
+# Test 5: Security group ports — 7474 and 7687 open
+# ---------------------------------------------------------------------------
+if [ -n "${STACK_NAME}" ] && [ -n "${REGION}" ]; then
+  run_test "Security group ports"
+
+  SG_ID=$(aws cloudformation describe-stack-resources \
+    --stack-name "${STACK_NAME}" \
+    --region "${REGION}" \
+    --query "StackResources[?LogicalResourceId=='Neo4jExternalSecurityGroup'].PhysicalResourceId" \
+    --output text 2>/dev/null || true)
+
+  if [ -z "${SG_ID}" ]; then
+    fail "Could not find Neo4jExternalSecurityGroup in stack resources"
+  else
+    SG_PORTS=$(aws ec2 describe-security-groups \
+      --group-ids "${SG_ID}" \
+      --region "${REGION}" \
+      --query "SecurityGroups[0].IpPermissions[*].FromPort" \
+      --output text 2>/dev/null || true)
+
+    HAS_7474=false
+    HAS_7687=false
+    for port in ${SG_PORTS}; do
+      [ "${port}" = "7474" ] && HAS_7474=true
+      [ "${port}" = "7687" ] && HAS_7687=true
+    done
+
+    if ${HAS_7474} && ${HAS_7687}; then
+      pass "Security group ${SG_ID} allows ports 7474 and 7687"
+    else
+      fail "Security group ${SG_ID} missing expected ports (7474=${HAS_7474}, 7687=${HAS_7687})"
+    fi
+  fi
+else
+  echo "--- Skipping security group test (no StackName/Region) ---"
+  echo ""
+fi
+
+# ---------------------------------------------------------------------------
+# Test 6: Neo4j server status — edition and version via dbms.components()
+# ---------------------------------------------------------------------------
+run_test "Neo4j server status"
+
+STATUS_EXIT=0
+STATUS_RESULT=$(cypher-shell \
+  -a "${BOLT_ENDPOINT}" \
+  -u "${USERNAME}" \
+  -p "${PASSWORD}" \
+  --format plain \
+  "CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition" 2>&1) || STATUS_EXIT=$?
+
+if [ "${STATUS_EXIT}" -eq 0 ]; then
+  if echo "${STATUS_RESULT}" | grep -qi "community"; then
+    pass "Neo4j server running: $(echo "${STATUS_RESULT}" | tail -1)"
+  else
+    fail "Unexpected edition: ${STATUS_RESULT}"
+  fi
+else
+  fail "dbms.components() failed (exit ${STATUS_EXIT}): ${STATUS_RESULT}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 7: Network binding — server listens on 0.0.0.0
+# ---------------------------------------------------------------------------
+run_test "Network binding"
+
+BIND_EXIT=0
+BIND_RESULT=$(cypher-shell \
+  -a "${BOLT_ENDPOINT}" \
+  -u "${USERNAME}" \
+  -p "${PASSWORD}" \
+  --format plain \
+  "CALL dbms.listConfig('server.default_listen_address') YIELD value RETURN value" 2>&1) || BIND_EXIT=$?
+
+if [ "${BIND_EXIT}" -eq 0 ]; then
+  if echo "${BIND_RESULT}" | grep -q "0.0.0.0"; then
+    pass "Neo4j is bound to 0.0.0.0 (all interfaces)"
+  else
+    fail "Unexpected listen address: ${BIND_RESULT}"
+  fi
+else
+  fail "Could not query listen address (exit ${BIND_EXIT}): ${BIND_RESULT}"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 8: Sample data — Create Movies dataset via Cypher
 # ---------------------------------------------------------------------------
 run_test "Create Movies dataset"
 
@@ -319,7 +443,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Test 5: Verify Movies dataset — Query nodes and relationships
+# Test 9: Verify Movies dataset — Query nodes and relationships
 # ---------------------------------------------------------------------------
 run_test "Verify Movies dataset"
 
@@ -343,7 +467,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Test 6: APOC — Verify apoc.version() is callable (if installed)
+# Test 10: APOC — Verify apoc.version() is callable (if installed)
 # ---------------------------------------------------------------------------
 if [ "${INSTALL_APOC}" = "yes" ]; then
   run_test "APOC plugin"

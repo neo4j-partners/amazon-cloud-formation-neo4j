@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import getpass
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import urlparse
@@ -80,6 +82,8 @@ def load_config(outputs_path: Path, password_override: str | None = None) -> Sta
         if password_override is not None
         else fields.get("Password", "")
     )
+    if not password and sys.stdin.isatty():
+        password = getpass.getpass("Enter neo4j password: ")
     if not password:
         raise ValueError(
             "No password available. Provide --password or ensure Password is in "

@@ -14,6 +14,7 @@ from test_ce.movies_dataset import (
     verify_movies_dataset,
 )
 from test_ce.neo4j_checks import run_simple_tests
+from test_ce.neo4j_deep_checks import run_deep_neo4j_checks
 from test_ce.reporting import TestReporter
 from test_ce.resilience import run_resilience_tests
 from test_ce.wait import wait_for_neo4j
@@ -116,6 +117,9 @@ def main() -> None:
     # Run simple tests (always)
     run_simple_tests(config, reporter)
 
+    # Deep Neo4j config checks (always — only needs Bolt)
+    run_deep_neo4j_checks(config, reporter)
+
     if args.simple:
         # In simple mode, validate Cypher write/read with the Movies dataset
         # (in full mode, resilience tests handle this with persistence verification)
@@ -123,11 +127,21 @@ def main() -> None:
             verify_movies_dataset(config, reporter)
             cleanup_movies_dataset(config)
     else:
-        # Full mode: volume checks, Movies dataset persistence, instance replacement
+        # Full mode: infra checks, volume checks, Movies dataset persistence, instance replacement
         import boto3  # noqa: PLC0415 — only needed for full mode
 
+        from test_ce.aws_helpers import get_stack_resources  # noqa: PLC0415
+        from test_ce.infra_checks import run_infra_checks  # noqa: PLC0415
+
         session = boto3.Session(region_name=config.region)
-        run_resilience_tests(config, reporter, session, replacement_timeout=args.timeout)
+        resource_map = get_stack_resources(session, config.stack_name)
+
+        run_infra_checks(session, config, reporter, resource_map)
+        run_resilience_tests(
+            config, reporter, session,
+            replacement_timeout=args.timeout,
+            resource_map=resource_map,
+        )
 
     # Print summary and exit
     exit_code = reporter.summary(

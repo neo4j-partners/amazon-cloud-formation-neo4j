@@ -1,0 +1,829 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Neo4j Community Edition deployed on a single EC2 instance with Auto Scaling
+  Group resilience, persistent EBS data volume, and Elastic IP.
+  This product requires an internet connection to deploy properly. The
+  following packages are downloaded on deployment: Neo4j Community Edition
+  and Java runtime dependencies (from https://yum.neo4j.com/stable/latest
+  via dnf), and the Neo4j GPG signing key (from
+  https://debian.neo4j.com/neotechnology.gpg.key). The deployment script
+  also contacts the following AWS service endpoints via the AWS CLI:
+  EC2 API (DescribeVolumes, AttachVolume, AssociateAddress) and
+  CloudFormation API (SignalResource). The EC2 Instance Metadata Service
+  (IMDS, link-local 169.254.169.254) is used to retrieve instance identity.
+  The APOC plugin, if enabled, is copied from the local filesystem
+  (bundled with the Neo4j package) and is not downloaded externally. No
+  customer data is collected, exported, or sent to any external endpoint.
+
+Metadata:
+  ExternalConnectivityDisclosure:
+    Description: >-
+      This product requires an internet connection to deploy properly. The
+      following packages are downloaded on deployment: Neo4j Community Edition
+      and Java runtime dependencies (from https://yum.neo4j.com/stable/latest
+      via dnf), and the Neo4j GPG signing key (from
+      https://debian.neo4j.com/neotechnology.gpg.key). No customer data is
+      collected, exported, or sent to any external endpoint.
+    DeployTimeExternalDependencies:
+      - Endpoint: https://yum.neo4j.com/stable/latest
+        Purpose: >-
+          Downloads and installs the Neo4j Community Edition package and its
+          dependencies (including Java) at deploy time via dnf.
+        Protocol: HTTPS
+        DataSent: None
+      - Endpoint: https://debian.neo4j.com/neotechnology.gpg.key
+        Purpose: >-
+          Imports the Neo4j GPG signing key for package verification.
+        Protocol: HTTPS
+        DataSent: None
+    AWSServiceEndpoints:
+      - Service: EC2 Instance Metadata Service (IMDS)
+        Endpoint: http://169.254.169.254 (link-local, not an external endpoint)
+        Purpose: >-
+          Retrieves instance ID and IMDSv2 session token. Required for EBS
+          attachment, Elastic IP association, and CloudFormation signaling.
+        DataSent: None
+      - Service: Amazon EC2 API (via AWS CLI)
+        Actions:
+          - ec2:DescribeVolumes (poll data volume state before attaching)
+          - ec2:AttachVolume (attach the persistent EBS data volume)
+          - ec2:AssociateAddress (associate the Elastic IP with the instance)
+        Purpose: >-
+          Manage instance storage and networking within the customer's own
+          AWS account. All calls route to the regional EC2 endpoint.
+        DataSent: None
+      - Service: AWS CloudFormation API (via AWS CLI)
+        Actions:
+          - cloudformation:SignalResource
+        Purpose: >-
+          Reports deployment success or failure to the CreationPolicy on the
+          Auto Scaling Group.
+        DataSent: None
+    LocalOperations:
+      - Operation: APOC plugin installation (if enabled)
+        Source: /var/lib/neo4j/labs/ or /var/lib/neo4j/products/
+        Purpose: >-
+          Copies the APOC plugin jar from the local filesystem (bundled with
+          the Neo4j package) to the plugins directory. No external download.
+    CustomerDataPolicy: >-
+      No customer data is collected, exported, or sent to any endpoint.
+      The software does not phone home or transmit usage telemetry.
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "AWS Marketplace Parameters"
+        Parameters:
+          - ImageId
+      - Label:
+          default: "Neo4j Configuration"
+        Parameters:
+          - Password
+          - InstanceType
+          - DiskSize
+          - DataDiskSize
+          - InstallAPOC
+      - Label:
+          default: "Network Security"
+        Parameters:
+          - AllowedCIDR
+    ParameterLabels:
+      ImageId:
+        default: Image ID
+      Password:
+        default: Password
+      InstanceType:
+        default: Instance Type
+      DiskSize:
+        default: Root Disk Size
+      DataDiskSize:
+        default: Data Disk Size
+      InstallAPOC:
+        default: Install APOC Plugin
+      AllowedCIDR:
+        default: Allowed CIDR Range
+
+Parameters:
+  ImageId:
+    Description: Neo4j Community Edition Marketplace AMI
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    # TODO: Replace prod-XXXXX with the actual Marketplace product code once the listing is created.
+    Default: /aws/service/marketplace/prod-XXXXX/2026.01.3
+
+  Password:
+    Description: >
+      Password for the neo4j admin user. Must be at least 8 characters
+      and contain both letters and numbers.
+    Type: String
+    MinLength: 8
+    AllowedPattern: ^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$
+    ConstraintDescription: Must be at least 8 characters and contain both letters and numbers.
+    NoEcho: true
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.medium
+    AllowedValues:
+      # Burstable — dev, testing, learning
+      - t3.medium       # 2 vCPU,   4 GB
+      - t3.large        # 2 vCPU,   8 GB
+      - t3.xlarge       # 4 vCPU,  16 GB
+      # Memory optimized (Intel gen 8) — production workloads
+      - r8i.large       # 2 vCPU,  16 GB
+      - r8i.xlarge      # 4 vCPU,  32 GB
+      - r8i.2xlarge     # 8 vCPU,  64 GB
+      - r8i.4xlarge     # 16 vCPU, 128 GB
+      - r8i.8xlarge     # 32 vCPU, 256 GB
+      - r8i.12xlarge    # 48 vCPU, 384 GB
+      - r8i.16xlarge    # 64 vCPU, 512 GB
+      - r8i.24xlarge    # 96 vCPU, 768 GB
+      - r8i.32xlarge    # 128 vCPU, 1024 GB
+      - r8i.48xlarge    # 192 vCPU, 1536 GB
+      - r8i.96xlarge    # 384 vCPU, 3072 GB
+
+  DiskSize:
+    Description: Size in GB of the root EBS volume (OS and Neo4j binaries only)
+    Type: Number
+    Default: 20
+    MinValue: 20
+
+  DataDiskSize:
+    Description: >
+      Size in GB of the dedicated Neo4j data EBS volume. This volume persists
+      independently of the EC2 instance, so data survives instance replacement.
+      Provision at least 20% more than your expected data footprint to avoid
+      SSD wear under sustained writes.
+    Type: Number
+    Default: 30
+    MinValue: 20
+
+  InstallAPOC:
+    Description: Whether to install the APOC plugin
+    Type: String
+    Default: "yes"
+    AllowedValues:
+      - "yes"
+      - "no"
+
+  AllowedCIDR:
+    Description: >
+      CIDR range allowed to access Neo4j ports (7474, 7687). Please set CIDR
+      to x.x.x.x/32 to allow one specific IP address access, 0.0.0.0/0 to
+      allow all IP addresses access, or another CIDR range.
+    Type: String
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    ConstraintDescription: Must be a valid CIDR block (e.g. 203.0.113.0/24 or 0.0.0.0/0)
+
+# =============================================================================
+# Resources
+#
+# 14 resources total (down from 26 in the EE template):
+#   - Single subnet (no clustering, so no Subnet2/Subnet3)
+#   - Single security group (no internal cluster ports)
+#   - ASG fixed at 1 instance
+#   - Elastic IP (stable public address, re-associated on instance replacement)
+#   - Persistent EBS data volume (survives instance replacement)
+#   - IAM policy: cfn-signal + volume attach + EIP associate
+# =============================================================================
+Resources:
+
+  # ---------------------------------------------------------------------------
+  # Networking — VPC, Subnet, Route Table, Internet Gateway
+  # ---------------------------------------------------------------------------
+
+  Neo4jVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRoute:
+    Type: AWS::EC2::Route
+    # The route must wait for the IGW to be attached to the VPC.
+    DependsOn: Neo4jInternetGatewayAttachment
+    Properties:
+      GatewayId: !Ref Neo4jInternetGateway
+      RouteTableId: !Ref Neo4jRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  Neo4jSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet1
+
+  Neo4jInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref Neo4jInternetGateway
+      VpcId: !Ref Neo4jVPC
+
+  # ---------------------------------------------------------------------------
+  # Elastic IP — Stable public address for the Neo4j instance
+  #
+  # The EIP is allocated by CloudFormation and associated with the instance
+  # in UserData. When the ASG replaces the instance, the new instance
+  # re-associates the same EIP, so the public address is stable.
+  # ---------------------------------------------------------------------------
+
+  Neo4jElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-eip"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
+  # Storage — Persistent Data Volume
+  #
+  # Standalone EBS volume for Neo4j data (/data). Because it is a separate
+  # CloudFormation resource it is NOT destroyed when the ASG replaces the
+  # instance. UserData attaches, formats (first boot only), and mounts it.
+  # ---------------------------------------------------------------------------
+
+  Neo4jDataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      VolumeType: gp3
+      Size: !Ref DataDiskSize
+      Encrypted: true
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-data"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
+  # Compute — Auto Scaling Group and Launch Template
+  #
+  # ASG is fixed at 1 instance. Marketplace recommends ASG even for
+  # single-instance products for automatic replacement on failure.
+  # ---------------------------------------------------------------------------
+
+  Neo4jAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT10M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: 1
+        MinInstancesInService: 0
+        WaitOnResourceSignals: true
+        PauseTime: PT10M
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      # EC2 health checks: replaces instances that fail hardware/network status
+      # checks. For CE (single instance + EIP) this is sufficient.
+      HealthCheckType: EC2
+      HealthCheckGracePeriod: 600
+      VPCZoneIdentifier:
+        - !Ref Neo4jSubnet1
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        # TODO: ImageId resolves via SSM. Replace the prod-XXXXX placeholder in the
+        # ImageId parameter default once the Marketplace listing is created.
+        ImageId: !Ref ImageId
+        InstanceType: !Ref InstanceType
+        SecurityGroupIds:
+          - !Ref Neo4jExternalSecurityGroup
+        EbsOptimized: true
+        IamInstanceProfile:
+          Arn: !GetAtt Neo4jInstanceProfile.Arn
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: !Ref DiskSize
+              VolumeType: gp3
+              Encrypted: true
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+        UserData:
+          Fn::Base64:
+            Fn::Sub:
+              - |
+                #!/bin/bash
+                exec > >(tee /var/log/neo4j-userdata.log) 2>&1
+                set -euo pipefail
+                echo "Running Neo4j Community Edition startup script..."
+
+                # ==============================================================
+                # EXTERNAL CONNECTIVITY DISCLOSURE
+                #
+                # This script contacts the following endpoints:
+                #   - yum.neo4j.com        (Neo4j package repository)
+                #   - debian.neo4j.com     (GPG key for package verification)
+                #   - IMDS 169.254.169.254 (link-local, instance metadata)
+                #   - AWS EC2 API          (DescribeVolumes, AttachVolume,
+                #                           AssociateAddress)
+                #   - AWS CloudFormation API (SignalResource)
+                #
+                # Neo4j Community Edition is installed from yum at deploy time.
+                # No customer data is collected or exported.
+                # ==============================================================
+
+                # ---------------------------------------------------------------
+                # Signal helper — notify CloudFormation of success or failure
+                #
+                # Uses the AWS CLI (pre-installed on Amazon Linux 2023) to call
+                # cloudformation:SignalResource via IMDSv2 for the instance ID.
+                # The ERR trap ensures failure is reported if any command exits
+                # non-zero (due to set -e).
+                # ---------------------------------------------------------------
+                signal_cfn() {
+                  local status="$1"
+                  # IMDS (link-local 169.254.169.254) — not an external endpoint
+                  TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+                    -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+                  INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+                    http://169.254.169.254/latest/meta-data/instance-id)
+                  # AWS CloudFormation API — regional service endpoint
+                  aws cloudformation signal-resource \
+                    --stack-name "${STACK_NAME}" \
+                    --logical-resource-id Neo4jAutoScalingGroup \
+                    --unique-id "$INSTANCE_ID" \
+                    --status "$status" \
+                    --region "${REGION}" 2>/dev/null || true
+                }
+                trap 'signal_cfn FAILURE' ERR
+
+                # ---------------------------------------------------------------
+                # Install Neo4j Community Edition from yum
+                #
+                # Adds the Neo4j yum repository and installs the latest calver
+                # release. This mirrors the EE deploy-time install pattern.
+                # ---------------------------------------------------------------
+                install_neo4j_from_yum() {
+                  echo "Installing Neo4j Community Edition from yum..."
+                  rpm --import https://debian.neo4j.com/neotechnology.gpg.key
+                  printf '[neo4j]\nname=Neo4j RPM Repository\nbaseurl=https://yum.neo4j.com/stable/latest\nenabled=1\ngpgcheck=1\n' > /etc/yum.repos.d/neo4j.repo
+                  dnf install -y neo4j
+                  systemctl enable neo4j
+                }
+
+                install_neo4j_from_yum
+
+                # ---------------------------------------------------------------
+                # NVMe device lookup helper
+                #
+                # On Nitro instances, EBS volumes appear as /dev/nvme*n1 devices.
+                # The kernel assigns NVMe device numbers in non-deterministic
+                # order, so we cannot assume /dev/nvme1n1 is always the data
+                # volume. Instead, we match the EBS volume ID embedded in each
+                # NVMe device's serial number (with hyphens removed, prefixed
+                # with "vol"). Falls back to the traditional /dev/xvd* name
+                # for non-NVMe instance types.
+                # ---------------------------------------------------------------
+                find_ebs_device() {
+                  local vol_id="$1"
+                  local xvd_name="$2"
+                  # Traditional device name (non-NVMe instance types)
+                  if [ -b "$xvd_name" ]; then
+                    echo "$xvd_name"
+                    return 0
+                  fi
+                  # NVMe: match volume ID in device serial number
+                  local vol_serial
+                  vol_serial=$(echo "$vol_id" | tr -d '-')
+                  for dev in /dev/nvme?n1; do
+                    [ -b "$dev" ] || continue
+                    local serial
+                    serial=$(lsblk -no SERIAL "$dev" 2>/dev/null | tr -d ' ')
+                    if [ "$serial" == "$vol_serial" ]; then
+                      echo "$dev"
+                      return 0
+                    fi
+                  done
+                  return 1
+                }
+
+                # ---------------------------------------------------------------
+                # Config helper — idempotent neo4j.conf setter
+                #
+                # Replaces an existing setting (commented or uncommented) or
+                # appends if missing. Prevents duplicates that would trigger
+                # Neo4j 2026's strict config validation (see PITFALLS.md #1).
+                #
+                # NOTE: This script lives inside Fn::Sub, which intercepts
+                # dollar-brace syntax. We use $1/$2 directly (not local vars)
+                # to avoid Fn::Sub/bash escaping issues.
+                # ---------------------------------------------------------------
+                set_neo4j_conf() {
+                  local conf=/etc/neo4j/neo4j.conf
+                  sed -i "s|^#\?$1=.*|$1=$2|" "$conf"
+                  if ! grep -q "^$1=" "$conf"; then
+                    echo "$1=$2" >> "$conf"
+                  fi
+                }
+
+                # ---------------------------------------------------------------
+                # Attach and mount the persistent data EBS volume
+                #
+                # The Neo4jDataVolume is a standalone CloudFormation resource
+                # that survives instance replacement. On first boot the volume
+                # is unformatted so we create an ext4 filesystem; on subsequent
+                # boots (after ASG replacement) blkid detects the existing FS
+                # and we skip formatting to preserve data.
+                #
+                # The volume must be in the same AZ as the subnet (both use
+                # index 0 of GetAZs). We wait for the device to appear because
+                # attach-volume returns before the kernel sees the block device.
+                # ---------------------------------------------------------------
+                echo "Attaching persistent data volume..."
+                # IMDS (link-local 169.254.169.254) — not an external endpoint
+                TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+                  -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+                INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+                  http://169.254.169.254/latest/meta-data/instance-id)
+
+                # Wait for the volume to become available. After an ASG
+                # replacement the old instance may still be detaching the
+                # volume. Poll for up to 90 seconds before giving up.
+                # AWS EC2 API — regional service endpoint (DescribeVolumes)
+                echo "Waiting for data volume to become available..."
+                for attempt in $(seq 1 18); do
+                  VOL_STATE=$(aws ec2 describe-volumes \
+                    --volume-ids "${DATA_VOLUME_ID}" \
+                    --region "${REGION}" \
+                    --query "Volumes[0].State" --output text)
+                  [ "$VOL_STATE" == "available" ] && break
+                  echo "  Volume state: $VOL_STATE (attempt $attempt/18, waiting 5s...)"
+                  sleep 5
+                done
+                if [ "$VOL_STATE" != "available" ]; then
+                  echo "ERROR: data volume ${DATA_VOLUME_ID} not available (state: $VOL_STATE)"
+                  exit 1
+                fi
+
+                # AWS EC2 API — regional service endpoint (AttachVolume)
+                aws ec2 attach-volume \
+                  --volume-id "${DATA_VOLUME_ID}" \
+                  --instance-id "$INSTANCE_ID" \
+                  --device /dev/xvdf \
+                  --region "${REGION}"
+
+                # AWS EC2 API — regional service endpoint (DescribeVolumes waiter)
+                echo "Waiting for data volume device to appear..."
+                aws ec2 wait volume-in-use \
+                  --volume-ids "${DATA_VOLUME_ID}" \
+                  --region "${REGION}"
+
+                # Wait up to 30s for the device to appear, then resolve it
+                # using find_ebs_device (handles both xvd and NVMe naming).
+                DATA_DEV=""
+                for i in $(seq 1 30); do
+                  DATA_DEV=$(find_ebs_device "${DATA_VOLUME_ID}" /dev/xvdf) && break
+                  sleep 1
+                done
+                if [ -z "$DATA_DEV" ]; then
+                  echo "ERROR: data volume device never appeared (volume ${DATA_VOLUME_ID})"
+                  exit 1
+                fi
+                echo "Data volume device: $DATA_DEV"
+
+                # Format only on first boot (no existing filesystem)
+                if ! blkid "$DATA_DEV"; then
+                  echo "First boot — formatting data volume as ext4..."
+                  mkfs.ext4 "$DATA_DEV"
+                else
+                  echo "Existing filesystem detected — skipping format."
+                fi
+
+                mkdir -p /data
+                mount -o noatime,nodiratime "$DATA_DEV" /data
+                chown neo4j:neo4j /data
+
+                # Point Neo4j at the persistent data volume.
+                set_neo4j_conf server.directories.data /data
+
+                # On first boot, clear auth state so set-initial-password works.
+                # On subsequent boots (data volume already has databases) the
+                # password and system DB are already initialized.
+                if [ ! -d /data/databases/system ]; then
+                  echo "First boot — clearing auth state for initial password setup..."
+                  rm -rf /data/dbms/ 2>/dev/null || true
+                fi
+
+                # ---------------------------------------------------------------
+                # Associate the Elastic IP with this instance
+                #
+                # The EIP is allocated by CloudFormation. On each boot (initial
+                # or ASG replacement) the instance claims it so the public
+                # address follows the instance.
+                # ---------------------------------------------------------------
+                # AWS EC2 API — regional service endpoint (AssociateAddress)
+                echo "Associating Elastic IP..."
+                aws ec2 associate-address \
+                  --allocation-id "${EIP_ALLOC_ID}" \
+                  --instance-id "$INSTANCE_ID" \
+                  --region "${REGION}"
+
+                # ---------------------------------------------------------------
+                # Install APOC plugin (optional)
+                #
+                # APOC is bundled with Neo4j but must be moved to the plugins
+                # directory to activate. The jar lives in /var/lib/neo4j/labs/
+                # on current Neo4j versions. We try both labs/ and products/
+                # as a forward-compatibility measure in case the location changes.
+                # ---------------------------------------------------------------
+                if [ "${APOC}" == "yes" ]; then
+                  # LOCAL FILESYSTEM ONLY — no download; jar is bundled with the Neo4j package
+                  echo "Installing APOC plugin..."
+                  cp /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || \
+                    cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true
+                  set_neo4j_conf dbms.security.procedures.allowlist "apoc.*"
+                fi
+
+                # ---------------------------------------------------------------
+                # Configure network
+                #
+                # Bind to 0.0.0.0 so client connections work on all interfaces.
+                # Advertise the Elastic IP so drivers/browsers connect via the
+                # stable public address rather than a private IP.
+                # ---------------------------------------------------------------
+                echo "Configuring network in neo4j.conf..."
+                set_neo4j_conf server.default_listen_address 0.0.0.0
+                set_neo4j_conf server.default_advertised_address "${EIP_PUBLIC_IP}"
+                set_neo4j_conf server.bolt.listen_address "0.0.0.0:7687"
+                set_neo4j_conf server.bolt.advertised_address "${EIP_PUBLIC_IP}:7687"
+                set_neo4j_conf server.http.listen_address "0.0.0.0:7474"
+                set_neo4j_conf server.http.advertised_address "${EIP_PUBLIC_IP}:7474"
+
+                # ---------------------------------------------------------------
+                # Configure memory
+                #
+                # neo4j-admin server memory-recommendation inspects available
+                # system RAM and writes appropriate heap and page cache settings.
+                # ---------------------------------------------------------------
+                echo "Configuring memory..."
+                neo4j-admin server memory-recommendation | grep -E '^[a-z].*=' | while IFS='=' read -r key value; do
+                  set_neo4j_conf "$key" "$value"
+                done
+
+                # ---------------------------------------------------------------
+                # Cypher IP blocklist
+                #
+                # Prevent Cypher queries from reaching internal AWS infrastructure
+                # (VPC ranges, link-local/IMDS, IPv6 private ranges).
+                # ---------------------------------------------------------------
+                echo "Configuring Cypher IP blocklist..."
+                set_neo4j_conf internal.dbms.cypher_ip_blocklist "10.0.0.0/8,100.64.0.0/10,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8"
+
+                # ---------------------------------------------------------------
+                # OS hardening — disable swap and raise file descriptor limit
+                #
+                # Neo4j uses memory-mapped I/O heavily; swap causes severe
+                # latency spikes. The default Linux ulimit of 1024 open files
+                # is too low — Neo4j recommends at least 40000.
+                # ---------------------------------------------------------------
+                echo "Applying OS hardening..."
+                swapoff -a
+                sed -i '/swap/d' /etc/fstab
+
+                mkdir -p /etc/systemd/system/neo4j.service.d
+                printf '[Service]\nLimitNOFILE=60000\n' > /etc/systemd/system/neo4j.service.d/override.conf
+                systemctl daemon-reload
+
+                # ---------------------------------------------------------------
+                # Set admin password and start Neo4j
+                #
+                # Password is set before starting so the default password is
+                # never active on the network. Note: the password is visible in
+                # the launch template UserData to anyone with
+                # ec2:DescribeLaunchTemplateVersions permission. A future
+                # improvement could retrieve it from Secrets Manager instead.
+                #
+                # On subsequent boots (ASG
+                # replacement) the system database already exists on the
+                # persistent volume with the password set, so we skip this.
+                # ---------------------------------------------------------------
+                if [ ! -d /data/databases/system ]; then
+                  echo "Setting initial password..."
+                  neo4j-admin dbms set-initial-password "${NEO4J_PASSWORD}"
+                else
+                  echo "Persistent data volume detected — skipping password setup."
+                fi
+
+                echo "Starting Neo4j..."
+                systemctl start neo4j
+
+                signal_cfn SUCCESS
+                echo "Neo4j Community Edition startup complete."
+              # Variable map: Fn::Sub resolves these names in the script above.
+              # Using the two-argument form avoids bash escaping issues — see
+              # PWD.md and the Fn::Sub docs for details.
+              - NEO4J_PASSWORD: !Ref Password
+                EIP_ALLOC_ID: !GetAtt Neo4jElasticIP.AllocationId
+                EIP_PUBLIC_IP: !GetAtt Neo4jElasticIP.PublicIp
+                APOC: !Ref InstallAPOC
+                STACK_NAME: !Ref 'AWS::StackName'
+                REGION: !Ref 'AWS::Region'
+                DATA_VOLUME_ID: !Ref Neo4jDataVolume
+
+  # ---------------------------------------------------------------------------
+  # IAM — Instance Profile and Role
+  #
+  # CE does not need ASG peer-discovery permissions (no clustering). The role
+  # grants cloudformation:SignalResource so UserData can report success/failure
+  # back to the CreationPolicy on the ASG, ec2:AttachVolume so UserData can
+  # attach the persistent data volume, ec2:AssociateAddress for the Elastic IP,
+  # and SSM Session Manager access for debugging.
+  # ---------------------------------------------------------------------------
+
+  Neo4jInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref Neo4jRole
+
+  Neo4jRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: !Sub "Neo4j CE instance role for stack ${AWS::StackName}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      Policies:
+        - PolicyName: Neo4jCFNSignal
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:SignalResource
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+        - PolicyName: Neo4jVolumeAttach
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:AttachVolume
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/${Neo4jDataVolume}"
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeVolumes
+                Resource: "*"
+        - PolicyName: Neo4jEIPAssociate
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:AssociateAddress
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:elastic-ip/${Neo4jElasticIP.AllocationId}"
+                  - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
+  # Security — Security Group
+  #
+  # Ports 7474 (HTTP/Browser) and 7687 (Bolt) only. No internal cluster ports
+  # needed for CE. The AllowedCIDR parameter controls ingress — restrict it
+  # to your IP range for production. Enable HTTPS (7473) once TLS is configured.
+  # ---------------------------------------------------------------------------
+
+  Neo4jExternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Neo4j HTTP (7474) and Bolt (7687) access
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 7474
+          ToPort: 7474
+          CidrIp: !Ref AllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          CidrIp: !Ref AllowedCIDR
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+# =============================================================================
+# Outputs
+# =============================================================================
+Outputs:
+  Neo4jBrowserURL:
+    Description: URL for Neo4j Browser
+    Value: !Sub "http://${Neo4jElasticIP.PublicIp}:7474"
+  Neo4jURI:
+    Description: Neo4j Bolt connection URI
+    Value: !Sub "neo4j://${Neo4jElasticIP.PublicIp}:7687"
+  Username:
+    Description: The username is neo4j.
+    Value: neo4j
+  Edition:
+    Description: Neo4j edition deployed
+    Value: Community Edition (GPLv3)
+  DataVolumeId:
+    Description: >
+      EBS volume holding Neo4j data. This volume is RETAINED when the stack is
+      deleted to protect your data. You must manually delete it via the EC2
+      console (EBS > Volumes) when it is no longer needed to avoid ongoing
+      storage charges.
+    Value: !Ref Neo4jDataVolume

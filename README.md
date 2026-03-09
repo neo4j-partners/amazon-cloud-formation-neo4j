@@ -1,12 +1,14 @@
 # amazon-cloud-formation-neo4j
-This repo contains an Amazon CloudFormation Templates (CFT) that deploys Neo4j on AWS.  There are templates for Enterprise Edition (EE) and Community Edition (CE). These templates are used in two AWS Marketplace listings:
+This repo contains Amazon CloudFormation Templates (CFT) that deploy Neo4j on AWS.
 
-* [Neo4j Enterprise Edition](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4) 
-* Neo4j Community Edition  
+## Editions
 
-While deployable through the marketplace, it can also be useful to fork and customize the template to meet your needs.
+- **[neo4j-ee](neo4j-ee/)** - Neo4j Enterprise Edition. This is the template used in the [Neo4j Enterprise Edition AWS Marketplace listing](https://aws.amazon.com/marketplace/pp/prodview-akmzjikgawgn4).
+- **[neo4j-ce](neo4j-ce/)** - Neo4j Community Edition.
 
-To deploy this template from the command line, follow these instructions.
+While deployable through the marketplace, it can also be useful to fork and customize the templates to meet your needs.
+
+To deploy a template from the command line, follow these instructions.
 
 ## Environment Setup
 First we need to install and configure the AWS CLI.  Follow the instructions Amazon provides [here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).  Basically all you need to do is:
@@ -21,15 +23,16 @@ Once installed, configure with the command:
 You can confirm the CLI is working properly by running:
 
     aws ec2 describe-account-attributes
-    
+
 Then you'll want to clone this repo.  You can do that with the command:
 
     git clone https://github.com/neo4j-partners/amazon-cloud-formation-neo4j.git
     cd amazon-cloud-formation-neo4j
 
 ## Creating a Stack
-The AWS word for a deployment is a stack.  [deploy.sh](deploy.sh) is a helper script to deploy a stack.  Pick whether you would like EE or CE.  cd into the appropriate directory.  Then take a look at it and modify any variables, then run it as:
+The AWS word for a deployment is a stack.  Each edition folder contains a `deploy.sh` helper script.  Take a look at it and modify any variables, then run it as:
 
+    cd neo4j-ee  # or neo4j-ce
     ./deploy.sh <STACK_NAME>
 
 When complete you can access the Neo4j Browser at the Neo4jBrowserURL given in the stack outputs.

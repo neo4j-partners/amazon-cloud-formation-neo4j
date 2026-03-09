@@ -1,0 +1,21 @@
+[project]
+name = "test-ce"
+version = "0.1.0"
+description = "Integration tests for the Neo4j CE CloudFormation stack"
+readme = "README.md"
+authors = [
+    { name = "Ryan Knight", email = "ryan.knight@neo4j.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "boto3>=1.35.0",
+    "neo4j>=5.25.0",
+    "requests>=2.32.0",
+]
+
+[project.scripts]
+test-ce = "test_ce.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

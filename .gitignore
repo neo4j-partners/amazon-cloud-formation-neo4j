@@ -1,0 +1,47 @@
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# === Windows ===
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# === IntelliJ / JetBrains ===
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# === VSCode ===
+.vscode/
+*.code-workspace
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.whl
+.venv/
+venv/
+ENV/
+.env
+*.pyo
+
+# === Project ===
+.mcp.json
+ami-id.txt
+.deploy/
+deploy-values.md

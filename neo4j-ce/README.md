@@ -2,7 +2,41 @@
 
 CloudFormation template and tooling for the Neo4j Community Edition AWS Marketplace listing.
 
-## Quick Start
+## Quick Start — Console Deployment
+
+If you deployed from the AWS console, you can test your stack by generating a local outputs file and running the test suite.
+
+```bash
+cd neo4j-ce
+
+# Set your neo4j password in .env (see .env.sample)
+cp .env.sample .env
+# edit .env with your password
+
+# Generate the outputs file (reads password from .env)
+./generate-outputs.sh --stack-name <stack-name> --region <region>
+
+# Full test (connectivity + EBS resilience via instance termination)
+cd test_ce
+uv run test-ce
+
+# Test a specific deployment
+uv run test-ce --stack <stack-name>
+
+# Quick connectivity-only test
+uv run test-ce --simple
+
+# Custom timeout for ASG replacement (default 600s)
+uv run test-ce --timeout 900
+```
+
+**Simple mode** (`--simple`) checks: HTTP API, authentication, Bolt connectivity, and APOC availability.
+
+**Full mode** (default) adds: writes sentinel data, terminates the instance, waits for ASG to replace it, then verifies the data persisted on the new instance via the retained EBS volume.
+
+The test suite reads connection info from `.deploy/<stack-name>.txt` (newest deployment by default).
+
+## Quick Start — CLI Deployment
 
 All scripts use the `marketplace` AWS CLI profile. Export it once so every command picks it up:
 
@@ -54,9 +88,7 @@ Both test tools read connection details from `.deploy/<stack-name>.txt`. If the 
 
 ```bash
 ./generate-outputs.sh --stack-name <stack-name> --region <region>
-# prompts for the neo4j password (not stored in CloudFormation)
-
-./generate-outputs.sh --stack-name <stack-name> --region <region> --password <password>
+# reads the neo4j password from .env (STACK_PASSWORD=...)
 ```
 
 Then run the tests:

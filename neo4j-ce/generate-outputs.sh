@@ -6,9 +6,9 @@
 # and test_ce/ can be used against them.
 #
 # Usage:
-#   ./generate-outputs.sh --stack-name <name> --region <region> [--password <password>]
+#   ./generate-outputs.sh --stack-name <name> --region <region>
 #
-# If --password is omitted, prompts interactively.
+# Password is read from .env (STACK_PASSWORD=...).
 
 set -euo pipefail
 
@@ -30,7 +30,6 @@ read_field() {
 # ---------------------------------------------------------------------------
 STACK_NAME=""
 REGION=""
-PASSWORD=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,13 +41,9 @@ while [[ $# -gt 0 ]]; do
       REGION="$2"
       shift 2
       ;;
-    --password)
-      PASSWORD="$2"
-      shift 2
-      ;;
     *)
       echo "ERROR: Unknown argument '$1'." >&2
-      echo "Usage: $0 --stack-name <name> --region <region> [--password <password>]" >&2
+      echo "Usage: $0 --stack-name <name> --region <region>" >&2
       exit 1
       ;;
   esac
@@ -56,7 +51,7 @@ done
 
 if [ -z "${STACK_NAME}" ] || [ -z "${REGION}" ]; then
   echo "ERROR: --stack-name and --region are required." >&2
-  echo "Usage: $0 --stack-name <name> --region <region> [--password <password>]" >&2
+  echo "Usage: $0 --stack-name <name> --region <region>" >&2
   exit 1
 fi
 
@@ -82,21 +77,20 @@ fi
 echo "  Stack status: ${STACK_STATUS}"
 
 # ---------------------------------------------------------------------------
-# Resolve password (before any file writes)
+# Resolve password from .env
 # ---------------------------------------------------------------------------
-if [ -z "${PASSWORD}" ]; then
-  if [ -t 0 ]; then
-    read -r -s -p "Enter neo4j password: " PASSWORD
-    echo ""
-  else
-    echo "ERROR: No password provided and stdin is not a terminal." >&2
-    echo "Use --password <password> when running non-interactively." >&2
-    exit 1
-  fi
+ENV_FILE="${SCRIPT_DIR}/.env"
+if [ ! -f "${ENV_FILE}" ]; then
+  echo "ERROR: ${ENV_FILE} not found. Create it with STACK_PASSWORD=<password>." >&2
+  exit 1
 fi
 
+# shellcheck source=/dev/null
+source "${ENV_FILE}"
+PASSWORD="${STACK_PASSWORD:-}"
+
 if [ -z "${PASSWORD}" ]; then
-  echo "ERROR: Password cannot be empty." >&2
+  echo "ERROR: STACK_PASSWORD not set in ${ENV_FILE}." >&2
   exit 1
 fi
 

@@ -14,6 +14,11 @@ Metadata:
           - NumberOfServers
           - InstanceType
           - DiskSize
+      - Label:
+          default: "Security & Monitoring"
+        Parameters:
+          - AllowedCIDR
+          - AlertEmail
     ParameterLabels:
       ImageId:
         default: Image ID
@@ -25,6 +30,10 @@ Metadata:
         default: Instance Type
       DiskSize:
         default: Disk Size
+      AlertEmail:
+        default: Alert Email Address
+      AllowedCIDR:
+        default: Allowed CIDR
 
 Parameters:
   ImageId:
@@ -64,12 +73,24 @@ Parameters:
     Type: Number
     Default: 100
     MinValue: 100
+  AlertEmail:
+    Description: Email address for CloudWatch alarm notifications. Leave blank to skip email subscription.
+    Type: String
+    Default: ''
+  AllowedCIDR:
+    Description: CIDR range allowed to access Neo4j ports 7474 and 7687. Use 0.0.0.0/0 to allow access from anywhere, or restrict to a known CIDR for production deployments.
+    Type: String
+    Default: 0.0.0.0/0
 
 Conditions:
   CreateCluster: !Not
     - !Equals
       - !Ref NumberOfServers
       - '1'
+  HasAlertEmail: !Not
+    - !Equals
+      - !Ref AlertEmail
+      - ''
 
 Resources:
   Neo4jVPC:
@@ -323,6 +344,9 @@ Resources:
                 Ref: DiskSize
               VolumeType: gp3
               Encrypted: true
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
         UserData:
           Fn::Base64:
             !Join
@@ -370,6 +394,7 @@ Resources:
               - "  sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
               - "  echo \"dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*\" >> /etc/neo4j/neo4j.conf\n"
               - "  echo \"dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*\" >> /etc/neo4j/neo4j.conf\n"
+              - "  sed -i '/jdwp/Id' /etc/neo4j/neo4j.conf\n"
               - "}\n"
 
               - "build_neo4j_conf_file() {\n"
@@ -429,6 +454,43 @@ Resources:
               - "  neo4j-admin dbms set-initial-password \"${password}\"\n"
               - "}\n"
 
+              - "install_cloudwatch_agent() {\n"
+              - "  echo \"Installing CloudWatch agent...\"\n"
+              - "  yum install -y amazon-cloudwatch-agent\n"
+              - "  cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << CWCONFIG\n"
+              - "{\n"
+              - "  \"logs\": {\n"
+              - "    \"logs_collected\": {\n"
+              - "      \"files\": {\n"
+              - "        \"collect_list\": [\n"
+              - "          {\n"
+              - "            \"file_path\": \"/var/log/neo4j/security.log\",\n"
+              - "            \"log_group_name\": \"/neo4j/${stackName}/application\",\n"
+              - "            \"log_stream_name\": \"{instance_id}/security\",\n"
+              - "            \"retention_in_days\": 90\n"
+              - "          },\n"
+              - "          {\n"
+              - "            \"file_path\": \"/var/log/neo4j/debug.log\",\n"
+              - "            \"log_group_name\": \"/neo4j/${stackName}/application\",\n"
+              - "            \"log_stream_name\": \"{instance_id}/debug\",\n"
+              - "            \"retention_in_days\": 90\n"
+              - "          },\n"
+              - "          {\n"
+              - "            \"file_path\": \"/var/log/cloud-init-output.log\",\n"
+              - "            \"log_group_name\": \"/neo4j/${stackName}/application\",\n"
+              - "            \"log_stream_name\": \"{instance_id}/cloud-init-output\",\n"
+              - "            \"retention_in_days\": 90\n"
+              - "          }\n"
+              - "        ]\n"
+              - "      }\n"
+              - "    }\n"
+              - "  }\n"
+              - "}\n"
+              - "CWCONFIG\n"
+              - "  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json\n"
+              - "}\n"
+
+              - "install_cloudwatch_agent\n"
               - "install_neo4j_from_yum\n"
               - "extension_config\n"
               - "build_neo4j_conf_file\n"
@@ -452,6 +514,8 @@ Resources:
                 - ec2.amazonaws.com
             Action:
               - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
         - PolicyName: Neo4jPolicy
           PolicyDocument:
@@ -465,6 +529,12 @@ Resources:
                   - cloudformation:DescribeStack*
                   - ec2:DescribeInstances
                 Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/neo4j/${AWS::StackName}/application:*'
 
   Neo4jExternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -475,50 +545,163 @@ Resources:
         - IpProtocol: tcp
           FromPort: 7474
           ToPort: 7474
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref AllowedCIDR
         - IpProtocol: tcp
           FromPort: 7687
           ToPort: 7687
-          CidrIp: 0.0.0.0/0
+          CidrIp: !Ref AllowedCIDR
 
   Neo4jInternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Enable Neo4j Internal Ports
       VpcId: !Ref Neo4jVPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 5000
-          ToPort: 5000
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 6000
-          ToPort: 6000
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 7000
-          ToPort: 7000
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 7688
-          ToPort: 7688
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 2003
-          ToPort: 2003
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 2004
-          ToPort: 2004
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 3637
-          ToPort: 3637
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
-        - IpProtocol: tcp
-          FromPort: 5005
-          ToPort: 5005
-          SourceSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress5000:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 5000
+      ToPort: 5000
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress6000:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 6000
+      ToPort: 6000
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress7000:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7000
+      ToPort: 7000
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress7688:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7688
+      ToPort: 7688
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress2003:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2003
+      ToPort: 2003
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress2004:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2004
+      ToPort: 2004
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress3637:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 3637
+      ToPort: 3637
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jFlowLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/vpc/flowlogs/${AWS::StackName}'
+      RetentionInDays: 90
+
+  Neo4jFlowLogsIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: Neo4jFlowLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: '*'
+
+  Neo4jVPCFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref Neo4jVPC
+      TrafficType: ALL
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref Neo4jFlowLogsGroup
+      DeliverLogsPermissionArn: !GetAtt Neo4jFlowLogsIAMRole.Arn
+
+  Neo4jAppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/neo4j/${AWS::StackName}/application'
+      RetentionInDays: 90
+
+  Neo4jAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'neo4j-alerts-${AWS::StackName}'
+      Subscription:
+        Fn::If:
+          - HasAlertEmail
+          - - Protocol: email
+              Endpoint: !Ref AlertEmail
+          - !Ref AWS::NoValue
+
+  Neo4jFailedAuthMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref Neo4jAppLogGroup
+      FilterPattern: '"failed to log in"'
+      MetricTransformations:
+        - MetricNamespace: !Sub 'Neo4j/${AWS::StackName}'
+          MetricName: FailedAuthAttempts
+          MetricValue: '1'
+          DefaultValue: 0
+
+  Neo4jFailedAuthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'Neo4j-FailedAuth-${AWS::StackName}'
+      AlarmDescription: 'Neo4j authentication failures exceeded 10 in a 5-minute window'
+      MetricName: FailedAuthAttempts
+      Namespace: !Sub 'Neo4j/${AWS::StackName}'
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref Neo4jAlertTopic
+      TreatMissingData: notBreaching
 
 Outputs:
   Neo4jBrowserURL:
@@ -540,3 +723,15 @@ Outputs:
   Username:
     Description: 'The username is neo4j.'
     Value: 'neo4j'
+  Neo4jAppLogGroupName:
+    Description: CloudWatch Logs log group for Neo4j application logs
+    Value: !Ref Neo4jAppLogGroup
+  Neo4jAlertTopicArn:
+    Description: SNS topic ARN for Neo4j security alerts
+    Value: !Ref Neo4jAlertTopic
+  VpcFlowLogGroupName:
+    Description: CloudWatch Logs log group for VPC flow logs
+    Value: !Ref Neo4jFlowLogsGroup
+  FailedAuthAlarmName:
+    Description: CloudWatch alarm name for Neo4j failed authentication events
+    Value: !Ref Neo4jFailedAuthAlarm

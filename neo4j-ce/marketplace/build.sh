@@ -43,6 +43,11 @@ sed -i 's/^#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_
 # AL2023 may already have this set via cloud-init presets, but we make it explicit.
 sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 
+# Disable sshd DNS checks — prevents SSH login failures when DNS is unavailable.
+# Remove any existing UseDNS line (commented or not) then append a clean value.
+sed -i '/UseDNS/d' /etc/ssh/sshd_config
+echo "UseDNS no" >> /etc/ssh/sshd_config
+
 # Disable local root access
 passwd -l root
 
@@ -59,6 +64,10 @@ rm -rf /var/cache/dnf
 
 # Remove temporary files
 rm -rf /tmp/* /var/tmp/*
+
+# Clear shell history — required by shared AMI guidelines to avoid leaking
+# credentials or commands run during the build session.
+shred -u /root/.bash_history 2>/dev/null || rm -f /root/.bash_history
 
 echo "=== Build complete ==="
 echo "Next steps:"

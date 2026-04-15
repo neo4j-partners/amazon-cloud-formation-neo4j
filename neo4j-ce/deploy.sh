@@ -24,7 +24,7 @@
 
 set -euo pipefail
 
-export AWS_PROFILE="${AWS_PROFILE:-marketplace}"
+export AWS_PROFILE="${AWS_PROFILE:-default}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -239,6 +239,7 @@ aws cloudformation describe-stacks \
   printf "%-20s = %s\n" "DiskSize" "20"
   printf "%-20s = %s\n" "DataDiskSize" "30"
   printf "%-20s = %s\n" "VolumeType" "gp3"
+  printf "%-20s = %s\n" "Edition" "ce"
   if [ -n "${COPIED_AMI_ID}" ]; then
     printf "%-20s = %s\n" "CopiedAmiId" "$COPIED_AMI_ID"
     printf "%-20s = %s\n" "SourceRegion" "$SOURCE_REGION"
@@ -248,5 +249,5 @@ aws cloudformation describe-stacks \
 echo ""
 echo "Outputs saved to ${OUTPUTS_FILE}"
 echo ""
-echo "To test:      cd test_ce && uv run test-ce --stack ${STACK_NAME}"
+echo "To test:      cd test_neo4j && uv run test-neo4j --edition ce --stack ${STACK_NAME}"
 echo "To tear down: ./teardown.sh ${STACK_NAME}"

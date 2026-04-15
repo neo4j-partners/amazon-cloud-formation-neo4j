@@ -1,0 +1,18 @@
+[project]
+name = "test-neo4j"
+version = "0.1.0"
+description = "Integration tests for Neo4j CE and EE CloudFormation stacks"
+
+requires-python = ">=3.11"
+dependencies = [
+    "boto3>=1.35.0",
+    "neo4j>=5.25.0",
+    "requests>=2.32.0",
+]
+
+[project.scripts]
+test-neo4j = "test_neo4j.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

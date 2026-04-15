@@ -1,7 +1,7 @@
 #!/bin/bash
-# create-ami.sh — Automate the CE Marketplace AMI build
+# create-ami.sh — Automate the EE Marketplace AMI build
 #
-# Launches an Amazon Linux 2023 instance, runs build.sh on it via UserData,
+# Launches an Amazon Linux 2023 instance, runs the build steps via UserData,
 # waits for the instance to stop, creates an AMI with IMDSv2 enforced, and
 # cleans up the build instance.
 #
@@ -12,8 +12,9 @@
 # Usage:
 #   AWS_PROFILE=marketplace ./create-ami.sh
 #
-# Neo4j is installed at deploy time from yum.neo4j.com, so this script
-# no longer takes a version argument. The AMI is a base OS image only.
+# The AMI is a base OS image only (SSH hardening + OS patches).
+# Neo4j Enterprise is installed at deploy time via the CloudFormation UserData
+# script, not baked into the AMI.
 
 set -euo pipefail
 
@@ -21,20 +22,15 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 REGION="us-east-1"
-AMI_NAME="neo4j-ce-base-$(date +%Y%m%d)"
+AMI_NAME="neo4j-ee-base-$(date +%Y%m%d)"
 INSTANCE_TYPE="t3.medium"
 
-# Tags applied to all resources created by this script
-TAGS="ResourceType=instance,Tags=[{Key=Name,Value=neo4j-ce-ami-build},{Key=Purpose,Value=marketplace-ami-build}]"
+TAGS="ResourceType=instance,Tags=[{Key=Name,Value=neo4j-ee-ami-build},{Key=Purpose,Value=marketplace-ami-build}]"
 
 # ---------------------------------------------------------------------------
 # Preflight: verify we're in the correct AWS account
-#
-# The AMI must be built in the neo4j-marketplace account (385155106615).
-# All AWS CLI calls use --region us-east-1 regardless of the profile's
-# default region (the marketplace profile defaults to us-west-2).
 # ---------------------------------------------------------------------------
-echo "=== Neo4j CE AMI Builder ==="
+echo "=== Neo4j EE AMI Builder ==="
 echo ""
 echo "Verifying AWS identity..."
 
@@ -56,10 +52,6 @@ echo ""
 
 # ---------------------------------------------------------------------------
 # Step 1: Deregister any existing AMI with the same name
-#
-# AMI names must be unique per account+region. If a previous build produced
-# an AMI with this name, deregister it (and its backing snapshot) so
-# create-image can reuse the name.
 # ---------------------------------------------------------------------------
 EXISTING_AMI=$(aws ec2 describe-images \
   --region "${REGION}" \
@@ -71,7 +63,6 @@ EXISTING_AMI=$(aws ec2 describe-images \
 if [ -n "${EXISTING_AMI}" ] && [ "${EXISTING_AMI}" != "None" ]; then
   echo "Found existing AMI with name '${AMI_NAME}': ${EXISTING_AMI}"
 
-  # Capture the snapshot IDs before deregistering (so we can delete them)
   SNAP_IDS=$(aws ec2 describe-images \
     --region "${REGION}" \
     --image-ids "${EXISTING_AMI}" \
@@ -83,7 +74,6 @@ if [ -n "${EXISTING_AMI}" ] && [ "${EXISTING_AMI}" != "None" ]; then
     --region "${REGION}" \
     --image-id "${EXISTING_AMI}"
 
-  # Delete orphaned snapshots to avoid storage costs
   for snap in ${SNAP_IDS}; do
     if [ -n "${snap}" ] && [ "${snap}" != "None" ]; then
       echo "Deleting snapshot ${snap}..."
@@ -114,11 +104,7 @@ fi
 echo "Base AMI: ${BASE_AMI}"
 
 # ---------------------------------------------------------------------------
-# Step 3: Create UserData that runs build.sh inline
-#
-# We embed build.sh directly in UserData rather than uploading it separately.
-# This avoids needing S3, SSH, or SSM Session Manager access on the build
-# instance. The script shuts down the instance when done.
+# Step 3: Create UserData that runs the build steps inline
 # ---------------------------------------------------------------------------
 echo "Preparing UserData..."
 
@@ -126,7 +112,7 @@ USERDATA=$(cat <<'BUILDSCRIPT'
 #!/bin/bash
 set -euo pipefail
 
-echo "=== Neo4j CE Base AMI Build (via UserData) ==="
+echo "=== Neo4j EE Base AMI Build (via UserData) ==="
 
 # --- Patch the OS ---
 echo "Patching OS..."
@@ -176,10 +162,7 @@ fi
 echo "Instance launched: ${INSTANCE_ID}"
 
 # ---------------------------------------------------------------------------
-# Step 5: Wait for build.sh to finish (instance stops itself)
-#
-# Two-phase wait: the instance-stopped waiter treats "pending" as a terminal
-# failure, so we must first wait for "running" before waiting for "stopped".
+# Step 5: Wait for build to finish (instance stops itself)
 # ---------------------------------------------------------------------------
 echo ""
 echo "Waiting for instance to start..."
@@ -188,7 +171,7 @@ aws ec2 wait instance-running \
   --instance-ids "${INSTANCE_ID}"
 
 echo "Instance running. Build in progress (typically 3-5 minutes)..."
-echo "Waiting for instance to stop (build.sh shuts down when done)..."
+echo "Waiting for instance to stop (build shuts down when done)..."
 echo ""
 
 aws ec2 wait instance-stopped \
@@ -205,7 +188,7 @@ IMAGE_ID=$(aws ec2 create-image \
   --region "${REGION}" \
   --instance-id "${INSTANCE_ID}" \
   --name "${AMI_NAME}" \
-  --description "Neo4j CE base image on Amazon Linux 2023 (Neo4j installed at deploy time)" \
+  --description "Neo4j EE base image on Amazon Linux 2023 (Neo4j installed at deploy time)" \
   --query "ImageId" \
   --output text)
 
@@ -228,16 +211,6 @@ aws ec2 modify-image-attribute \
 
 # ---------------------------------------------------------------------------
 # Step 7: Tag the AMI
-#
-# create-image does not support --imds-support, so we modify the AMI after
-# creation using modify-image-attribute is not available either. Instead we
-# use register-image approach: we deregister and re-register. However, the
-# simpler path is to set imds-support via modify-instance-metadata-defaults
-# or accept that the CloudFormation launch template enforces HttpTokens=required
-# at the instance level, which is equivalent.
-#
-# For belt-and-suspenders, we document that the launch template enforces IMDSv2
-# and tag the AMI accordingly.
 # ---------------------------------------------------------------------------
 echo "Tagging AMI..."
 aws ec2 create-tags \
@@ -245,13 +218,13 @@ aws ec2 create-tags \
   --resources "${IMAGE_ID}" \
   --tags \
     Key=Name,Value="${AMI_NAME}" \
-    Key=Neo4jEdition,Value="community-base" \
+    Key=Neo4jEdition,Value="enterprise-base" \
     Key=BaseOS,Value="Amazon Linux 2023" \
     Key=IMDSv2,Value="v2.0-required" \
     Key=Purpose,Value="marketplace-ami"
 
 # ---------------------------------------------------------------------------
-# Step 8: Save AMI ID for downstream scripts (e.g. test-ami.sh)
+# Step 8: Save AMI ID for downstream scripts
 # ---------------------------------------------------------------------------
 AMI_ID_FILE="$(dirname "$0")/ami-id.txt"
 echo "${IMAGE_ID}" > "${AMI_ID_FILE}"
@@ -283,5 +256,5 @@ echo "       Marketplace Portal > Products > Server > Request changes"
 echo "       > Update versions > Test 'Add version'"
 echo ""
 echo "  3. Update the CFT ImageId parameter default with the product code"
-echo "       once the Marketplace listing is created."
+echo "       once the Marketplace listing is published."
 echo "============================================="

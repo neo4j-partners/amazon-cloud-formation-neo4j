@@ -1,13 +1,13 @@
 #!/bin/bash
-# test-ami.sh — Verify a CE Marketplace base AMI via SSM Run Command
+# test-ami.sh — Verify an EE Marketplace base AMI via SSM Run Command
 #
 # Launches a temporary instance from the AMI, runs verification commands
 # over SSM (no SSH key or port 22 required), reports pass/fail, and
 # cleans up.
 #
-# The CE AMI is a base OS image only (SSH hardening + OS patches).
-# Neo4j is installed at deploy time from yum.neo4j.com, so this script
-# only verifies the base image properties.
+# The EE AMI is a base OS image only (SSH hardening + OS patches).
+# Neo4j Enterprise is installed at deploy time via CloudFormation UserData,
+# so this script only verifies the base image properties.
 #
 # Prerequisites:
 #   - AWS CLI configured with the marketplace profile (neo4j-marketplace account)
@@ -17,9 +17,6 @@
 #   AWS_PROFILE=marketplace ./test-ami.sh [ami-id]
 #
 # If ami-id is omitted, reads from ami-id.txt (written by create-ami.sh).
-#
-# Example:
-#   AWS_PROFILE=marketplace ./test-ami.sh ami-089ef8c9f4da68869
 
 set -euo pipefail
 
@@ -44,13 +41,12 @@ else
   exit 1
 fi
 
-# Tags for resources created by this script
-INSTANCE_TAGS="ResourceType=instance,Tags=[{Key=Name,Value=neo4j-ce-ami-test},{Key=Purpose,Value=marketplace-ami-test}]"
+INSTANCE_TAGS="ResourceType=instance,Tags=[{Key=Name,Value=neo4j-ee-ami-test},{Key=Purpose,Value=marketplace-ami-test}]"
 
 # ---------------------------------------------------------------------------
 # Preflight: verify AWS account
 # ---------------------------------------------------------------------------
-echo "=== Neo4j CE AMI Tester ==="
+echo "=== Neo4j EE AMI Tester ==="
 echo ""
 echo "Verifying AWS identity..."
 
@@ -90,17 +86,13 @@ echo "AMI is available."
 
 # ---------------------------------------------------------------------------
 # Step 2: Create a temporary IAM role with SSM permissions
-#
-# The test instance needs the AmazonSSMManagedInstanceCore managed policy
-# so the SSM agent can register and receive Run Command invocations.
 # ---------------------------------------------------------------------------
-ROLE_NAME="neo4j-ce-ami-test-ssm-role"
-PROFILE_NAME="neo4j-ce-ami-test-ssm-profile"
+ROLE_NAME="neo4j-ee-ami-test-ssm-role"
+PROFILE_NAME="neo4j-ee-ami-test-ssm-profile"
 
 echo ""
 echo "Setting up IAM role for SSM access..."
 
-# Create role (idempotent — ignore AlreadyExists)
 aws iam create-role \
   --role-name "${ROLE_NAME}" \
   --assume-role-policy-document '{
@@ -119,7 +111,6 @@ aws iam attach-role-policy \
   --policy-arn "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore" \
   2>/dev/null || true
 
-# Create instance profile and add role (idempotent)
 aws iam create-instance-profile \
   --instance-profile-name "${PROFILE_NAME}" \
   2>/dev/null || true
@@ -129,8 +120,6 @@ aws iam add-role-to-instance-profile \
   --role-name "${ROLE_NAME}" \
   2>/dev/null || true
 
-# IAM is eventually consistent — the instance profile may not be usable
-# immediately after creation. A brief pause avoids launch failures.
 echo "Waiting for IAM propagation..."
 sleep 10
 
@@ -202,21 +191,15 @@ echo "SSM agent online."
 
 # ---------------------------------------------------------------------------
 # Step 5: Run verification commands via SSM Run Command
-#
-# The AMI is a base OS image only. We verify:
-#   - SSH password authentication is disabled
-#   - Root login is restricted
-#   - OS is Amazon Linux 2023
 # ---------------------------------------------------------------------------
 echo ""
 echo "Running verification commands..."
 
-# Send the verification commands as a single script
 COMMAND_ID=$(aws ssm send-command \
   --region "${REGION}" \
   --instance-ids "${INSTANCE_ID}" \
   --document-name "AWS-RunShellScript" \
-  --comment "Neo4j CE base AMI verification" \
+  --comment "Neo4j EE base AMI verification" \
   --parameters 'commands=[
     "echo \"=== CHECK 1: SSH password authentication ===\"",
     "grep -i PasswordAuthentication /etc/ssh/sshd_config | head -5",
@@ -281,7 +264,6 @@ echo ""
 echo "============================================="
 FAILURES=0
 
-# Check SSH password auth disabled (match explicit uncommented setting)
 if echo "${COMMAND_OUTPUT}" | grep -q "^PasswordAuthentication no"; then
   echo "  PASS: SSH password authentication is disabled"
 else
@@ -289,8 +271,6 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 
-# Check root login restricted (match explicit uncommented setting).
-# "prohibit-password" is the modern name; "without-password" is the deprecated alias.
 if echo "${COMMAND_OUTPUT}" | grep -qE "^PermitRootLogin (prohibit-password|without-password)"; then
   echo "  PASS: Root login is restricted"
 else
@@ -305,7 +285,6 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 
-# Check OS identity (NAME and VERSION are on separate lines in os-release)
 if echo "${COMMAND_OUTPUT}" | grep -q 'VERSION_ID="2023"'; then
   echo "  PASS: OS is Amazon Linux 2023"
 else
@@ -320,7 +299,6 @@ if [ "${FAILURES}" -gt 0 ]; then
   echo "  RESULT: ${FAILURES} check(s) FAILED"
   echo ""
   echo "  Review the output above and fix the AMI build."
-  # Instance is terminated by the cleanup trap
   exit 1
 else
   echo "  RESULT: All checks PASSED"

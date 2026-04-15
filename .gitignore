@@ -45,3 +45,5 @@ ENV/
 ami-id.txt
 .deploy/
 deploy-values.md
+worklog/
+

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import sys
 from pathlib import Path
 
-from test_neo4j.config import load_config
+from test_neo4j.config import LOCAL_BOLT_PORT, LOCAL_HTTP_PORT, load_config
 from test_neo4j.movies_dataset import (
     cleanup_movies_dataset,
     create_movies_dataset,
@@ -108,6 +109,16 @@ def main() -> None:
             "and JDWP absence in neo4j.conf (via SSM)."
         ),
     )
+    parser.add_argument(
+        "--run-extended-ee-checks",
+        action="store_true",
+        help=(
+            "Run Private-mode EE infrastructure checks: NLB scheme, instance public-IP "
+            "absence, private subnet placement, VPC endpoints, endpoint SG source, "
+            "NAT Gateway count, and VPC DNS settings. "
+            "Skipped automatically for CE stacks or Public-mode deployments."
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
@@ -123,6 +134,8 @@ def main() -> None:
     mode = "simple" if args.simple else "full"
     if args.infra_security:
         mode += "+infra-security"
+    if args.run_extended_ee_checks:
+        mode += "+extended-ee-checks"
     reporter = TestReporter()
 
     log.info("=== Neo4j %s Stack Tester ===", args.edition.upper())
@@ -131,51 +144,92 @@ def main() -> None:
     log.info("  Host:     %s", config.host)
     log.info("  Edition:  %s", config.edition.upper())
     log.info("  Mode:     %s", mode)
+    log.info("  Deploy:   %s", config.deployment_mode)
     log.info("")
 
-    if not wait_for_neo4j(config, timeout=300, interval=10):
-        log.info("")
-        log.info("Troubleshooting:")
-        log.info(
-            "  aws cloudformation describe-stacks --stack-name %s --region %s",
-            config.stack_name,
-            config.region,
-        )
-        sys.exit(1)
-    log.info("")
-
-    run_simple_tests(config, reporter)
-    run_deep_neo4j_checks(config, reporter)
-
+    # Initialise AWS session early if Private mode (needed for SSM tunnels) or
+    # if the test mode requires infra checks.
     session = None
     resource_map = None
+    need_aws = (
+        config.deployment_mode == "Private"
+        or not args.simple
+        or args.infra_security
+        or args.run_extended_ee_checks
+    )
 
-    if not args.simple or args.infra_security:
+    if need_aws:
         import boto3  # noqa: PLC0415
 
-        from test_neo4j.aws_helpers import get_stack_resources  # noqa: PLC0415
+        from test_neo4j.aws_helpers import (  # noqa: PLC0415
+            get_asg_instance_id,
+            get_stack_resources,
+            ssm_port_forward,
+        )
 
         session = boto3.Session(region_name=config.region)
         resource_map = get_stack_resources(session, config.stack_name)
 
-    if args.simple:
+    fwd_stack = contextlib.ExitStack()
+
+    if config.deployment_mode == "Private":
+        instance_id = get_asg_instance_id(session, config.stack_name, resource_map)
+        log.info("  SSM target:   %s", instance_id)
+        log.info("  NLB:          %s", config.nlb_dns)
+        log.info("  Local HTTP:   localhost:%d -> %s:7474", LOCAL_HTTP_PORT, config.nlb_dns)
+        log.info("  Local Bolt:   localhost:%d -> %s:7687", LOCAL_BOLT_PORT, config.nlb_dns)
+        log.info("")
+        log.info("Opening SSM tunnels...")
+        fwd_stack.enter_context(
+            ssm_port_forward(instance_id, config.nlb_dns, 7474, LOCAL_HTTP_PORT, config.region)
+        )
+        fwd_stack.enter_context(
+            ssm_port_forward(instance_id, config.nlb_dns, 7687, LOCAL_BOLT_PORT, config.region)
+        )
+
+    with fwd_stack:
+        if not wait_for_neo4j(config, timeout=300, interval=10):
+            log.info("")
+            log.info("Troubleshooting:")
+            log.info(
+                "  aws cloudformation describe-stacks --stack-name %s --region %s",
+                config.stack_name,
+                config.region,
+            )
+            sys.exit(1)
+        log.info("")
+
+        run_simple_tests(config, reporter)
+        run_deep_neo4j_checks(config, reporter)
+
         if create_movies_dataset(config, reporter):
             verify_movies_dataset(config, reporter)
             cleanup_movies_dataset(config)
-    else:
-        from test_neo4j.infra_checks import run_infra_checks  # noqa: PLC0415
 
-        run_infra_checks(session, config, reporter, resource_map)
-        run_resilience_tests(
-            config, reporter, session,
-            replacement_timeout=args.timeout,
-            resource_map=resource_map,
-        )
+        if not args.simple:
+            from test_neo4j.infra_checks import run_infra_checks  # noqa: PLC0415
 
-    if args.infra_security:
-        from test_neo4j.infra_checks import run_network_security_checks  # noqa: PLC0415
+            run_infra_checks(session, config, reporter, resource_map)
+            run_resilience_tests(
+                config, reporter, session,
+                replacement_timeout=args.timeout,
+                resource_map=resource_map,
+            )
 
-        run_network_security_checks(session, config, reporter, resource_map)
+        if args.infra_security:
+            from test_neo4j.infra_checks import run_network_security_checks  # noqa: PLC0415
+
+            run_network_security_checks(session, config, reporter, resource_map)
+
+        if args.run_extended_ee_checks:
+            from test_neo4j.infra_checks import run_private_mode_checks  # noqa: PLC0415
+
+            if config.edition == "ee":
+                run_private_mode_checks(session, config, reporter, resource_map)
+            else:
+                log.info(
+                    "--run-extended-ee-checks is EE-only — skipping for CE.\n"
+                )
 
     exit_code = reporter.summary(
         stack_name=config.stack_name,

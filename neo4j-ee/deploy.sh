@@ -3,7 +3,7 @@
 # Deploy the Neo4j Enterprise Edition CloudFormation stack for local testing.
 #
 # Usage:
-#   ./deploy.sh [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL]
+#   ./deploy.sh [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private]
 #
 # Stack name is auto-generated as test-ee-<timestamp>.
 # Password is randomly generated and saved to .deploy/<stack-name>.txt.
@@ -42,6 +42,7 @@ REGION_OVERRIDE=""
 NUMBER_OF_SERVERS=""
 USE_MARKETPLACE=false
 ALERT_EMAIL=""
+DEPLOYMENT_MODE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -61,9 +62,13 @@ while [[ $# -gt 0 ]]; do
       ALERT_EMAIL="$2"
       shift 2
       ;;
+    --mode)
+      DEPLOYMENT_MODE="$2"
+      shift 2
+      ;;
     -*)
       echo "ERROR: Unknown option '$1'." >&2
-      echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL]" >&2
+      echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private]" >&2
       exit 1
       ;;
     *)
@@ -71,7 +76,7 @@ while [[ $# -gt 0 ]]; do
         INSTANCE_FAMILY="$1"
       else
         echo "ERROR: Unexpected argument '$1'." >&2
-        echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL]" >&2
+        echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private]" >&2
         exit 1
       fi
       shift
@@ -81,6 +86,7 @@ done
 
 INSTANCE_FAMILY="${INSTANCE_FAMILY:-t3}"
 NUMBER_OF_SERVERS="${NUMBER_OF_SERVERS:-3}"
+DEPLOYMENT_MODE="${DEPLOYMENT_MODE:-Private}"
 
 # ---------------------------------------------------------------------------
 # Resolve instance type from the instance-family argument
@@ -102,6 +108,14 @@ case "${NUMBER_OF_SERVERS}" in
   1|3) ;;
   *)
     echo "ERROR: --number-of-servers must be 1 or 3 (got '${NUMBER_OF_SERVERS}')." >&2
+    exit 1
+    ;;
+esac
+
+case "${DEPLOYMENT_MODE}" in
+  Public|Private) ;;
+  *)
+    echo "ERROR: --mode must be Public or Private (got '${DEPLOYMENT_MODE}')." >&2
     exit 1
     ;;
 esac
@@ -206,6 +220,7 @@ echo "  Stack:          ${STACK_NAME}"
 echo "  Region:         ${REGION}"
 echo "  Instance:       ${INSTANCE_TYPE} (family: ${INSTANCE_FAMILY})"
 echo "  Servers:        ${NUMBER_OF_SERVERS}"
+echo "  Mode:           ${DEPLOYMENT_MODE}"
 echo "  AMI source:     ${AMI_SOURCE}"
 if [ "${USE_MARKETPLACE}" = false ]; then
   echo "  AMI:            ${AMI_ID}"
@@ -225,6 +240,7 @@ echo ""
 PARAMS="ParameterKey=Password,ParameterValue=${Password}"
 PARAMS="${PARAMS} ParameterKey=NumberOfServers,ParameterValue=${NUMBER_OF_SERVERS}"
 PARAMS="${PARAMS} ParameterKey=InstanceType,ParameterValue=${INSTANCE_TYPE}"
+PARAMS="${PARAMS} ParameterKey=DeploymentMode,ParameterValue=${DEPLOYMENT_MODE}"
 if [ -n "${SSM_PARAM_PATH}" ]; then
   PARAMS="${PARAMS} ParameterKey=ImageId,ParameterValue=${SSM_PARAM_PATH}"
 fi
@@ -274,6 +290,7 @@ aws cloudformation describe-stacks \
   printf "%-20s = %s\n" "NumberOfServers" "$NUMBER_OF_SERVERS"
   printf "%-20s = %s\n" "InstanceType" "$INSTANCE_TYPE"
   printf "%-20s = %s\n" "Edition" "ee"
+  printf "%-20s = %s\n" "DeploymentMode" "$DEPLOYMENT_MODE"
   printf "%-20s = %s\n" "AmiSource" "$AMI_SOURCE"
   if [ -n "${ALERT_EMAIL}" ]; then
     printf "%-20s = %s\n" "AlertEmail" "$ALERT_EMAIL"

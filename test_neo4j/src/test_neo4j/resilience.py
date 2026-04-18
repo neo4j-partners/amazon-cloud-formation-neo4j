@@ -1,7 +1,4 @@
-"""EBS persistence resilience tests: write sentinel, kill instance, verify data survives.
-
-CE only. EE cluster resilience tests are deferred.
-"""
+"""Resilience tests: EBS persistence (CE) and Raft cluster recovery (EE)."""
 
 from __future__ import annotations
 
@@ -13,6 +10,7 @@ from test_neo4j.aws_helpers import (
     get_asg_instance_id,
     get_stack_resources,
     terminate_instance,
+    wait_for_cluster_recovery,
     wait_for_replacement_instance,
 )
 from test_neo4j.config import StackConfig
@@ -140,6 +138,120 @@ def _cleanup_sentinel(config: StackConfig, test_run_id: str) -> None:
         log.warning("  Could not clean up sentinel node (non-fatal).\n")
 
 
+def _check_cluster_overview(
+    config: StackConfig,
+    reporter: TestReporter,
+    expected_nodes: int,
+) -> None:
+    """Verify the cluster has reformed: expected node count with exactly one LEADER."""
+    with reporter.test("Cluster overview after node replacement") as ctx:
+        try:
+            with config.driver() as driver:
+                records, _, _ = driver.execute_query(
+                    "CALL dbms.cluster.overview() YIELD id, addresses, role "
+                    "RETURN id, addresses, role"
+                )
+                actual_count = len(records)
+                roles = [r["role"] for r in records]
+                leader_count = sum(1 for r in roles if r == "LEADER")
+
+                issues = []
+                if actual_count != expected_nodes:
+                    issues.append(f"expected {expected_nodes} nodes, got {actual_count}")
+                if leader_count != 1:
+                    issues.append(f"expected 1 LEADER, got {leader_count}")
+
+                if not issues:
+                    follower_count = actual_count - leader_count
+                    ctx.pass_(
+                        f"Cluster has {actual_count} nodes "
+                        f"(1 LEADER, {follower_count} FOLLOWER)"
+                    )
+                else:
+                    role_summary = ", ".join(roles)
+                    ctx.fail(
+                        f"Cluster check failed: {'; '.join(issues)} "
+                        f"(roles: {role_summary})"
+                    )
+        except Exception as exc:
+            ctx.fail(f"Failed to query dbms.cluster.overview(): {exc}")
+
+
+def run_ee_resilience_tests(
+    config: StackConfig,
+    reporter: TestReporter,
+    session: boto3.Session,
+    replacement_timeout: int = 600,
+    resource_map: dict[str, str] | None = None,
+) -> None:
+    """EE Raft resilience: terminate one cluster node, verify ASG replacement and cluster reformation."""
+    if resource_map is None:
+        resource_map = get_stack_resources(session, config.stack_name)
+
+    asg_name = resource_map.get("Neo4jAutoScalingGroup")
+    if not asg_name:
+        log.info("EE resilience: ASG not found in resource map — skipping.\n")
+        return
+
+    asg_client = session.client("autoscaling")
+    groups = asg_client.describe_auto_scaling_groups(
+        AutoScalingGroupNames=[asg_name]
+    )["AutoScalingGroups"]
+    if not groups:
+        log.info("EE resilience: ASG %s not found — skipping.\n", asg_name)
+        return
+
+    expected_nodes = groups[0]["DesiredCapacity"]
+    if expected_nodes < 2:
+        log.info(
+            "EE resilience: single-instance deployment (DesiredCapacity=%d) — "
+            "Raft resilience test requires a cluster, skipping.\n",
+            expected_nodes,
+        )
+        return
+
+    log.info(
+        "EE cluster resilience: terminating one of %d nodes...\n", expected_nodes
+    )
+
+    original_instance_id = get_asg_instance_id(session, config.stack_name, resource_map)
+    log.info("  Original instance: %s\n", original_instance_id)
+
+    with reporter.test("Terminate one cluster node") as ctx:
+        try:
+            terminate_instance(session, original_instance_id)
+            ctx.pass_(f"Terminated {original_instance_id}")
+        except Exception as exc:
+            ctx.fail(f"Failed to terminate instance: {exc}")
+            return
+
+    with reporter.test("Wait for ASG replacement") as ctx:
+        try:
+            recovered = wait_for_cluster_recovery(
+                session,
+                config.stack_name,
+                resource_map,
+                terminated_instance=original_instance_id,
+                expected_count=expected_nodes,
+                timeout=replacement_timeout,
+            )
+            ctx.pass_(
+                f"Cluster recovered to {len(recovered)} InService instances "
+                f"(terminated {original_instance_id})"
+            )
+        except Exception as exc:
+            ctx.fail(str(exc))
+            return
+
+    log.info("Waiting for Neo4j after cluster recovery...")
+    if not wait_for_neo4j(config, timeout=300, interval=10):
+        with reporter.test("Post-recovery Neo4j readiness") as ctx:
+            ctx.fail("Neo4j did not become reachable within 300s after cluster recovery")
+        return
+
+    _check_cluster_overview(config, reporter, expected_nodes)
+
+
 def run_resilience_tests(
     config: StackConfig,
     reporter: TestReporter,
@@ -147,9 +259,11 @@ def run_resilience_tests(
     replacement_timeout: int = 600,
     resource_map: dict[str, str] | None = None,
 ) -> None:
-    """Orchestrate EBS persistence tests. CE only — EE cluster resilience is deferred."""
+    """Orchestrate resilience tests: Raft cluster recovery (EE) or EBS persistence (CE)."""
     if config.edition == "ee":
-        log.info("EE cluster resilience tests are not yet implemented — skipping.\n")
+        run_ee_resilience_tests(
+            config, reporter, session, replacement_timeout, resource_map
+        )
         return
 
     test_run_id = uuid.uuid4().hex

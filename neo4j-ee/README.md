@@ -17,12 +17,13 @@ There are two AMI modes depending on what you're testing.
 **Marketplace mode** — validates what a live customer receives. No AMI file needed:
 
 ```bash
-./deploy.sh --marketplace                                                           # t3.medium, 3 nodes, random region
+./deploy.sh --marketplace                                                           # t3.medium, 3 nodes, random region, Private mode
 ./deploy.sh --marketplace r8i                                                       # memory optimized (r8i.xlarge)
 ./deploy.sh --marketplace --number-of-servers 1                                     # single instance
 ./deploy.sh --marketplace --region eu-west-1                                        # specific region
 ./deploy.sh --marketplace r8i --region us-east-2 --number-of-servers 3
 ./deploy.sh --marketplace --alert-email you@example.com                             # enable CloudWatch alarm emails
+./deploy.sh --marketplace --mode Public                                             # internet-facing NLB (opt-in)
 ```
 
 **Local AMI mode** — tests a newly built AMI before it is published to the Marketplace. Build the AMI first, then deploy:
@@ -35,12 +36,13 @@ There are two AMI modes depending on what you're testing.
 Then deploy using that AMI:
 
 ```bash
-./deploy.sh                                                            # t3.medium, 3 nodes, random region
+./deploy.sh                                                            # t3.medium, 3 nodes, random region, Private mode
 ./deploy.sh r8i                                                        # memory optimized (r8i.xlarge)
 ./deploy.sh --number-of-servers 1                                      # single instance
 ./deploy.sh --region eu-west-1                                         # specific region (AMI auto-copied)
 ./deploy.sh r8i --region us-east-2 --number-of-servers 3
 ./deploy.sh --alert-email you@example.com                              # enable CloudWatch alarm emails
+./deploy.sh --mode Public                                              # internet-facing NLB (opt-in)
 ```
 
 In local AMI mode the script creates a temporary SSM parameter for the AMI ID and copies the AMI cross-region if needed. Cross-region copies can take 10-20+ minutes — use `--region us-east-1` to skip the copy.
@@ -121,36 +123,115 @@ Valid step names:
 
 The `alarm` step takes up to 7 minutes (5-minute CloudWatch evaluation window). All other steps complete in under a minute. SNS email delivery is flagged as a manual step in the summary — see `TESTING_GUIDE.md` for instructions.
 
-### 4. Tear Down
+### 4. Connect to a Private Deployment
+
+Private mode (the default) places instances in private subnets with no public IP. Access uses AWS Systems Manager Session Manager port-forwarding — no bastion host or VPN required.
+
+**Prerequisite:** install the Session Manager Plugin alongside the AWS CLI:
+
+```bash
+# macOS
+brew install --cask session-manager-plugin
+
+# or download from AWS:
+# https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
+```
+
+The test suite (`uv run test-neo4j`) opens the tunnels automatically. To connect manually, look up the instance ID and NLB DNS from the stack outputs, then:
+
+```bash
+# HTTP (Neo4j Browser) on localhost:7474
+INSTANCE_ID=$(aws cloudformation describe-stack-resource \
+  --stack-name <stack-name> --region <region> \
+  --logical-resource-id Neo4jAutoScalingGroup \
+  --query StackResourceDetail.PhysicalResourceId --output text | \
+  xargs -I{} aws autoscaling describe-auto-scaling-groups \
+    --auto-scaling-group-names {} --region <region> \
+    --query 'AutoScalingGroups[0].Instances[?LifecycleState==`InService`].InstanceId' \
+    --output text)
+
+NLB_DNS=$(aws cloudformation describe-stacks \
+  --stack-name <stack-name> --region <region> \
+  --query 'Stacks[0].Outputs[?OutputKey==`Neo4jInternalDNS`].OutputValue' \
+  --output text)
+
+aws ssm start-session --target "$INSTANCE_ID" \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "host=${NLB_DNS},portNumber=7474,localPortNumber=7474" \
+  --region <region> &
+
+aws ssm start-session --target "$INSTANCE_ID" \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters "host=${NLB_DNS},portNumber=7687,localPortNumber=7687" \
+  --region <region> &
+
+# Then open http://localhost:7474 in a browser
+# or connect bolt: neo4j://localhost:7687
+```
+
+The stack also outputs ready-to-copy `Neo4jSSMHTTPCommand` and `Neo4jSSMBoltCommand` values with the NLB DNS already substituted — only the instance ID needs to be filled in.
+
+> **Note:** Connection strings generated inside Neo4j Browser (the "Connect URL" field and copy-paste URIs) will show the internal NLB DNS hostname rather than `localhost`. Substitute `localhost` for the hostname to connect through the open tunnel.
+
+### 5. Tear Down
 
 ```bash
 ./teardown.sh                  # tears down the most recent deployment
 ./teardown.sh <stack-name>     # tears down a specific deployment
 ```
 
+> **Note:** Private mode provisions NAT Gateways (1 for single-instance, 3 for cluster), which incur hourly charges. Tear down promptly after testing.
+
 Deletes the CloudFormation stack, the SSM parameter created in local AMI mode, any cross-region AMI copy, and removes the deployment file from `.deploy/`. In `--marketplace` mode only the stack and output file are deleted (no SSM parameter or copied AMI to clean up).
 
 ## What Gets Deployed
 
-**Three-node cluster** (`NumberOfServers=3`, the default):
+The `DeploymentMode` parameter (default: `Private`) controls network placement.
+
+### Private mode (default)
+
+Instances have no public IP and no direct internet exposure. NAT Gateways provide outbound-only internet access (for package updates, etc.). Access is via SSM Session Manager port-forwarding.
+
+**Three-node cluster** (`NumberOfServers=3`):
+- VPC with three public subnets (NAT Gateways) and three private subnets (EC2 instances), one pair per AZ
+- Internal Network Load Balancer across the three private subnets
+- Three NAT Gateways (one per AZ) for cluster-member outbound traffic
+- Three EC2 instances in private subnets forming a Causal Cluster with Raft consensus
+- External security group allowing inbound on 7474 and 7687 from `AllowedCIDR` (default `10.0.0.0/16`)
+- Internal security group restricting cluster ports (5000, 6000, 7000, 7688, and others) to cluster members only
+
+**Single instance** (`NumberOfServers=1`):
+- VPC with one public subnet (NAT Gateway) and one private subnet (EC2 instance)
+- Internal Network Load Balancer in the private subnet
+- One NAT Gateway for outbound traffic
+- One EC2 instance in a private subnet
+
+### Public mode (`--mode Public`)
+
+Instances receive public IP addresses and the NLB is internet-facing. Use for development or when a VPN/private network is not available.
+
+**Three-node cluster** (`NumberOfServers=3`):
 - VPC with three public subnets, one per Availability Zone
-- Network Load Balancer (TCP, internet-facing) across all three subnets
-- Three EC2 instances forming a Causal Cluster with Raft consensus
+- Internet-facing Network Load Balancer across all three subnets
+- Three EC2 instances with public IPs forming a Causal Cluster with Raft consensus
 - External security group allowing inbound on 7474 (Browser/HTTP) and 7687 (Bolt) from `AllowedCIDR`
-- Internal security group restricting cluster ports (6000, 7000, 7688, and others) to cluster members only
+- Internal security group restricting cluster ports to cluster members only
 
 **Single instance** (`NumberOfServers=1`):
 - VPC with a single public subnet
-- Network Load Balancer in that subnet
-- One EC2 instance (no clustering; useful for dev/test)
+- Internet-facing Network Load Balancer in that subnet
+- One EC2 instance with a public IP
 
-The NLB DNS name is the stable public endpoint in both configurations. Bolt client routing is handled by the NLB — the Neo4j driver connects to port 7687 on the NLB and the cluster handles request routing internally.
+### Common to both modes
+
+The NLB DNS name is the stable endpoint in all configurations. The Neo4j driver connects to port 7687 on the NLB and the cluster handles request routing internally. In Private mode, connect via an SSM port-forward tunnel — the test suite handles this automatically.
 
 **Security configuration:**
 
 | Setting | Default | Notes |
 |---|---|---|
-| `AllowedCIDR` | `0.0.0.0/0` | CIDR allowed to reach ports 7474 and 7687. Restrict to a VPN or known range for production. |
+| `DeploymentMode` | `Private` | `Private`: instances in private subnets, internal NLB, NAT Gateways. `Public`: public IPs, internet-facing NLB. |
+| `AllowedCIDR` | `10.0.0.0/16` | CIDR allowed to reach ports 7474 and 7687. The value `0.0.0.0/0` is rejected by the template; override for Public mode. |
 | IMDSv2 | enforced | Instance metadata requires session tokens; IMDSv1 requests are rejected. |
 | JDWP (port 5005) | disabled | Remote debug port is closed and the JVM debug flag is stripped from `neo4j.conf` at boot. |
 | Internal cluster ports | self-referencing | Ports 5000, 6000, 7000, 7688, and others are reachable only from other cluster members. |

@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
+import shutil
+import signal
+import socket
+import subprocess
 import time
+from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -50,6 +57,168 @@ def get_asg_instance_id(
         f"No InService instance in ASG {asg_name}. "
         f"Current states: {', '.join(states) or 'none'}"
     )
+
+
+def get_asg_instance_ids(
+    session: boto3.Session,
+    stack_name: str,
+    resource_map: dict[str, str] | None = None,
+) -> list[str]:
+    """Return EC2 instance IDs for all InService instances in the stack's ASG."""
+    if resource_map is None:
+        resource_map = get_stack_resources(session, stack_name)
+
+    asg_name = resource_map.get("Neo4jAutoScalingGroup")
+    if not asg_name:
+        raise RuntimeError(f"Neo4jAutoScalingGroup not found in stack {stack_name}")
+
+    asg_client = session.client("autoscaling")
+    groups = asg_client.describe_auto_scaling_groups(
+        AutoScalingGroupNames=[asg_name]
+    )["AutoScalingGroups"]
+
+    if not groups:
+        raise RuntimeError(f"ASG {asg_name} not found")
+
+    return [
+        i["InstanceId"]
+        for i in groups[0]["Instances"]
+        if i["LifecycleState"] == "InService"
+    ]
+
+
+def wait_for_cluster_recovery(
+    session: boto3.Session,
+    stack_name: str,
+    resource_map: dict[str, str],
+    *,
+    terminated_instance: str,
+    expected_count: int,
+    timeout: int = 600,
+    interval: int = 15,
+) -> list[str]:
+    """Poll the ASG until expected_count InService instances exist, excluding terminated_instance.
+
+    Returns the list of recovered InService instance IDs.
+    Unlike wait_for_replacement_instance (CE), this is safe for multi-node clusters where
+    other instances remain InService during the replacement.
+    """
+    asg_name = resource_map.get("Neo4jAutoScalingGroup")
+    if not asg_name:
+        raise RuntimeError(f"Neo4jAutoScalingGroup not found in stack {stack_name}")
+
+    asg_client = session.client("autoscaling")
+    deadline = time.monotonic() + timeout
+
+    while True:
+        try:
+            groups = asg_client.describe_auto_scaling_groups(
+                AutoScalingGroupNames=[asg_name]
+            )["AutoScalingGroups"]
+
+            if groups:
+                in_service = [
+                    i["InstanceId"]
+                    for i in groups[0]["Instances"]
+                    if i["LifecycleState"] == "InService"
+                    and i["InstanceId"] != terminated_instance
+                ]
+                if len(in_service) >= expected_count:
+                    elapsed = timeout - (deadline - time.monotonic())
+                    log.info(
+                        "  Cluster recovered: %d InService instances (%.0fs elapsed)",
+                        len(in_service),
+                        elapsed,
+                    )
+                    return in_service
+
+                elapsed = timeout - (deadline - time.monotonic())
+                states = [
+                    f"{i['InstanceId']}={i['LifecycleState']}"
+                    for i in groups[0]["Instances"]
+                ]
+                log.info("  Instances: %s (%.0fs elapsed)", ", ".join(states), elapsed)
+
+        except Exception as exc:
+            elapsed = timeout - (deadline - time.monotonic())
+            log.info("  API call failed (%.0fs elapsed): %s — retrying", elapsed, exc)
+
+        if time.monotonic() >= deadline:
+            break
+
+        time.sleep(interval)
+
+    raise TimeoutError(
+        f"Cluster did not recover to {expected_count} InService instances in ASG {asg_name} "
+        f"after {timeout}s. Check ASG activity and instance logs."
+    )
+
+
+@contextlib.contextmanager
+def ssm_port_forward(
+    instance_id: str,
+    remote_host: str,
+    remote_port: int,
+    local_port: int,
+    region: str,
+) -> Iterator[int]:
+    """Open an SSM port-forward tunnel and yield local_port once it accepts connections.
+
+    Requires the AWS Session Manager Plugin to be installed separately from the AWS CLI.
+    """
+    if shutil.which("session-manager-plugin") is None:
+        raise RuntimeError(
+            "AWS Session Manager Plugin is not installed. "
+            "Install from: https://docs.aws.amazon.com/systems-manager/latest/userguide/"
+            "session-manager-working-with-install-plugin.html"
+        )
+
+    cmd = [
+        "aws", "ssm", "start-session",
+        "--target", instance_id,
+        "--document-name", "AWS-StartPortForwardingSessionToRemoteHost",
+        "--parameters", f"host={remote_host},portNumber={remote_port},localPortNumber={local_port}",
+        "--region", region,
+    ]
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 60.0
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection(("localhost", local_port), timeout=1):
+                    break
+            except (ConnectionRefusedError, OSError):
+                if proc.poll() is not None:
+                    stderr = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
+                    raise RuntimeError(f"SSM port-forward process exited early: {stderr}")
+                time.sleep(1)
+        else:
+            raise TimeoutError(
+                f"SSM tunnel to localhost:{local_port} did not open within 60s"
+            )
+        yield local_port
+    finally:
+        # Kill the entire process group: `aws ssm start-session` spawns
+        # `session-manager-plugin` as a grandchild. SIGTERM to the `aws`
+        # process alone leaves the grandchild alive, holding the local port.
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait()
 
 
 def terminate_instance(session: boto3.Session, instance_id: str) -> None:

@@ -414,6 +414,332 @@ def check_jdwp_absent(
         )
 
 
+# ---------------------------------------------------------------------------
+# Private-mode infrastructure checks
+# ---------------------------------------------------------------------------
+
+def check_nlb_scheme(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify NLB scheme: internal for Private mode, internet-facing for Public mode."""
+    with reporter.test("NLB scheme") as ctx:
+        nlb_arn = resource_map.get("Neo4jNetworkLoadBalancer")
+        if not nlb_arn:
+            ctx.fail("Neo4jNetworkLoadBalancer not found in stack resources")
+            return
+        try:
+            elbv2 = session.client("elbv2")
+            resp = elbv2.describe_load_balancers(LoadBalancerArns=[nlb_arn])
+            scheme = resp["LoadBalancers"][0]["Scheme"]
+            expected = "internal" if config.deployment_mode == "Private" else "internet-facing"
+            if scheme == expected:
+                ctx.pass_(f"NLB scheme is {scheme!r}")
+            else:
+                ctx.fail(f"NLB scheme is {scheme!r} (expected {expected!r})")
+        except Exception as exc:
+            ctx.fail(f"Failed to describe NLB {nlb_arn}: {exc}")
+
+
+def check_instances_no_public_ip(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify all InService instances have no public IP (Private mode only)."""
+    with reporter.test("Instances have no public IP") as ctx:
+        from test_neo4j.aws_helpers import get_asg_instance_ids  # noqa: PLC0415
+
+        try:
+            instance_ids = get_asg_instance_ids(session, config.stack_name, resource_map)
+        except RuntimeError as exc:
+            ctx.fail(f"Could not list InService instances: {exc}")
+            return
+
+        if not instance_ids:
+            ctx.fail("No InService instances found in ASG")
+            return
+
+        try:
+            ec2 = session.client("ec2")
+            resp = ec2.describe_instances(InstanceIds=instance_ids)
+            with_public_ip = []
+            for reservation in resp["Reservations"]:
+                for inst in reservation["Instances"]:
+                    iid = inst["InstanceId"]
+                    public_ip = inst.get("PublicIpAddress")
+                    if public_ip:
+                        with_public_ip.append(f"{iid}={public_ip}")
+
+            if with_public_ip:
+                ctx.fail(
+                    f"Instances with public IPs (expected none in Private mode): "
+                    f"{', '.join(with_public_ip)}"
+                )
+            else:
+                ctx.pass_(f"All {len(instance_ids)} instances have no public IP")
+        except Exception as exc:
+            ctx.fail(f"Failed to describe instances: {exc}")
+
+
+def check_instances_in_private_subnets(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify all InService instances are in the stack's private subnets."""
+    with reporter.test("Instances in private subnets") as ctx:
+        from test_neo4j.aws_helpers import get_asg_instance_ids  # noqa: PLC0415
+
+        private_subnet_ids = {
+            v for k, v in resource_map.items()
+            if k.startswith("Neo4jPrivateSubnet") and v
+        }
+        if not private_subnet_ids:
+            ctx.fail("No Neo4jPrivateSubnet* resources found in stack")
+            return
+
+        try:
+            instance_ids = get_asg_instance_ids(session, config.stack_name, resource_map)
+        except RuntimeError as exc:
+            ctx.fail(f"Could not list InService instances: {exc}")
+            return
+
+        if not instance_ids:
+            ctx.fail("No InService instances found in ASG")
+            return
+
+        try:
+            ec2 = session.client("ec2")
+            resp = ec2.describe_instances(InstanceIds=instance_ids)
+            wrong_subnet = []
+            for reservation in resp["Reservations"]:
+                for inst in reservation["Instances"]:
+                    subnet = inst.get("SubnetId", "")
+                    if subnet not in private_subnet_ids:
+                        wrong_subnet.append(f"{inst['InstanceId']}={subnet}")
+
+            if wrong_subnet:
+                ctx.fail(
+                    f"Instances not in private subnets {private_subnet_ids}: "
+                    f"{', '.join(wrong_subnet)}"
+                )
+            else:
+                ctx.pass_(
+                    f"All {len(instance_ids)} instances are in private subnets "
+                    f"({', '.join(sorted(private_subnet_ids))})"
+                )
+        except Exception as exc:
+            ctx.fail(f"Failed to describe instances: {exc}")
+
+
+def check_vpc_endpoints_available(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify all required VPC endpoints exist and are available."""
+    with reporter.test("VPC endpoints available") as ctx:
+        vpc_id = resource_map.get("Neo4jVPC")
+        if not vpc_id:
+            ctx.fail("Neo4jVPC not found in stack resources")
+            return
+
+        region = config.region
+        required_services = {
+            f"com.amazonaws.{region}.ssm",
+            f"com.amazonaws.{region}.ssmmessages",
+            f"com.amazonaws.{region}.ec2messages",
+            f"com.amazonaws.{region}.logs",
+            f"com.amazonaws.{region}.s3",
+        }
+
+        try:
+            ec2 = session.client("ec2")
+            resp = ec2.describe_vpc_endpoints(
+                Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
+            )
+            endpoints = resp["VpcEndpoints"]
+
+            available = {
+                ep["ServiceName"]
+                for ep in endpoints
+                if ep.get("State") == "available"
+            }
+            not_available = {
+                ep["ServiceName"]: ep.get("State")
+                for ep in endpoints
+                if ep["ServiceName"] in required_services and ep.get("State") != "available"
+            }
+            missing = required_services - {ep["ServiceName"] for ep in endpoints}
+
+            issues = []
+            if missing:
+                issues.append(f"missing: {', '.join(sorted(missing))}")
+            if not_available:
+                issues.append(
+                    f"not available: "
+                    f"{', '.join(f'{s}={st}' for s, st in not_available.items())}"
+                )
+
+            if not issues:
+                ctx.pass_(f"All 5 required VPC endpoints are available in {vpc_id}")
+            else:
+                ctx.fail(f"VPC endpoint check failed: {'; '.join(issues)}")
+        except Exception as exc:
+            ctx.fail(f"Failed to describe VPC endpoints for {vpc_id}: {exc}")
+
+
+def check_vpc_endpoint_sg_uses_sg_source(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify VpcEndpointSecurityGroup port-443 ingress uses SG source, not CIDR."""
+    with reporter.test("VPC endpoint SG uses SG source (not CIDR)") as ctx:
+        ep_sg_id = resource_map.get("VpcEndpointSecurityGroup")
+        ext_sg_id = resource_map.get("Neo4jExternalSecurityGroup")
+        if not ep_sg_id:
+            ctx.fail("VpcEndpointSecurityGroup not found in stack resources")
+            return
+        if not ext_sg_id:
+            ctx.fail("Neo4jExternalSecurityGroup not found in stack resources")
+            return
+
+        try:
+            ec2 = session.client("ec2")
+            resp = ec2.describe_security_groups(GroupIds=[ep_sg_id])
+            permissions = resp["SecurityGroups"][0]["IpPermissions"]
+
+            port_443_rules = [
+                p for p in permissions
+                if p.get("FromPort") == 443 and p.get("ToPort") == 443
+            ]
+            if not port_443_rules:
+                ctx.fail(f"{ep_sg_id} has no port-443 ingress rule")
+                return
+
+            issues = []
+            for rule in port_443_rules:
+                if rule.get("IpRanges"):
+                    cidrs = [r["CidrIp"] for r in rule["IpRanges"]]
+                    issues.append(f"CIDR ranges present: {cidrs}")
+                pairs = rule.get("UserIdGroupPairs", [])
+                sg_sources = [p["GroupId"] for p in pairs]
+                if ext_sg_id not in sg_sources:
+                    issues.append(
+                        f"Neo4jExternalSecurityGroup ({ext_sg_id}) not in SG sources: {sg_sources}"
+                    )
+
+            if not issues:
+                ctx.pass_(
+                    f"{ep_sg_id} port-443 ingress locked to SG source {ext_sg_id}"
+                )
+            else:
+                ctx.fail(f"{ep_sg_id} port-443 rule issues: {'; '.join(issues)}")
+        except Exception as exc:
+            ctx.fail(f"Failed to describe security group {ep_sg_id}: {exc}")
+
+
+def check_nat_gateways_available(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify NAT Gateway count matches deployment: 1 for single-instance, 3 for cluster."""
+    with reporter.test("NAT Gateways available") as ctx:
+        vpc_id = resource_map.get("Neo4jVPC")
+        if not vpc_id:
+            ctx.fail("Neo4jVPC not found in stack resources")
+            return
+
+        expected = 3 if resource_map.get("Neo4jNatGateway2") else 1
+
+        try:
+            ec2 = session.client("ec2")
+            resp = ec2.describe_nat_gateways(
+                Filter=[
+                    {"Name": "vpc-id", "Values": [vpc_id]},
+                    {"Name": "state", "Values": ["available"]},
+                ]
+            )
+            count = len(resp["NatGateways"])
+            if count == expected:
+                ctx.pass_(f"{count} NAT Gateway(s) available in {vpc_id}")
+            else:
+                ctx.fail(
+                    f"Expected {expected} available NAT Gateway(s) in {vpc_id}, found {count}"
+                )
+        except Exception as exc:
+            ctx.fail(f"Failed to describe NAT Gateways for {vpc_id}: {exc}")
+
+
+def check_vpc_dns_support(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify VPC has enableDnsSupport and enableDnsHostnames both enabled."""
+    with reporter.test("VPC DNS support and hostnames enabled") as ctx:
+        vpc_id = resource_map.get("Neo4jVPC")
+        if not vpc_id:
+            ctx.fail("Neo4jVPC not found in stack resources")
+            return
+
+        try:
+            ec2 = session.client("ec2")
+            support = ec2.describe_vpc_attribute(
+                VpcId=vpc_id, Attribute="enableDnsSupport"
+            )["EnableDnsSupport"]["Value"]
+            hostnames = ec2.describe_vpc_attribute(
+                VpcId=vpc_id, Attribute="enableDnsHostnames"
+            )["EnableDnsHostnames"]["Value"]
+
+            issues = []
+            if not support:
+                issues.append("enableDnsSupport=false")
+            if not hostnames:
+                issues.append("enableDnsHostnames=false")
+
+            if not issues:
+                ctx.pass_(f"{vpc_id} has enableDnsSupport=true, enableDnsHostnames=true")
+            else:
+                ctx.fail(f"{vpc_id} DNS config issues: {', '.join(issues)}")
+        except Exception as exc:
+            ctx.fail(f"Failed to describe VPC attributes for {vpc_id}: {exc}")
+
+
+def run_private_mode_checks(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Run Private-mode infrastructure checks (EE only, skipped for Public deployments)."""
+    if config.deployment_mode != "Private":
+        log.info(
+            "DeploymentMode=%s — skipping Private-mode infrastructure checks.",
+            config.deployment_mode,
+        )
+        return
+
+    check_nlb_scheme(session, config, reporter, resource_map)
+    check_instances_no_public_ip(session, config, reporter, resource_map)
+    check_instances_in_private_subnets(session, config, reporter, resource_map)
+    check_vpc_endpoints_available(session, config, reporter, resource_map)
+    check_vpc_endpoint_sg_uses_sg_source(session, config, reporter, resource_map)
+    check_nat_gateways_available(session, config, reporter, resource_map)
+    check_vpc_dns_support(session, config, reporter, resource_map)
+
+
 def run_network_security_checks(
     session: boto3.Session,
     config: StackConfig,

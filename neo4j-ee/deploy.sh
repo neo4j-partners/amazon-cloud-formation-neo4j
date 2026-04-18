@@ -3,7 +3,7 @@
 # Deploy the Neo4j Enterprise Edition CloudFormation stack for local testing.
 #
 # Usage:
-#   ./deploy.sh [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private]
+#   ./deploy.sh [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private] [--allowed-cidr CIDR]
 #
 # Stack name is auto-generated as test-ee-<timestamp>.
 # Password is randomly generated and saved to .deploy/<stack-name>.txt.
@@ -43,6 +43,7 @@ NUMBER_OF_SERVERS=""
 USE_MARKETPLACE=false
 ALERT_EMAIL=""
 DEPLOYMENT_MODE=""
+ALLOWED_CIDR=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -66,9 +67,13 @@ while [[ $# -gt 0 ]]; do
       DEPLOYMENT_MODE="$2"
       shift 2
       ;;
+    --allowed-cidr)
+      ALLOWED_CIDR="$2"
+      shift 2
+      ;;
     -*)
       echo "ERROR: Unknown option '$1'." >&2
-      echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private]" >&2
+      echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private] [--allowed-cidr CIDR]" >&2
       exit 1
       ;;
     *)
@@ -76,7 +81,7 @@ while [[ $# -gt 0 ]]; do
         INSTANCE_FAMILY="$1"
       else
         echo "ERROR: Unexpected argument '$1'." >&2
-        echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private]" >&2
+        echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private] [--allowed-cidr CIDR]" >&2
         exit 1
       fi
       shift
@@ -87,6 +92,20 @@ done
 INSTANCE_FAMILY="${INSTANCE_FAMILY:-t3}"
 NUMBER_OF_SERVERS="${NUMBER_OF_SERVERS:-3}"
 DEPLOYMENT_MODE="${DEPLOYMENT_MODE:-Private}"
+
+# Resolve AllowedCIDR: explicit arg > per-mode default
+if [[ -z "${ALLOWED_CIDR}" ]]; then
+  if [[ "${DEPLOYMENT_MODE}" == "Private" ]]; then
+    ALLOWED_CIDR="10.0.0.0/16"
+  else
+    DETECTED_IP="$(curl -s --max-time 5 https://checkip.amazonaws.com)"
+    if [[ -z "${DETECTED_IP}" ]]; then
+      echo "ERROR: Could not detect public IP. Pass --allowed-cidr explicitly." >&2
+      exit 1
+    fi
+    ALLOWED_CIDR="${DETECTED_IP}/32"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Resolve instance type from the instance-family argument
@@ -221,6 +240,7 @@ echo "  Region:         ${REGION}"
 echo "  Instance:       ${INSTANCE_TYPE} (family: ${INSTANCE_FAMILY})"
 echo "  Servers:        ${NUMBER_OF_SERVERS}"
 echo "  Mode:           ${DEPLOYMENT_MODE}"
+echo "  AllowedCIDR:    ${ALLOWED_CIDR}"
 echo "  AMI source:     ${AMI_SOURCE}"
 if [ "${USE_MARKETPLACE}" = false ]; then
   echo "  AMI:            ${AMI_ID}"
@@ -241,6 +261,7 @@ PARAMS="ParameterKey=Password,ParameterValue=${Password}"
 PARAMS="${PARAMS} ParameterKey=NumberOfServers,ParameterValue=${NUMBER_OF_SERVERS}"
 PARAMS="${PARAMS} ParameterKey=InstanceType,ParameterValue=${INSTANCE_TYPE}"
 PARAMS="${PARAMS} ParameterKey=DeploymentMode,ParameterValue=${DEPLOYMENT_MODE}"
+PARAMS="${PARAMS} ParameterKey=AllowedCIDR,ParameterValue=${ALLOWED_CIDR}"
 if [ -n "${SSM_PARAM_PATH}" ]; then
   PARAMS="${PARAMS} ParameterKey=ImageId,ParameterValue=${SSM_PARAM_PATH}"
 fi

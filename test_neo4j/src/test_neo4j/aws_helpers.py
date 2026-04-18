@@ -9,6 +9,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import threading
 import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
@@ -154,6 +155,15 @@ def wait_for_cluster_recovery(
     )
 
 
+def _drain_pipe(stream) -> None:
+    """Read and discard plugin IPC bytes to prevent OS pipe buffer overflow."""
+    try:
+        while stream.read(4096):
+            pass
+    except Exception:
+        pass
+
+
 @contextlib.contextmanager
 def ssm_port_forward(
     instance_id: str,
@@ -162,7 +172,7 @@ def ssm_port_forward(
     local_port: int,
     region: str,
 ) -> Iterator[int]:
-    """Open an SSM port-forward tunnel and yield local_port once it accepts connections.
+    """Open an SSM port-forward tunnel and yield local_port once traffic flows end-to-end.
 
     Requires the AWS Session Manager Plugin to be installed separately from the AWS CLI.
     """
@@ -183,11 +193,13 @@ def ssm_port_forward(
     proc = subprocess.Popen(
         cmd,
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,   # must be PIPE: plugin uses stdout as IPC channel with the CLI
         stderr=subprocess.PIPE,
         start_new_session=True,
     )
+    threading.Thread(target=_drain_pipe, args=(proc.stdout,), daemon=True).start()
     try:
+        # Stage 1: wait for the local port to bind (plugin lifecycle step 1)
         deadline = time.monotonic() + 60.0
         while time.monotonic() < deadline:
             try:
@@ -202,6 +214,12 @@ def ssm_port_forward(
             raise TimeoutError(
                 f"SSM tunnel to localhost:{local_port} did not open within 60s"
             )
+
+        # With stdout=PIPE, the WebSocket channel is ready by the time the local port
+        # binds. A short sleep covers any residual startup lag without probing the
+        # tunnel (a partial-read probe sends a TCP RST that corrupts WebSocket state).
+        # See worklog/FIX_SSM_WORK_LOG.md for the full investigation.
+        time.sleep(3)
         yield local_port
     finally:
         # Kill the entire process group: `aws ssm start-session` spawns

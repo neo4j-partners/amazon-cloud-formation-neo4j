@@ -125,7 +125,63 @@ The `alarm` step takes up to 7 minutes (5-minute CloudWatch evaluation window). 
 
 ### 4. Connect to a Private Deployment
 
-Private mode (the default) places instances in private subnets with no public IP. Access uses AWS Systems Manager Session Manager port-forwarding — no bastion host or VPN required.
+Private mode (the default) places instances in private subnets with no public IP and an internal NLB. Public mode places instances in public subnets with an internet-facing NLB — useful for demos and development.
+
+#### Driver URI scheme and cluster routing
+
+Neo4j drivers support two URI schemes with different connection semantics:
+
+- **`bolt://`** — connects directly to the specified host and port. No routing table is fetched. All requests go to that single host.
+- **`neo4j://`** — uses the Bolt routing protocol. The driver fetches a routing table on first connect, listing writers, readers, and routers. Subsequent requests are distributed across cluster members.
+
+**How the template configures routing**
+
+At boot each cluster node sets two `neo4j.conf` values:
+
+```
+server.bolt.advertised_address = <nlb-dns>:7687
+dbms.routing.default_router    = SERVER
+```
+
+`server.bolt.advertised_address` controls the address this node advertises in routing tables — set to the NLB DNS rather than the node's own private IP. `dbms.routing.default_router=SERVER` tells the node to return a one-entry routing table (the NLB) instead of the full list of cluster member IPs. Any driver connecting with `neo4j://` will receive a routing table containing the NLB DNS name and will send all subsequent requests back through the NLB, which distributes across nodes and lets Neo4j server-side routing handle write vs. read direction internally.
+
+**URI scheme by access pattern**
+
+| Access pattern | Recommended URI | Notes |
+|---|---|---|
+| Same VPC | `neo4j://<nlb-dns>:7687` | Routing table returns NLB DNS; driver stays on NLB; full cluster failover |
+| Peered VPC / Transit Gateway | `neo4j://<nlb-dns>:7687` | NLB DNS resolves to private IPs reachable through the peering route |
+| SSM tunnel | `bolt://localhost:7687` | Skips routing table; simple and reliable for operator access |
+| SSM tunnel + routing scheme | `neo4j://localhost:7687` with custom resolver | Routing table returns NLB DNS, which resolves to private IPs not routable from the laptop; fails without a custom resolver (see below) |
+| Direct node IP (same subnet) | `bolt://<node-ip>:7687` | Bypasses NLB; single node only, no failover — see production patterns below |
+
+**`neo4j://` through an SSM tunnel requires a custom resolver**
+
+Via SSM, the driver connects to `localhost:7687`. The server returns a routing table with the NLB DNS name (e.g., `internal-xxxx.elb.amazonaws.com:7687`). The driver tries to open new connections to that address, which resolves to private IPs inside the VPC — not routable from the operator's laptop. Subsequent requests fail.
+
+The simplest fix is `bolt://localhost:7687` for SSM access. If `neo4j://` is required (for example, a CI runner that must exercise cluster routing), implement a custom resolver that maps the NLB DNS back to `localhost`:
+
+```python
+# Python driver — custom resolver for SSM tunnel
+from neo4j import GraphDatabase
+
+def resolver(address):
+    return [("localhost", 7687)]
+
+driver = GraphDatabase.driver(
+    "neo4j://localhost:7687",
+    auth=("neo4j", password),
+    resolver=resolver
+)
+```
+
+The custom resolver pattern is available in all official Neo4j drivers.
+
+**References:** [Leadership, routing, and load balancing](https://neo4j.com/docs/operations-manual/current/clustering/setup/routing/) · [Configure network connectors — `server.bolt.advertised_address`](https://neo4j.com/docs/operations-manual/current/configuration/connectors/)
+
+#### From an operator workstation (SSM port-forward)
+
+For interactive access from a laptop or CI runner, use AWS Systems Manager Session Manager port-forwarding — no bastion host or VPN required.
 
 **Prerequisite:** install the Session Manager Plugin alongside the AWS CLI:
 
@@ -166,12 +222,22 @@ aws ssm start-session --target "$INSTANCE_ID" \
   --region <region> &
 
 # Then open http://localhost:7474 in a browser
-# or connect bolt: neo4j://localhost:7687
+# or connect bolt: bolt://localhost:7687
 ```
 
 The stack also outputs ready-to-copy `Neo4jSSMHTTPCommand` and `Neo4jSSMBoltCommand` values with the NLB DNS already substituted — only the instance ID needs to be filled in.
 
 > **Note:** Connection strings generated inside Neo4j Browser (the "Connect URL" field and copy-paste URIs) will show the internal NLB DNS hostname rather than `localhost`. Substitute `localhost` for the hostname to connect through the open tunnel.
+
+#### From application workloads (production patterns)
+
+Application tiers inside AWS reach the internal NLB directly without SSM tunnels. AWS Network Load Balancers support connections from clients over VPC peering, AWS managed VPN, Direct Connect, and third-party VPN solutions.
+
+**Same VPC** — an application running in the same VPC connects to the NLB's internal DNS name on port 7687 (Bolt) or 7474 (HTTP). The `AllowedCIDR` parameter defaults to `10.0.0.0/16` (the VPC CIDR), so no security group changes are needed for in-VPC clients.
+
+**VPC Peering / Transit Gateway** — an application in a spoke VPC reaches the NLB's private IP addresses through the peering or TGW route. Two prerequisites: (1) a route in the spoke VPC's route table pointing the Neo4j VPC CIDR at the peering connection or TGW attachment, and (2) `AllowedCIDR` must be updated at stack launch to include the spoke VPC's CIDR (e.g. `10.1.0.0/16`). The NLB DNS resolves directly to private IPs; no additional DNS configuration is required on the peering connection.
+
+**Within the same subnet** — an application in the same subnet can connect directly to individual Neo4j node IPs on port 7687, bypassing the NLB. Use `bolt://<node-ip>:7687`; see [Driver URI scheme and cluster routing](#driver-uri-scheme-and-cluster-routing) for why `neo4j://` should not be used with a direct node IP.
 
 ### 5. Tear Down
 
@@ -197,7 +263,7 @@ Instances have no public IP and no direct internet exposure. NAT Gateways provid
 - Internal Network Load Balancer across the three private subnets
 - Three NAT Gateways (one per AZ) for cluster-member outbound traffic
 - Three EC2 instances in private subnets forming a Causal Cluster with Raft consensus
-- External security group allowing inbound on 7474 and 7687 from `AllowedCIDR` (default `10.0.0.0/16`)
+- External security group allowing inbound on 7474 and 7687 from `AllowedCIDR`
 - Internal security group restricting cluster ports (5000, 6000, 7000, 7688, and others) to cluster members only
 
 **Single instance** (`NumberOfServers=1`):
@@ -231,7 +297,7 @@ The NLB DNS name is the stable endpoint in all configurations. The Neo4j driver 
 | Setting | Default | Notes |
 |---|---|---|
 | `DeploymentMode` | `Private` | `Private`: instances in private subnets, internal NLB, NAT Gateways. `Public`: public IPs, internet-facing NLB. |
-| `AllowedCIDR` | `10.0.0.0/16` | CIDR allowed to reach ports 7474 and 7687. The value `0.0.0.0/0` is rejected by the template; override for Public mode. |
+| `AllowedCIDR` | *(required)* | CIDR allowed to reach ports 7474 and 7687. Private mode: enter `10.0.0.0/16`. Public mode: enter the CIDR of the clients that should reach the NLB. `0.0.0.0/0` is not accepted. |
 | IMDSv2 | enforced | Instance metadata requires session tokens; IMDSv1 requests are rejected. |
 | JDWP (port 5005) | disabled | Remote debug port is closed and the JVM debug flag is stripped from `neo4j.conf` at boot. |
 | Internal cluster ports | self-referencing | Ports 5000, 6000, 7000, 7688, and others are reachable only from other cluster members. |

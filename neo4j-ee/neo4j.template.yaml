@@ -43,9 +43,13 @@ Parameters:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/marketplace/prod-vwigx4rbvvb5s/2025.12.0
   Password:
-    Description: Password for Neo4j
+    Description: >
+      Password for the neo4j admin user. Must be at least 8 characters
+      and contain both letters and numbers.
     Type: String
     MinLength: 8
+    AllowedPattern: ^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$
+    ConstraintDescription: Must be at least 8 characters and contain both letters and numbers.
     NoEcho: true
   NumberOfServers:
     Description: Number of EC2 instances to deploy
@@ -92,14 +96,13 @@ Parameters:
       requires AllowedCIDR. Private is recommended for production.
   AllowedCIDR:
     Type: String
-    Default: 10.0.0.0/16
-    AllowedPattern: '^(?!0\.0\.0\.0/0$).+'
-    ConstraintDescription: 'Enter a valid CIDR block (e.g. 10.0.0.0/16 or your IP as x.x.x.x/32). The value 0.0.0.0/0 is not permitted.'
+    AllowedPattern: '^(?!0\.0\.0\.0/0$)(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+    ConstraintDescription: Must be a valid CIDR block (e.g. 10.0.0.0/16 or your IP as x.x.x.x/32). The value 0.0.0.0/0 is not permitted.
     Description: >-
-      CIDR allowed to reach Neo4j ports 7474 and 7687. In Private mode, defaults
-      to the VPC CIDR (10.0.0.0/16). In Public mode, supply the CIDR of the
-      clients that should reach the internet-facing NLB (e.g. 203.0.113.0/24
-      for a known office egress). 0.0.0.0/0 is not accepted.
+      CIDR allowed to reach Neo4j ports 7474 and 7687. In Private mode, enter
+      10.0.0.0/16 (the VPC CIDR). In Public mode, enter the CIDR of the clients
+      that should reach the internet-facing NLB (e.g. 203.0.113.0/24 for a
+      known office egress). 0.0.0.0/0 is not accepted.
 
 Conditions:
   CreateCluster: !Not
@@ -219,7 +222,7 @@ Resources:
 
   Neo4jPrivateSubnet2:
     Type: AWS::EC2::Subnet
-    Condition: IsPrivate
+    Condition: IsPrivateCluster
     Properties:
       CidrBlock: 10.0.11.0/24
       MapPublicIpOnLaunch: false
@@ -238,7 +241,7 @@ Resources:
 
   Neo4jPrivateSubnet3:
     Type: AWS::EC2::Subnet
-    Condition: IsPrivate
+    Condition: IsPrivateCluster
     Properties:
       CidrBlock: 10.0.12.0/24
       MapPublicIpOnLaunch: false
@@ -393,14 +396,14 @@ Resources:
 
   Neo4jPrivateSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: IsPrivate
+    Condition: IsPrivateCluster
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable2
       SubnetId: !Ref Neo4jPrivateSubnet2
 
   Neo4jPrivateSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: IsPrivate
+    Condition: IsPrivateCluster
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable3
       SubnetId: !Ref Neo4jPrivateSubnet3
@@ -423,6 +426,7 @@ Resources:
 
   Neo4jRoute:
     Type: AWS::EC2::Route
+    DependsOn: Neo4jInternetGatewayAttachment
     Properties:
       GatewayId: !Ref Neo4jInternetGateway
       RouteTableId: !Ref Neo4jRouteTable
@@ -470,7 +474,7 @@ Resources:
   # ---------------------------------------------------------------------------
 
   Neo4jNetworkLoadBalancer:
-    DependsOn: Neo4jInternetGateway
+    DependsOn: Neo4jInternetGatewayAttachment
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
       IpAddressType: ipv4
@@ -525,7 +529,11 @@ Resources:
           - 'tg'
       Port: 7474
       Protocol: TCP
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
       HealthCheckIntervalSeconds: 10
+      Matcher:
+        HttpCode: '200'
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -696,7 +704,7 @@ Resources:
               - "    if [[ ${#instanceId} -eq 0 ]]; then\n"
               - "     echo \"Missing instance Id. Exiting!! \"\n"
               - "    fi\n"
-              - "    coreMembers=$(aws autoscaling describe-auto-scaling-instances --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -n1 -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
+              - "    coreMembers=$(aws autoscaling describe-auto-scaling-instances --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
               - "    if [[ ${#coreMembers} -eq 0 ]]; then\n"
               - "     echo \"Missing coreMembers. Exiting!! \"\n"
               - "    fi\n"
@@ -787,7 +795,6 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - autoscaling:CreateOrUpdateTags
                   - autoscaling:DescribeAutoScalingInstances
                   - autoscaling:DescribeAutoScalingGroups
                   - cloudformation:DescribeStack*
@@ -799,6 +806,20 @@ Resources:
                   - logs:PutLogEvents
                   - logs:DescribeLogStreams
                 Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/neo4j/${AWS::StackName}/application:*'
+
+  Neo4jASGTagsPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: Neo4jASGTagsPolicy
+      Roles:
+        - !Ref Neo4jRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - autoscaling:CreateOrUpdateTags
+            Resource: !Sub 'arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${Neo4jAutoScalingGroup}'
 
   Neo4jExternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -1012,6 +1033,9 @@ Resources:
                 Action:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
+                Resource: !Sub '${Neo4jFlowLogsGroup.Arn}:*'
+              - Effect: Allow
+                Action:
                   - logs:DescribeLogGroups
                   - logs:DescribeLogStreams
                 Resource: '*'

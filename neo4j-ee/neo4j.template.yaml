@@ -1113,7 +1113,7 @@ Resources:
 
           dnf install -y python3-pip
           dnf update -y aws-cfn-bootstrap
-          python3 -m pip install 'neo4j>=5,<6'
+          python3 -m pip install 'neo4j>=5,<6' boto3
 
           # Neo4j yum repo + cypher-shell for interactive admin via:
           #   aws ssm start-session --target <bastion> → cypher-shell -a neo4j://<nlb>:7687

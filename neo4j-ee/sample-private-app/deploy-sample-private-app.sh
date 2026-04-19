@@ -60,7 +60,7 @@ fi
 
 if [ -z "${OUTPUTS_FILE}" ] || [ ! -f "${OUTPUTS_FILE}" ]; then
   echo "ERROR: No EE deployment found." >&2
-  echo "Run ./deploy.sh first, then ./deploy-sample-private-app.sh [stack-name]." >&2
+  echo "Run ../deploy.sh first, then ./deploy-sample-private-app.sh [stack-name]." >&2
   exit 1
 fi
 
@@ -124,16 +124,22 @@ pip install -q -r lambda/requirements.txt -t lambda/
 CDK_DEFAULT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 export CDK_DEFAULT_ACCOUNT
 export CDK_DEFAULT_REGION="${REGION}"
+export AWS_DEFAULT_REGION="${REGION}"
+
+# Clear cached context so stale VPC lookups from previous runs never block redeployment.
+echo '{}' > cdk.context.json
 
 echo "Bootstrapping CDK environment (idempotent)..."
 cdk bootstrap "aws://${CDK_DEFAULT_ACCOUNT}/${REGION}" --quiet 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# CDK deploy — context values replace SSM lookups inside the stack
+# CDK deploy — region and all resource IDs passed as context so synthesis is
+# deterministic regardless of the caller's shell environment.
 # ---------------------------------------------------------------------------
 echo "Deploying CDK stack ${CDK_STACK_NAME}..."
 OUTPUTS_JSON="/tmp/cdk-outputs-$$.json"
 cdk deploy \
+  -c "region=${REGION}" \
   -c "cdkStackName=${CDK_STACK_NAME}" \
   -c "neo4jStack=${NEO4J_STACK}" \
   -c "vpcId=${VPC_ID}" \
@@ -186,16 +192,16 @@ echo "Wrote ${CDK_LOCAL_FILE}"
 # ---------------------------------------------------------------------------
 # Write invoke.sh
 # ---------------------------------------------------------------------------
-INVOKE_SCRIPT="${EE_DIR}/invoke.sh"
+INVOKE_SCRIPT="${SCRIPT_DIR}/invoke.sh"
 cat > "${INVOKE_SCRIPT}" <<'INVOKE_EOF'
 #!/bin/bash
 # invoke.sh — Call the Neo4j demo Lambda via its IAM-authenticated Function URL.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CDK_FILE=$(ls -t "${SCRIPT_DIR}/.deploy"/cdk-*.json 2>/dev/null | head -1 || true)
+CDK_FILE=$(ls -t "${SCRIPT_DIR}/../.deploy"/cdk-*.json 2>/dev/null | head -1 || true)
 if [ -z "${CDK_FILE}" ]; then
-  echo "ERROR: No CDK deployment found. Run ./sample-private-app/deploy-sample-private-app.sh first." >&2
+  echo "ERROR: No CDK deployment found. Run ./deploy-sample-private-app.sh first." >&2
   exit 1
 fi
 
@@ -218,6 +224,6 @@ deactivate 2>/dev/null || true
 echo ""
 echo "============================================="
 echo "  CDK deploy complete."
-echo "  To invoke:    ./invoke.sh           (from neo4j-ee/)"
-echo "  To tear down: ./teardown-cdk.sh    (from neo4j-ee/)"
+echo "  To invoke:    ./invoke.sh"
+echo "  To tear down: ./teardown-cdk.sh"
 echo "============================================="

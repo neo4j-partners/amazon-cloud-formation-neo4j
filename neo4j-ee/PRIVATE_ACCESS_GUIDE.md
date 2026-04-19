@@ -28,7 +28,7 @@ The IAM role or user running these commands needs:
 | `ssm:GetParameter`, `ssm:GetParametersByPath` | `/neo4j-ee/<stack-name>/*` |
 | `secretsmanager:GetSecretValue`, `secretsmanager:DescribeSecret` | `neo4j/<stack-name>/password` |
 
-These are the same permissions the bastion itself uses. If `verify-phase1.sh` passes but `validate-private` fails on a permissions error, the gap is in the bastion's IAM role, not the operator's.
+These are the same permissions the bastion itself uses. If `preflight.sh` passes but `validate-private` fails on a permissions error, the gap is in the bastion's IAM role, not the operator's.
 
 ---
 
@@ -38,19 +38,19 @@ Before running any other script, confirm that V11's server-side machinery is in 
 
 ```bash
 cd neo4j-ee
-./scripts/verify-phase1.sh
+./scripts/preflight.sh
 ```
 
 Or for a specific stack:
 
 ```bash
-./scripts/verify-phase1.sh test-ee-1776575131
+./scripts/preflight.sh test-ee-1776575131
 ```
 
 Expected output when everything is ready:
 
 ```
-=== V11 Phase 1 Verification ===
+=== Preflight Checks ===
 
   Stack:   test-ee-1776575131
   Region:  us-east-1
@@ -229,7 +229,7 @@ See [AWS install instructions](https://docs.aws.amazon.com/systems-manager/lates
 The bastion's IAM role does not have access to the secret or SSM parameter for this stack. Check that the role policy covers `neo4j/<stack-name>/password` and `/neo4j-ee/<stack-name>/*`. Re-deploying the stack re-creates the IAM policy with the correct scope.
 
 **"Secret not found"**
-The stack was torn down. `teardown.sh` force-deletes the secret immediately to unblock re-deployment. If the stack is still up, run `verify-phase1.sh` to confirm the secret exists.
+The stack was torn down. `teardown.sh` force-deletes the secret immediately to unblock re-deployment. If the stack is still up, run `preflight.sh` to confirm the secret exists.
 
 **"NotALeader" error in Neo4j Browser**
 The NLB routed a write to a follower. Use `admin-shell.sh` for writes — `neo4j://` routing directs writes to the leader automatically.

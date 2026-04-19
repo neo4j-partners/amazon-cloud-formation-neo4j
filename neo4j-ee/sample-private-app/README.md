@@ -34,6 +34,8 @@ The Lambda's security group has two egress rules: TCP 7687 to the Neo4j external
 
 ## Workflow
 
+All scripts run from the `sample-private-app/` directory:
+
 ```bash
 # Deploy the CDK app against the most recent EE stack
 ./deploy-sample-private-app.sh
@@ -42,13 +44,13 @@ The Lambda's security group has two egress rules: TCP 7687 to the Neo4j external
 ./deploy-sample-private-app.sh test-ee-1776575131
 
 # Invoke the Lambda
-../invoke.sh
+./invoke.sh
 
 # Tear down
-../teardown-cdk.sh
+./teardown-cdk.sh
 ```
 
-`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, passes them as CDK context, runs `cdk deploy`, and writes the Function URL to `/neo4j-cdk/<cdk-stack>/function-url` in SSM and `.deploy/cdk-<cdk-stack>.json` locally. It also generates `invoke.sh`.
+`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, passes them as CDK context, runs `cdk deploy`, and writes the Function URL to `/neo4j-cdk/<cdk-stack>/function-url` in SSM and `../.deploy/cdk-<cdk-stack>.json` locally. It also generates `invoke.sh` in the same directory.
 
 The EE stack's SSM parameters (`/neo4j-ee/<stack>/vpc-id`, `nlb-dns`, `private-subnet-1-id`, `private-subnet-2-id`, `external-sg-id`, `password-secret-arn`) are CloudFormation resources — they exist for the lifetime of the EE stack and need no manual management.
 
@@ -78,7 +80,7 @@ On first invocation, nodes and relationships are created. Subsequent invocations
 The Function URL requires a Sigv4-signed request. `invoke.sh` handles this via `curl --aws-sigv4`:
 
 ```bash
-../invoke.sh
+./invoke.sh
 ```
 
 To call it manually:
@@ -103,6 +105,9 @@ curl --silent --aws-sigv4 "aws:amz:${AWS_DEFAULT_REGION}:lambda" \
 
 ```
 sample-private-app/
+├── deploy-sample-private-app.sh  # Deploy CDK stack; generates invoke.sh
+├── teardown-cdk.sh               # Delete CDK stack and SSM parameter
+├── invoke.sh                     # Generated at deploy time
 ├── app.py                        # CDK entry point; stack name from cdkStackName context
 ├── cdk.json                      # CDK configuration
 ├── requirements.txt              # CDK dependencies

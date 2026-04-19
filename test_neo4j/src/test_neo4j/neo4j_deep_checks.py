@@ -108,7 +108,12 @@ def check_memory_config(config: StackConfig, reporter: TestReporter) -> None:
 
 
 def check_data_directory(config: StackConfig, reporter: TestReporter) -> None:
-    """Verify server.directories.data is /data (the persistent EBS mount)."""
+    """Verify server.directories.data matches the expected path for the edition.
+
+    CE mounts a persistent EBS volume at /data and configures Neo4j to use it.
+    EE uses the default RPM install path; cluster replication provides resilience.
+    """
+    expected = "/data" if config.edition == "ce" else "/var/lib/neo4j/data"
     with reporter.test("Data directory") as ctx:
         try:
             with config.driver() as driver:
@@ -117,11 +122,11 @@ def check_data_directory(config: StackConfig, reporter: TestReporter) -> None:
                     "YIELD value RETURN value"
                 )
                 value = records[0]["value"]
-                if value == "/data":
-                    ctx.pass_("server.directories.data = /data")
+                if value == expected:
+                    ctx.pass_(f"server.directories.data = {value}")
                 else:
                     ctx.fail(
-                        f"server.directories.data = {value} (expected /data)"
+                        f"server.directories.data = {value} (expected {expected})"
                     )
         except Exception as exc:
             ctx.fail(f"Failed to query data directory: {exc}")

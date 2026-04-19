@@ -9,7 +9,7 @@ AWS CloudFormation templates for deploying Neo4j on AWS Marketplace. Two edition
 - **neo4j-ce/** — Community Edition. Single-instance with ASG-based resilience, persistent EBS volume, and Elastic IP.
 - **neo4j-ee/** — Enterprise Edition. Supports 1 or 3 node clusters with Network Load Balancer.
 
-All scripts expect `AWS_PROFILE=marketplace` (account 385155106615, neo4j-marketplace).
+All scripts expect `AWS_PROFILE=default`.
 
 ## Workflow Commands
 

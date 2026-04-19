@@ -47,3 +47,6 @@ ami-id.txt
 deploy-values.md
 worklog/
 
+# Self-signed CA bundle staged by deploy.sh --tls; removed by teardown.sh
+neo4j-ee/sample-private-app/lambda/neo4j-ca.crt
+

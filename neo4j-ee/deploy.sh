@@ -312,7 +312,7 @@ if [ "${ENABLE_TLS}" = true ]; then
   trap 'rm -rf "${CERT_DIR}"' EXIT
   openssl req -x509 -newkey rsa:4096 \
     -keyout "${CERT_DIR}/private.key" -out "${CERT_DIR}/public.crt" \
-    -days 365 -nodes \
+    -days 365 -noenc \
     -subj "/CN=${NLB_DNS}" \
     -addext "subjectAltName=DNS:${NLB_DNS}"
   echo "Self-signed cert generated (SAN: DNS:${NLB_DNS})"
@@ -401,14 +401,17 @@ OUTPUTS_FILE="${SCRIPT_DIR}/.deploy/${STACK_NAME}.txt"
 
 echo "Stack created. Writing outputs to ${OUTPUTS_FILE}..."
 
-# CloudFormation outputs
-aws cloudformation describe-stacks \
+# CloudFormation outputs + StackId (single API call)
+_stack_json=$(aws cloudformation describe-stacks \
   --stack-name "$STACK_NAME" \
   --region "$REGION" \
-  --query "Stacks[0].Outputs[*].[OutputKey,OutputValue]" \
-  --output text | while read -r key value; do
-    printf "%-20s = %s\n" "$key" "$value"
-  done | tee "${OUTPUTS_FILE}"
+  --output json)
+STACK_ID=$(echo "$_stack_json" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['Stacks'][0]['StackId'])")
+echo "$_stack_json" | python3 -c "
+import sys, json
+for o in json.load(sys.stdin)['Stacks'][0].get('Outputs', []):
+    print('{:<20} = {}'.format(o['OutputKey'], o['OutputValue']))
+" | tee "${OUTPUTS_FILE}"
 
 # Deploy context (values not in CloudFormation outputs)
 {
@@ -434,6 +437,7 @@ aws cloudformation describe-stacks \
   if [ -n "${BOLT_TLS_SECRET_ARN}" ]; then
     printf "%-20s = %s\n" "BoltTlsSecretArn" "${BOLT_TLS_SECRET_ARN}"
   fi
+  printf "%-20s = %s\n" "StackID" "$STACK_ID"
 } | tee -a "${OUTPUTS_FILE}"
 
 echo ""

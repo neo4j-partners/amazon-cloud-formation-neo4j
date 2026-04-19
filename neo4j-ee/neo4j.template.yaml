@@ -14,8 +14,6 @@ Metadata:
           - NumberOfServers
           - InstanceType
           - DataDiskSize
-          - DataVolumeIops
-          - DataVolumeThroughput
           - DataVolumeKmsKeyId
       - Label:
           default: "Security & Monitoring"
@@ -36,10 +34,6 @@ Metadata:
         default: Instance Type
       DataDiskSize:
         default: Data Disk Size (GB)
-      DataVolumeIops:
-        default: Data Volume IOPS
-      DataVolumeThroughput:
-        default: Data Volume Throughput (MB/s)
       DataVolumeKmsKeyId:
         default: Data Volume KMS Key ID
       AlertEmail:
@@ -100,25 +94,12 @@ Parameters:
     Type: Number
     Default: 100
     MinValue: 100
-  DataVolumeIops:
-    Description: >-
-      Provisioned IOPS for the gp3 data volume. Valid range 3000–16000.
-    Type: Number
-    Default: 3000
-    MinValue: 3000
-    MaxValue: 16000
-  DataVolumeThroughput:
-    Description: >-
-      Provisioned throughput in MB/s for the gp3 data volume. Valid range
-      125–1000.
-    Type: Number
-    Default: 125
-    MinValue: 125
-    MaxValue: 1000
+    MaxValue: 65536
   DataVolumeKmsKeyId:
     Description: >-
       Optional. KMS key ID or ARN for data volume encryption. Leave blank to
-      use the AWS-managed aws/ebs key.
+      use the account's default EBS encryption key (aws/ebs unless overridden
+      at the account level).
     Type: String
     Default: ''
   AlertEmail:
@@ -181,7 +162,6 @@ Conditions:
       - Condition: IsPrivate
       - Condition: CreateCluster
   BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
-  UseCustomAdvertisedDNS: !Not [!Equals [!Ref BoltAdvertisedDNS, '']]
   HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
 
 Resources:
@@ -664,8 +644,8 @@ Resources:
       AvailabilityZone: !Select [0, Fn::GetAZs: !Ref 'AWS::Region']
       Size: !Ref DataDiskSize
       VolumeType: gp3
-      Iops: !Ref DataVolumeIops
-      Throughput: !Ref DataVolumeThroughput
+      Iops: 3000
+      Throughput: 125
       Encrypted: true
       KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
       Tags:
@@ -689,8 +669,8 @@ Resources:
       AvailabilityZone: !Select [1, Fn::GetAZs: !Ref 'AWS::Region']
       Size: !Ref DataDiskSize
       VolumeType: gp3
-      Iops: !Ref DataVolumeIops
-      Throughput: !Ref DataVolumeThroughput
+      Iops: 3000
+      Throughput: 125
       Encrypted: true
       KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
       Tags:
@@ -714,8 +694,8 @@ Resources:
       AvailabilityZone: !Select [2, Fn::GetAZs: !Ref 'AWS::Region']
       Size: !Ref DataDiskSize
       VolumeType: gp3
-      Iops: !Ref DataVolumeIops
-      Throughput: !Ref DataVolumeThroughput
+      Iops: 3000
+      Throughput: 125
       Encrypted: true
       KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
       Tags:
@@ -746,8 +726,11 @@ Resources:
   Neo4jNode1ASG:
     Type: AWS::AutoScaling::AutoScalingGroup
     DependsOn:
-      - Neo4jPrivateSubnet1RouteTableAssociation
       - Neo4jNode1DataVolume
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref Neo4jLaunchTemplate
@@ -783,8 +766,11 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Condition: CreateCluster
     DependsOn:
-      - Neo4jPrivateSubnet2RouteTableAssociation
       - Neo4jNode2DataVolume
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref Neo4jLaunchTemplate
@@ -820,8 +806,11 @@ Resources:
     Type: AWS::AutoScaling::AutoScalingGroup
     Condition: CreateCluster
     DependsOn:
-      - Neo4jPrivateSubnet3RouteTableAssociation
       - Neo4jNode3DataVolume
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref Neo4jLaunchTemplate
@@ -913,11 +902,143 @@ Resources:
               - !Ref BoltAdvertisedDNS
               - "\n"
 
+              - "export IS_FIRST_BOOT=false\n"
+              - "\n"
+              - "_token=$(curl -s -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")\n"
+              - "_instance_id=$(curl -s -H \"X-aws-ec2-metadata-token: $_token\" http://169.254.169.254/latest/meta-data/instance-id)\n"
+              - "logicalId=$(aws ec2 describe-tags --region \"$region\" --filters \"Name=resource-id,Values=${_instance_id}\" \"Name=key,Values=aws:cloudformation:logical-id\" --query \"Tags[0].Value\" --output text 2>/dev/null || true)\n"
+              - "trap 'if [[ -n \"${logicalId:-}\" ]]; then cfn-signal --success false --stack \"$stackName\" --resource \"$logicalId\" --region \"$region\"; fi' ERR\n"
+              - "\n"
               - "set_neo4j_conf() {\n"
               - "  local conf=/etc/neo4j/neo4j.conf\n"
               - "  sed -i \"s|^#\\?$1=.*|$1=$2|\" \"$conf\"\n"
               - "  if ! grep -q \"^$1=\" \"$conf\"; then\n"
               - "    echo \"$1=$2\" >> \"$conf\"\n"
+              - "  fi\n"
+              - "}\n"
+              - "\n"
+              # Create the neo4j user/group with fixed UID:GID=500:500 before the
+              # data volume is mounted — the first-boot chown on the mount point
+              # needs the user to exist, and pinning the ID before yum install
+              # prevents UID drift across instance replacements (where the RPM
+              # would otherwise pick whatever free UID is available).
+              - "pin_neo4j_user() {\n"
+              - "  getent group neo4j >/dev/null || groupadd -g 500 neo4j\n"
+              - "  getent passwd neo4j >/dev/null || useradd -u 500 -g 500 -r -s /sbin/nologin -d /var/lib/neo4j neo4j\n"
+              - "}\n"
+              - "\n"
+              - "attach_and_mount_data_volume() {\n"
+              - "  echo \"Attaching and mounting data volume...\"\n"
+              - "  local _token\n"
+              - "  _token=$(curl -s -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")\n"
+              - "  local _instance_id\n"
+              - "  _instance_id=$(curl -s -H \"X-aws-ec2-metadata-token: $_token\" http://169.254.169.254/latest/meta-data/instance-id)\n"
+              - "  local _az\n"
+              - "  _az=$(curl -s -H \"X-aws-ec2-metadata-token: $_token\" http://169.254.169.254/latest/meta-data/placement/availability-zone)\n"
+              - "  if [[ -z \"${_instance_id}\" || -z \"${_az}\" ]]; then\n"
+              - "    echo \"ERROR: Could not read instance metadata from IMDSv2. Exiting.\"\n"
+              - "    exit 1\n"
+              - "  fi\n"
+              - "  local _stack_id\n"
+              - "  _stack_id=$(aws ec2 describe-tags --region \"$region\" \\\n"
+              - "    --filters \"Name=resource-id,Values=${_instance_id}\" \\\n"
+              - "              \"Name=key,Values=aws:cloudformation:stack-id\" \\\n"
+              - "    --query \"Tags[0].Value\" --output text)\n"
+              - "  if [[ -z \"${_stack_id}\" || \"${_stack_id}\" == \"None\" ]]; then\n"
+              - "    echo \"ERROR: Could not read aws:cloudformation:stack-id tag. Exiting.\"\n"
+              - "    exit 1\n"
+              - "  fi\n"
+              - "  local _vols _vol_count _data_vol_id\n"
+              - "  _vols=$(aws ec2 describe-volumes --region \"$region\" \\\n"
+              - "    --filters \"Name=tag:StackID,Values=${_stack_id}\" \\\n"
+              - "              \"Name=tag:Role,Values=neo4j-cluster-data\" \\\n"
+              - "              \"Name=availability-zone,Values=${_az}\" \\\n"
+              - "    --query \"Volumes[*].VolumeId\" --output text)\n"
+              - "  _vol_count=$(echo \"${_vols}\" | wc -w | xargs)\n"
+              - "  if [[ \"${_vol_count}\" -ne 1 ]]; then\n"
+              - "    echo \"ERROR: Expected 1 data volume in AZ ${_az}, found ${_vol_count}. Exiting.\"\n"
+              - "    exit 1\n"
+              - "  fi\n"
+              - "  _data_vol_id=\"${_vols}\"\n"
+              - "  echo \"Data volume: ${_data_vol_id} in ${_az}\"\n"
+              # Retry the attach call itself. On ASG replacement the previous
+              # instance's detach may still be in progress (VolumeInUse /
+              # IncorrectState) when the replacement boots — a single-shot
+              # attach would abort UserData right in the recovery scenario this
+              # design exists for. Retry for up to 60s before giving up.
+              - "  local _attach_ok=false\n"
+              - "  for _attach_try in $(seq 1 12); do\n"
+              - "    if aws ec2 attach-volume --region \"$region\" \\\n"
+              - "        --volume-id \"${_data_vol_id}\" \\\n"
+              - "        --instance-id \"${_instance_id}\" \\\n"
+              - "        --device /dev/sdf >/dev/null 2>&1; then\n"
+              - "      _attach_ok=true\n"
+              - "      break\n"
+              - "    fi\n"
+              - "    echo \"  attach-volume attempt ${_attach_try}/12 failed (volume may still be detaching from a prior instance), retrying in 5s...\"\n"
+              - "    sleep 5\n"
+              - "  done\n"
+              - "  if [[ \"${_attach_ok}\" != \"true\" ]]; then\n"
+              - "    echo \"ERROR: Could not attach volume ${_data_vol_id} to ${_instance_id} after 60s. Exiting.\"\n"
+              - "    exit 1\n"
+              - "  fi\n"
+              - "  echo \"Waiting for volume ${_data_vol_id} to reach 'attached' state (up to 2 min)...\"\n"
+              - "  local _vol_state=\"\"\n"
+              - "  for _i in $(seq 1 24); do\n"
+              - "    _vol_state=$(aws ec2 describe-volumes --region \"$region\" \\\n"
+              - "      --volume-ids \"${_data_vol_id}\" \\\n"
+              - "      --query \"Volumes[0].Attachments[0].State\" --output text 2>/dev/null || true)\n"
+              - "    [[ \"${_vol_state}\" == \"attached\" ]] && break\n"
+              - "    echo \"  volume state: ${_vol_state} (${_i}/24)...\"\n"
+              - "    sleep 5\n"
+              - "  done\n"
+              - "  if [[ \"${_vol_state}\" != \"attached\" ]]; then\n"
+              - "    echo \"ERROR: Volume ${_data_vol_id} did not reach 'attached' within 2 minutes. Exiting.\"\n"
+              - "    exit 1\n"
+              - "  fi\n"
+              # Resolve the NVMe device. Primary: ebsnvme-id -u prints the
+              # volume ID (vol-xxxx, dashes intact) — match against it directly.
+              # Fallback: /dev/disk/by-id symlink whose name strips dashes.
+              # Short retry covers the brief window between 'attached' state
+              # and the /dev/nvme*n1 node appearing.
+              - "  local _vol_serial=\"${_data_vol_id//-/}\"\n"
+              - "  local _data_dev=\"\"\n"
+              - "  for _nvme_try in $(seq 1 6); do\n"
+              - "    for _dev in /dev/nvme*n1; do\n"
+              - "      [[ -b \"$_dev\" ]] || continue\n"
+              - "      if /sbin/ebsnvme-id -u \"$_dev\" 2>/dev/null | grep -q \"${_data_vol_id}\"; then\n"
+              - "        _data_dev=\"$_dev\"\n"
+              - "        break 2\n"
+              - "      fi\n"
+              - "    done\n"
+              - "    if [[ -L /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${_vol_serial} ]]; then\n"
+              - "      _data_dev=$(readlink -f /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${_vol_serial})\n"
+              - "      break\n"
+              - "    fi\n"
+              - "    sleep 2\n"
+              - "  done\n"
+              - "  if [[ -z \"${_data_dev}\" || ! -b \"${_data_dev}\" ]]; then\n"
+              - "    echo \"ERROR: Could not resolve NVMe device for volume ${_data_vol_id} after retries. Exiting.\"\n"
+              - "    exit 1\n"
+              - "  fi\n"
+              - "  echo \"NVMe device: ${_data_dev}\"\n"
+              - "  if ! blkid \"${_data_dev}\" > /dev/null 2>&1; then\n"
+              - "    echo \"First boot: formatting ${_data_dev} with xfs...\"\n"
+              - "    mkfs.xfs \"${_data_dev}\"\n"
+              - "    IS_FIRST_BOOT=true\n"
+              - "  fi\n"
+              - "  local _uuid\n"
+              - "  _uuid=$(blkid -s UUID -o value \"${_data_dev}\")\n"
+              - "  if [[ -z \"${_uuid}\" ]]; then\n"
+              - "    echo \"ERROR: Could not read UUID from ${_data_dev}. Exiting.\"\n"
+              - "    exit 1\n"
+              - "  fi\n"
+              - "  mkdir -p /var/lib/neo4j/data\n"
+              - "  echo \"UUID=${_uuid}  /var/lib/neo4j/data  xfs  defaults,nofail,noatime,x-systemd.device-timeout=30  0 2\" >> /etc/fstab\n"
+              - "  mount /var/lib/neo4j/data\n"
+              - "  echo \"Data volume mounted at /var/lib/neo4j/data\"\n"
+              - "  if [[ \"${IS_FIRST_BOOT}\" == \"true\" ]]; then\n"
+              - "    chown neo4j:neo4j /var/lib/neo4j/data\n"
               - "  fi\n"
               - "}\n"
               - "\n"
@@ -973,30 +1094,58 @@ Resources:
               - "    set_neo4j_conf initial.dbms.default_primaries_count 3\n"
               - "    set_neo4j_conf initial.dbms.default_secondaries_count \"$(expr ${nodeCount} - 3)\"\n"
               - "    set_neo4j_conf dbms.cluster.minimum_initial_system_primaries_count \"${nodeCount}\"\n"
-              - "    TOKEN=$(curl -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")\n"
-              - "    instanceId=$(curl -H \"X-aws-ec2-metadata-token: $TOKEN\" -s http://169.254.169.254/latest/meta-data/instance-id)\n"
-              - "    if [[ ${#instanceId} -eq 0 ]]; then\n"
-              - "     echo \"Missing instance Id. Exiting!! \"\n"
+              - "    TOKEN=$(curl -s -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")\n"
+              - "    instanceId=$(curl -s -H \"X-aws-ec2-metadata-token: $TOKEN\" http://169.254.169.254/latest/meta-data/instance-id)\n"
+              - "    if [[ -z \"${instanceId}\" ]]; then\n"
+              - "      echo \"ERROR: Could not read instance ID from IMDSv2. Exiting.\"\n"
+              - "      exit 1\n"
               - "    fi\n"
-              - "    coreMembers=$(aws autoscaling describe-auto-scaling-instances --region $region --output text --query \"AutoScalingInstances[?contains(AutoScalingGroupName,'$stackName-Neo4jAutoScalingGroup')].[InstanceId]\" | xargs -I {} aws ec2 describe-instances --instance-ids {} --region $region --query \"Reservations[].Instances[].PrivateIpAddress\" --output text --filter \"Name=tag:aws:cloudformation:stack-name,Values=$stackName\")\n"
-              - "    if [[ ${#coreMembers} -eq 0 ]]; then\n"
-              - "     echo \"Missing coreMembers. Exiting!! \"\n"
+              - "    stackId=$(aws ec2 describe-tags --region \"$region\" --filters \"Name=resource-id,Values=${instanceId}\" \"Name=key,Values=aws:cloudformation:stack-id\" --query \"Tags[0].Value\" --output text)\n"
+              - "    if [[ -z \"${stackId}\" || \"${stackId}\" == \"None\" ]]; then\n"
+              - "      echo \"ERROR: Could not read aws:cloudformation:stack-id tag from instance ${instanceId}. Exiting.\"\n"
+              - "      exit 1\n"
+              - "    fi\n"
+              - "    coreMembers=\"\"\n"
+              - "    for attempt in $(seq 1 30); do\n"
+              - "      asgNames=$(aws autoscaling describe-auto-scaling-groups --region \"$region\" --query \"AutoScalingGroups[?Tags[?Key=='StackID' && Value=='${stackId}'] && Tags[?Key=='Role' && Value=='neo4j-cluster-node']].AutoScalingGroupName\" --output text 2>/dev/null | tr '\\t' '\\n' | grep -v '^$' | grep -v '^None$' | xargs || true)\n"
+              - "      if [[ -n \"${asgNames}\" ]]; then\n"
+              - "        instanceIds=$(aws autoscaling describe-auto-scaling-groups --region \"$region\" --auto-scaling-group-names ${asgNames} --query \"AutoScalingGroups[].Instances[].InstanceId\" --output text 2>/dev/null | tr '\\t' '\\n' | grep -v '^$' | grep -v '^None$' | xargs || true)\n"
+              - "        if [[ -n \"${instanceIds}\" ]]; then\n"
+              - "          coreMembers=$(aws ec2 describe-instances --region \"$region\" --instance-ids ${instanceIds} --query \"Reservations[].Instances[].PrivateIpAddress\" --output text 2>/dev/null | tr '\\t' '\\n' | grep -v '^$' | grep -v '^None$' | awk '{print $1\":6000\"}' | paste -sd, || true)\n"
+              - "        fi\n"
+              - "      fi\n"
+              - "      foundCount=0\n"
+              - "      [[ -n \"${coreMembers}\" ]] && foundCount=$(echo \"${coreMembers}\" | awk -F, '{print NF}')\n"
+              - "      [[ ${foundCount} -ge ${nodeCount} ]] && break\n"
+              - "      echo \"Peer discovery attempt ${attempt}/30: found ${foundCount}/${nodeCount} members, retrying in 10s...\"\n"
+              - "      sleep 10\n"
+              - "    done\n"
+              - "    if [[ -z \"${coreMembers}\" ]]; then\n"
+              - "      echo \"ERROR: Peer discovery failed after 5 minutes. Exiting.\"\n"
+              - "      exit 1\n"
               - "    fi\n"
               - "    echo \"CoreMembers = ${coreMembers}\"\n"
-              - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:6000,/g')\n"
-              - "    coreMembers=$(echo \"${coreMembers}\"):6000\n"
               - "    set_neo4j_conf dbms.cluster.discovery.resolver_type LIST\n"
               - "    set_neo4j_conf dbms.cluster.endpoints \"${coreMembers}\"\n"
               - "  fi\n"
               - "  if [ -n \"${boltCertArn}\" ]; then\n"
+              - "    command -v jq >/dev/null || dnf install -y jq\n"
               - "    mkdir -p /var/lib/neo4j/certificates/bolt\n"
-              - "    aws secretsmanager get-secret-value --region \"${region}\" \\\n"
-              - "      --secret-id \"${boltCertArn}\" --query SecretString --output text \\\n"
-              - "      | python3 -c \"import json,sys; d=json.load(sys.stdin); \\\n"
-              - "          open('/var/lib/neo4j/certificates/bolt/private.key','w').write(d['private_key']); \\\n"
-              - "          open('/var/lib/neo4j/certificates/bolt/public.crt','w').write(d['certificate'])\"\n"
+              - "    local _secret_json\n"
+              - "    _secret_json=$(aws secretsmanager get-secret-value --region \"${region}\" \\\n"
+              - "      --secret-id \"${boltCertArn}\" --query SecretString --output text)\n"
+              - "    if ! echo \"${_secret_json}\" | jq -e 'has(\"certificate\") and has(\"private_key\")' >/dev/null; then\n"
+              - "      echo \"ERROR: Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM). Exiting.\" >&2\n"
+              - "      exit 1\n"
+              - "    fi\n"
+              - "    umask 077\n"
+              - "    echo \"${_secret_json}\" | jq -r '.private_key' > /var/lib/neo4j/certificates/bolt/private.key\n"
+              - "    echo \"${_secret_json}\" | jq -r '.certificate' > /var/lib/neo4j/certificates/bolt/public.crt\n"
+              - "    umask 022\n"
+              - "    unset _secret_json\n"
               - "    chown -R neo4j:neo4j /var/lib/neo4j/certificates\n"
               - "    chmod 600 /var/lib/neo4j/certificates/bolt/private.key\n"
+              - "    chmod 644 /var/lib/neo4j/certificates/bolt/public.crt\n"
               - "    set_neo4j_conf dbms.ssl.policy.bolt.enabled true\n"
               - "    set_neo4j_conf dbms.ssl.policy.bolt.base_directory /var/lib/neo4j/certificates/bolt\n"
               - "    set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key\n"
@@ -1013,7 +1162,12 @@ Resources:
               - "start_neo4j() {\n"
               - "  echo \"Starting Neo4j...\"\n"
               - "  service neo4j start\n"
-              - "  neo4j-admin dbms set-initial-password \"${password}\"\n"
+              - "  # IS_FIRST_BOOT gates this: on replacement boots the auth DB already\n"
+              - "  # exists on the retained volume, so skipping preserves any post-deploy\n"
+              - "  # password changes the customer made.\n"
+              - "  if [[ \"${IS_FIRST_BOOT}\" == \"true\" ]]; then\n"
+              - "    neo4j-admin dbms set-initial-password \"${password}\"\n"
+              - "  fi\n"
               - "}\n"
 
               - "install_cloudwatch_agent() {\n"
@@ -1053,11 +1207,14 @@ Resources:
               - "}\n"
 
               - "install_cloudwatch_agent\n"
+              - "pin_neo4j_user\n"
+              - "attach_and_mount_data_volume\n"
               - "install_neo4j_from_yum\n"
               - "extension_config\n"
               - "build_neo4j_conf_file\n"
               - "add_cypher_ip_blocklist\n"
               - "start_neo4j\n"
+              - "cfn-signal --success true --stack \"$stackName\" --resource \"$logicalId\" --region \"$region\"\n"
 
   Neo4jInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -1083,24 +1240,32 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              # Describe-only actions: AWS does not support resource-level
+              # conditions on EC2/ASG Describe calls, so Resource: "*" is
+              # required. autoscaling:DescribeAutoScalingGroups is used by
+              # the tag-filtered peer discovery in UserData.
               - Effect: Allow
                 Action:
-                  - autoscaling:DescribeAutoScalingInstances
                   - autoscaling:DescribeAutoScalingGroups
                   - cloudformation:DescribeStack*
+                  - cloudformation:SignalResource
                   - ec2:DescribeInstances
                   - ec2:DescribeVolumes
                   - ec2:DescribeTags
                 Resource: "*"
-              # Instance must be able to attach its persistent data volume at
-              # boot. Scoped to volumes/instances in this stack via StackID
-              # tag condition.
+              # Two-statement form: volume-side enforces StackID+Role,
+              # instance-side enforces StackID. Both conditions must be
+              # satisfied for an attach to succeed.
               - Effect: Allow
-                Action:
-                  - ec2:AttachVolume
-                Resource:
-                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
-                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Action: ec2:AttachVolume
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceTag/StackID': !Ref 'AWS::StackId'
+                    'aws:ResourceTag/Role': neo4j-cluster-data
+              - Effect: Allow
+                Action: ec2:AttachVolume
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
                 Condition:
                   StringEquals:
                     'aws:ResourceTag/StackID': !Ref 'AWS::StackId'
@@ -1117,22 +1282,6 @@ Resources:
                     - secretsmanager:GetSecretValue
                   Resource: !Ref BoltCertificateSecretArn
                 - !Ref AWS::NoValue
-
-  Neo4jASGTagsPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: Neo4jASGTagsPolicy
-      Roles:
-        - !Ref Neo4jRole
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action:
-              - autoscaling:CreateOrUpdateTags
-            # Matches the three per-node ASGs auto-named
-            # <stack>-Neo4jNode{1,2,3}ASG-<suffix>.
-            Resource: !Sub 'arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AWS::StackName}-Neo4jNode*'
 
   Neo4jExternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -1317,7 +1466,7 @@ Resources:
 
   Neo4jConfigPrivateSubnet2Parameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivate
+    Condition: IsPrivateCluster
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/private-subnet-2-id'
       Type: String

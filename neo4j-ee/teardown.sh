@@ -5,16 +5,47 @@
 # name, region, SSM parameter path, and any copied AMI to clean up.
 #
 # Usage:
-#   ./teardown.sh [stack-name]
+#   ./teardown.sh [--delete-volumes] [stack-name]
 #
 # If stack-name is omitted, uses the most recently modified file in .deploy/.
+# --delete-volumes: after stack deletion, permanently delete the retained EBS
+#   data volumes. Without this flag the volumes are printed but left intact.
 
 set -euo pipefail
 
 export AWS_PROFILE="${AWS_PROFILE:-default}"
 
+DELETE_VOLUMES=false
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="${SCRIPT_DIR}/.deploy"
+
+# ---------------------------------------------------------------------------
+# Parse arguments: [--delete-volumes] [stack-name]
+# ---------------------------------------------------------------------------
+STACK_ARG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --delete-volumes)
+      DELETE_VOLUMES=true
+      shift
+      ;;
+    -*)
+      echo "ERROR: Unknown option '$1'." >&2
+      echo "Usage: $0 [--delete-volumes] [stack-name]" >&2
+      exit 1
+      ;;
+    *)
+      if [ -z "${STACK_ARG}" ]; then
+        STACK_ARG="$1"
+      else
+        echo "ERROR: Unexpected argument '$1'." >&2
+        exit 1
+      fi
+      shift
+      ;;
+  esac
+done
 
 # ---------------------------------------------------------------------------
 # Helper: read a value from a "Key = Value" file
@@ -36,8 +67,8 @@ force_delete_secret() {
 # ---------------------------------------------------------------------------
 # Resolve the outputs file
 # ---------------------------------------------------------------------------
-if [ $# -ge 1 ]; then
-  OUTPUTS_FILE="${DEPLOY_DIR}/$1.txt"
+if [ -n "${STACK_ARG}" ]; then
+  OUTPUTS_FILE="${DEPLOY_DIR}/${STACK_ARG}.txt"
 elif [ -d "${DEPLOY_DIR}" ]; then
   OUTPUTS_FILE=$(ls -t "${DEPLOY_DIR}"/*.txt 2>/dev/null | head -1 || true)
 else
@@ -46,12 +77,12 @@ fi
 
 if [ -z "${OUTPUTS_FILE}" ] || [ ! -f "${OUTPUTS_FILE}" ]; then
   echo "ERROR: No deployment found." >&2
-  if [ $# -ge 1 ]; then
-    echo "File not found: ${DEPLOY_DIR}/$1.txt" >&2
+  if [ -n "${STACK_ARG}" ]; then
+    echo "File not found: ${DEPLOY_DIR}/${STACK_ARG}.txt" >&2
   else
     echo "No .txt files in ${DEPLOY_DIR}/" >&2
   fi
-  echo "Usage: $0 [stack-name]" >&2
+  echo "Usage: $0 [--delete-volumes] [stack-name]" >&2
   exit 1
 fi
 
@@ -62,6 +93,7 @@ STACK_NAME=$(read_field "${OUTPUTS_FILE}" "StackName")
 REGION=$(read_field "${OUTPUTS_FILE}" "Region")
 SSM_PARAM_PATH=$(read_field "${OUTPUTS_FILE}" "SSMParamPath" 2>/dev/null || true)
 COPIED_AMI_ID=$(read_field "${OUTPUTS_FILE}" "CopiedAmiId" 2>/dev/null || true)
+STACK_ID=$(read_field "${OUTPUTS_FILE}" "StackID" 2>/dev/null || true)
 
 if [ -z "${STACK_NAME}" ] || [ -z "${REGION}" ]; then
   echo "ERROR: Could not read StackName or Region from ${OUTPUTS_FILE}." >&2
@@ -132,6 +164,45 @@ if [ -n "${BOLT_TLS_SECRET_ARN}" ]; then
   echo "Force-deleting Bolt TLS cert secret ${BOLT_TLS_SECRET_ARN}..."
   force_delete_secret "${BOLT_TLS_SECRET_ARN}"
   echo "Bolt TLS cert secret cleanup done."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 2d: Handle retained EBS data volumes
+#
+# Volumes have DeletionPolicy: Retain so they survive stack deletion by design.
+# Default: enumerate them and print a rerun hint so the operator can decide.
+# --delete-volumes: permanently delete each volume.
+# ---------------------------------------------------------------------------
+if [ -n "${STACK_ID}" ]; then
+  echo ""
+  echo "Looking up retained data volumes for StackID=${STACK_ID}..."
+  VOLUME_IDS=$(aws ec2 describe-volumes \
+    --region "${REGION}" \
+    --filters \
+      "Name=tag:StackID,Values=${STACK_ID}" \
+      "Name=tag:Role,Values=neo4j-cluster-data" \
+    --query "Volumes[*].[VolumeId,Size,AvailabilityZone,CreateTime]" \
+    --output text 2>/dev/null || true)
+
+  if [ -z "${VOLUME_IDS}" ]; then
+    echo "No retained data volumes found."
+  elif [ "${DELETE_VOLUMES}" = true ]; then
+    echo "Deleting retained data volumes..."
+    while IFS=$'\t' read -r vol_id size az created; do
+      echo "  Deleting ${vol_id} (${size}GB, ${az}, created ${created})..."
+      aws ec2 delete-volume --region "${REGION}" --volume-id "${vol_id}" \
+        || echo "  WARNING: Failed to delete ${vol_id} — check AWS console."
+      echo "  Deleted ${vol_id}."
+    done <<< "${VOLUME_IDS}"
+    echo "All data volumes deleted."
+  else
+    echo "Retained data volumes (not deleted — pass --delete-volumes to remove):"
+    while IFS=$'\t' read -r vol_id size az created; do
+      echo "  ${vol_id}  ${size}GB  ${az}  created ${created}"
+    done <<< "${VOLUME_IDS}"
+    echo ""
+    echo "To delete: ./teardown.sh --delete-volumes ${STACK_NAME}"
+  fi
 fi
 
 # ---------------------------------------------------------------------------

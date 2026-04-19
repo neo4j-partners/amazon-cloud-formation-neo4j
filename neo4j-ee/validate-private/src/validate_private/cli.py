@@ -54,6 +54,21 @@ def main() -> None:
         "--password",
         help="Override the password (skips Secrets Manager fetch)",
     )
+    parser.add_argument(
+        "--case",
+        choices=["single-loss", "total-loss"],
+        help=(
+            "Run a destructive resilience test case instead of connectivity checks. "
+            "single-loss: terminate one cluster node; verify volume reattach + data persistence. "
+            "total-loss: terminate all three nodes; verify full cluster recovery from retained volumes. "
+            "Expected runtime: ~5 min (single-loss), ~10-15 min (total-loss)."
+        ),
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        help="Override the ASG replacement timeout in seconds (default: 900 single-loss, 1200 total-loss)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
@@ -73,9 +88,21 @@ def main() -> None:
     log.info("  Region:  %s", config.region)
     log.info("  Bastion: %s", config.bastion_id)
     log.info("  NLB:     %s", config.nlb_dns)
+    if args.case:
+        log.info("  Mode:    resilience/%s", args.case)
     log.info("")
 
-    run_checks(config, reporter)
+    if args.case:
+        from validate_private.resilience import run_single_loss, run_total_loss  # noqa: PLC0415
+
+        if args.case == "single-loss":
+            timeout = args.timeout or 900
+            run_single_loss(config, reporter, timeout=timeout)
+        else:
+            timeout = args.timeout or 1200
+            run_total_loss(config, reporter, timeout=timeout)
+    else:
+        run_checks(config, reporter)
 
     exit_code = reporter.summary(
         stack_name=config.stack_name,

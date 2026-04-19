@@ -65,44 +65,7 @@ aws cloudformation describe-stacks \
 
 This returns the NLB DNS name, Bolt URI, and username.
 
-### 2. Test the Stack
-
-```bash
-cd test_neo4j
-uv run test-neo4j --edition ee                                    # tests the most recent EE deployment
-uv run test-neo4j --edition ee --stack <stack-name>               # tests a specific deployment
-uv run test-neo4j --edition ee --simple                           # connectivity checks only
-uv run test-neo4j --edition ee --simple --infra-security          # connectivity + security config checks
-uv run test-neo4j --edition ee --infra-security                   # full mode + security config checks
-```
-
-The test suite reads from `neo4j-ee/.deploy/` (most recently modified file by default) and runs two levels of testing:
-
-**Simple mode** (`--simple`) — connectivity + Neo4j configuration:
-1. **HTTP API** — GET the discovery endpoint, verify `neo4j_version` is present
-2. **Authentication** — POST a Cypher statement with Basic Auth, expect HTTP 200
-3. **Bolt connectivity** — connect via the Neo4j driver and execute `RETURN 1`
-4. **Neo4j server status** — verify Enterprise Edition via `dbms.components()`
-5. **Listen address** — confirm bound to `0.0.0.0`
-6. **Memory configuration** — verify heap and page cache are set
-7. **Data directory** — confirm `/data` (the persistent EBS mount)
-
-**Full mode** (default) — simple mode + infrastructure validation:
-8. **CloudFormation stack status** — verify `CREATE_COMPLETE`
-9. **Security group ports** — verify 7474 and 7687 are open
-
-**`--infra-security`** (optional, combinable with either mode) — verifies the network hardening and instance security configuration against the live AWS resources:
-10. **External SG ingress CIDR** — both ports match the `AllowedCIDR` stack parameter
-11. **Port 5005 absent** — JDWP remote debug port is not open in the internal security group
-12. **Internal SG self-reference** — cluster port ingress rules source from the internal SG only
-13. **IMDSv2 enforced** — launch template requires session tokens for instance metadata
-14. **JDWP absent from neo4j.conf** — verified on a running instance via SSM Run Command
-
-See `TESTING_V2.md` for a full description of each check and the one remaining manual verification step (CloudWatch log streams).
-
-Cluster resilience tests (node failure, leader election) are not yet implemented.
-
-### 3. Test Observability
+### 2. Test Observability
 
 `test-observability.sh` verifies the Phase 1 observability components that the CloudFormation template provisions: CloudWatch agent, application log streams, VPC flow logs, failed-auth alarm, and CloudTrail.
 
@@ -125,7 +88,7 @@ Valid step names:
 
 The `alarm` step takes up to 7 minutes (5-minute CloudWatch evaluation window). All other steps complete in under a minute. SNS email delivery is flagged as a manual step in the summary — see `TESTING_GUIDE.md` for instructions.
 
-### 4. Connect to a Private Deployment
+### 3. Connect to a Private Deployment
 
 For a complete operator walkthrough — retrieving the password, opening an admin shell, running the validation suite, and troubleshooting — see [`PRIVATE_ACCESS_GUIDE.md`](PRIVATE_ACCESS_GUIDE.md).
 
@@ -197,7 +160,7 @@ brew install --cask session-manager-plugin
 # https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
 ```
 
-The test suite (`uv run test-neo4j`) opens the tunnels automatically. To connect manually, copy the ready-to-run commands from the stack outputs:
+To connect manually, copy the ready-to-run commands from the stack outputs:
 
 ```bash
 aws cloudformation describe-stacks \
@@ -220,7 +183,7 @@ Application tiers inside AWS reach the internal NLB directly without SSM tunnels
 
 **Within the same subnet** — an application in the same subnet can connect directly to individual Neo4j node IPs on port 7687, bypassing the NLB. Use `bolt://<node-ip>:7687`; see [Driver URI scheme and cluster routing](#driver-uri-scheme-and-cluster-routing) for why `neo4j://` should not be used with a direct node IP.
 
-### 5. Tear Down
+### 4. Tear Down
 
 ```bash
 ./teardown.sh                  # tears down the most recent deployment
@@ -285,6 +248,62 @@ The NLB DNS name is the stable endpoint in all configurations. The Neo4j driver 
 | JDWP (port 5005) | disabled | Remote debug port is closed and the JVM debug flag is stripped from `neo4j.conf` at boot. |
 | Internal cluster ports | self-referencing | Ports 5000, 6000, 7000, 7688, and others are reachable only from other cluster members. |
 
+## TLS on Bolt
+
+The template can provision TLS on the Bolt connector (port 7687) from a customer-supplied certificate. When the `BoltCertificateSecretArn` parameter is set, Neo4j is configured with `server.bolt.tls_level=REQUIRED` and `dbms.ssl.policy.bolt.*` against the cert and key in the named Secrets Manager secret. When the parameter is empty (the default), Bolt runs as plain TCP — appropriate for internal-only deployments where the VPC/SG boundary is the trust boundary.
+
+Phase 1 covers Bolt only. The HTTP browser endpoint (7474) and cluster-internal ports (6000/7000/7688) remain plaintext (see [Residual risk](#residual-risk--cluster-replication-traffic) below).
+
+### Secret format
+
+Create a single Secrets Manager secret whose `SecretString` is JSON:
+
+```json
+{
+  "certificate": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+}
+```
+
+Both fields are required. UserData validates the JSON shape on boot and fails the stack with a clear error if either field is missing. Either field may hold an ACM Private CA-issued PEM — no separate parameter is needed.
+
+The default `aws/secretsmanager` AWS-managed key is sufficient for Phase 1. Customer-managed KMS keys (per-key audit trail, fine-grained revocation) are a Phase 2 hardening option.
+
+### Production guidance — customer-owned DNS (Option B)
+
+The recommended production pattern uses a stable customer-owned DNS name in front of the NLB so certs are not pinned to the AWS-generated NLB DNS:
+
+1. **Create a stable name for Neo4j.** Route53 private hosted zone with an A-record alias → NLB (internal deployments), or external DNS → NLB (public).
+2. **Obtain a cert for that name.** In order of preference:
+   - Public CA (ACM, Let's Encrypt) if the name is publicly resolvable — Lambda needs no CA bundle (uses system trust store).
+   - ACM Private CA — Lambda bundles the PCA root.
+   - Self-signed — lowest friction for internal-only workloads; Lambda bundles the leaf as its own CA.
+3. **Push cert + private key to Secrets Manager** as the JSON shape above.
+4. **Deploy in a single pass** with both parameters set:
+   ```
+   BoltAdvertisedDNS=neo4j.example.com
+   BoltCertificateSecretArn=arn:aws:secretsmanager:...:neo4j-bolt-tls
+   ```
+   `server.bolt.advertised_address`, the cert SAN, and the client connect URL all resolve to `neo4j.example.com` — self-consistent under EE cluster routing, and rotation does not require re-issuing against a changing NLB DNS.
+5. **Rotation.** Rotate the Secrets Manager secret value, then trigger an ASG instance refresh to pick up the new cert. A Lambda or client redeploy is only needed when the trusted CA bundle changes (not on a leaf-cert rotation under the same CA).
+
+**Cert expiry monitoring.** Phase 1 ships no cert-expiry alarm. For production, recommended options:
+- AWS Config rule [`acm-certificate-expiration-check`](https://docs.aws.amazon.com/config/latest/developerguide/acm-certificate-expiration-check.html) when using ACM-issued certs.
+- A CloudWatch scheduled Lambda that runs `openssl x509 -checkend` against the secret's PEM and emits a metric on days-to-expiry.
+- For ACM Private CA: subscribe to the ACM PCA expiration EventBridge events.
+
+Pick one before relying on Phase 1 in production.
+
+### Residual risk — cluster replication traffic
+
+Phase 1 secures only the client-facing Bolt port. Cluster-internal traffic (ports 6000 discovery, 7000 Raft, 7688 routing) remains plaintext, protected by the cluster security group alone. An actor with any of the following can still observe replication traffic on the wire:
+
+- `ec2:RunInstances` permission to launch an instance into the cluster subnet with the cluster security group attached.
+- `ec2:CreateTrafficMirrorSession` targeting a cluster ENI.
+- Root on any cluster node.
+
+If your threat model includes any of these vectors — for example, regulated workloads or shared-tenancy AWS accounts where IAM blast radius is wider than the cluster operator team — request **Phase 2 (cluster TLS)** before deploying. Phase 2 work is documented in `worklog/old_worklog/lambda-neo4j.md` §Phase 2 and requires dual-EKU certs (`serverAuth` + `clientAuth`), per-node SAN coverage, `client_auth=REQUIRE` mutual auth, and a rotation design that tolerates dual-trust during transition.
+
 ## Files
 
 | File | Purpose |
@@ -301,8 +320,6 @@ The NLB DNS name is the stable endpoint in all configurations. The Neo4j driver 
 | `marketplace/build.sh` | Hardening script run on the instance (also embedded in `create-ami.sh` UserData) |
 | `marketplace/ami-id.txt` | AMI ID from last build (gitignored) |
 | `.deploy/` | Deployment output files — one per stack (gitignored) |
-
-Test tooling lives in `../test_neo4j/` and is shared with the CE edition.
 
 ## Why the operator bastion exists — NLB hairpin
 

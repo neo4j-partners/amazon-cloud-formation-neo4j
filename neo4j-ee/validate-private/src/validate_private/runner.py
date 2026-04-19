@@ -95,7 +95,7 @@ def run_cypher_on_bastion(
         if code == "InvalidInstanceId":
             raise BastionCommandError(
                 f"Bastion {config.bastion_id} is not SSM-registered. "
-                "Run neo4j-ee/scripts/preflight.sh to diagnose."
+                "Run neo4j-ee/validate-private/scripts/preflight.sh to diagnose."
             ) from exc
         raise
 
@@ -104,20 +104,25 @@ def run_cypher_on_bastion(
 
     terminal = {"Success", "Failed", "Cancelled", "TimedOut"}
     deadline = time.monotonic() + timeout_s
+    inv: dict = {}
+    status = "Pending"
 
     while True:
-        inv = ssm.get_command_invocation(
-            CommandId=command_id,
-            InstanceId=config.bastion_id,
-        )
-        status = inv["Status"]
-        if status in terminal:
-            break
         if time.monotonic() >= deadline:
             raise BastionCommandError(
                 f"SSM command {command_id} did not complete within {timeout_s}s "
                 f"(last status: {status})"
             )
+        try:
+            inv = ssm.get_command_invocation(
+                CommandId=command_id,
+                InstanceId=config.bastion_id,
+            )
+            status = inv["Status"]
+            if status in terminal:
+                break
+        except ssm.exceptions.InvocationDoesNotExist:
+            pass
         time.sleep(2)
 
     stdout = inv.get("StandardOutputContent", "").strip()

@@ -4,6 +4,12 @@ Private mode places Neo4j instances in private subnets with no public IP and an 
 
 This guide covers everything an operator needs to verify, query, and troubleshoot a Private-mode stack using only AWS credentials and a stack name.
 
+All commands run from the `neo4j-ee/validate-private/` directory:
+
+```bash
+cd neo4j-ee/validate-private
+```
+
 ---
 
 ## Prerequisites
@@ -34,10 +40,9 @@ These are the same permissions the bastion itself uses. If `preflight.sh` passes
 
 ## 1. Verify the stack is ready
 
-Before running any other script, confirm that V11's server-side machinery is in place:
+Before running any other script, confirm that the stack and bastion are ready:
 
 ```bash
-cd neo4j-ee
 ./scripts/preflight.sh
 ```
 
@@ -92,7 +97,13 @@ PASSWORD=$(./scripts/get-password.sh 2>/dev/null)
 For any operation that writes to the database, use the admin shell. It opens `cypher-shell` on the bastion with a `neo4j://` URI, which means the Neo4j driver fetches the routing table and directs writes to the current leader automatically — no coin-flip routing.
 
 ```bash
-./scripts/admin-shell.sh
+uv run admin-shell
+```
+
+Or for a specific stack:
+
+```bash
+uv run admin-shell test-ee-1776575131
 ```
 
 The password is resolved on the bastion using the bastion's IAM role. It does not appear on the laptop or in CloudTrail. Once connected:
@@ -126,7 +137,7 @@ Writes through Neo4j Browser go to whichever node the NLB selects on each new co
 For one-off queries from the command line:
 
 ```bash
-./scripts/run-cypher.sh "CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition"
+uv run run-cypher "CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition"
 ```
 
 Output is JSON:
@@ -138,13 +149,13 @@ Output is JSON:
 With a specific stack name:
 
 ```bash
-./scripts/run-cypher.sh test-ee-1776575131 "MATCH (n) RETURN count(n) AS total"
+uv run run-cypher test-ee-1776575131 "MATCH (n) RETURN count(n) AS total"
 ```
 
 Pipe to `jq` for formatting:
 
 ```bash
-./scripts/run-cypher.sh "SHOW SERVERS YIELD serverId, address, role" | jq .
+uv run run-cypher "SHOW SERVERS YIELD name, address, state, health" | jq .
 ```
 
 ---
@@ -170,7 +181,6 @@ For more iterations:
 ## 7. Run the full validation suite
 
 ```bash
-cd neo4j-ee/validate-private
 uv run validate-private
 ```
 
@@ -229,10 +239,10 @@ See [AWS install instructions](https://docs.aws.amazon.com/systems-manager/lates
 The bastion's IAM role does not have access to the secret or SSM parameter for this stack. Check that the role policy covers `neo4j/<stack-name>/password` and `/neo4j-ee/<stack-name>/*`. Re-deploying the stack re-creates the IAM policy with the correct scope.
 
 **"Secret not found"**
-The stack was torn down. `teardown.sh` force-deletes the secret immediately to unblock re-deployment. If the stack is still up, run `preflight.sh` to confirm the secret exists.
+The stack was torn down. `teardown.sh` force-deletes the secret immediately to unblock re-deployment. If the stack is still up, run `./scripts/preflight.sh` to confirm the secret exists.
 
 **"NotALeader" error in Neo4j Browser**
-The NLB routed a write to a follower. Use `admin-shell.sh` for writes — `neo4j://` routing directs writes to the leader automatically.
+The NLB routed a write to a follower. Use `uv run admin-shell` for writes — `neo4j://` routing directs writes to the leader automatically.
 
 **Bastion Python checks fail but SSM is Online**
 The bastion's UserData finished but package installation failed. Check `/var/log/cloud-init-output.log` on the bastion:

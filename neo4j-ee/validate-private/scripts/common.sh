@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# common.sh — shared helpers sourced by neo4j-ee/scripts/*.sh (not executed directly)
+# common.sh — shared helpers sourced by neo4j-ee/validate-private/scripts/*.sh (not executed directly)
 
 export AWS_PROFILE="${AWS_PROFILE:-default}"
 
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEPLOY_DIR="${SCRIPTS_DIR}/../.deploy"
+DEPLOY_DIR="${SCRIPTS_DIR}/../../.deploy"
 
 # Read a "Key = Value" deploy file field, stripping whitespace.
 read_field() {
@@ -40,7 +40,7 @@ resolve_stack() {
 }
 
 # Exit with an error if the stack is not Private-mode.
-# Protects admin-shell.sh, run-cypher.sh, and smoke-write.sh from Public stacks.
+# Protects smoke-write.sh and browser-tunnel.sh from Public stacks.
 require_private_mode() {
   local outputs_file="$1"
   local mode stack_name

@@ -5,7 +5,8 @@
 # Use bolt://localhost:7687 for Bolt connections from the same laptop session.
 #
 # Note: writes through Neo4j Browser go to whichever cluster node the NLB picks,
-# which may or may not be the leader. For guaranteed-leader writes, use admin-shell.sh.
+# which may or may not be the leader. For guaranteed-leader writes, use:
+#   uv run admin-shell
 #
 # Usage: ./scripts/browser-tunnel.sh [stack-name]
 # Prerequisite: AWS Session Manager Plugin (brew install --cask session-manager-plugin)

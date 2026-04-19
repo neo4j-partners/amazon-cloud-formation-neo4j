@@ -36,7 +36,7 @@ class TestReporter:
                 if not ok:
                     log.info("    - %s: %s", name, detail)
             log.info("")
-            log.info("  Diagnose with: ./scripts/preflight.sh")
+            log.info("  Diagnose with: ./validate-private/scripts/preflight.sh")
             log.info("  Bastion logs:  aws ssm send-command --instance-ids %s "
                      "--document-name AWS-RunShellScript "
                      "--parameters 'commands=[\"tail -50 /var/log/cloud-init-output.log\"]'",

@@ -12,7 +12,7 @@ REGION="${2:-us-east-1}"
 
 if [[ -z "$STACK_NAME" ]]; then
   # Try to pick the most recent deploy file
-  DEPLOY_FILE=$(ls -t "$(dirname "$0")/../.deploy/"*.txt 2>/dev/null | head -1 || true)
+  DEPLOY_FILE=$(ls -t "$(dirname "$0")/../../.deploy/"*.txt 2>/dev/null | head -1 || true)
   if [[ -z "$DEPLOY_FILE" ]]; then
     echo "Usage: $0 <stack-name> [region]"
     exit 1

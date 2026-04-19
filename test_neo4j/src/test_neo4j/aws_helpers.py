@@ -31,8 +31,13 @@ def get_asg_instance_id(
     session: boto3.Session,
     stack_name: str,
     resource_map: dict[str, str] | None = None,
+    exclude_instance: str | None = None,
 ) -> str:
-    """Return the EC2 instance ID of the single InService instance in the stack's ASG."""
+    """Return the EC2 instance ID of the first InService instance in the stack's ASG.
+
+    In a multi-node cluster there may be several InService instances; this returns the
+    first one in API response order, skipping *exclude_instance* if provided.
+    """
     if resource_map is None:
         resource_map = get_stack_resources(session, stack_name)
 
@@ -50,7 +55,7 @@ def get_asg_instance_id(
 
     instances = groups[0]["Instances"]
     for instance in instances:
-        if instance["LifecycleState"] == "InService":
+        if instance["LifecycleState"] == "InService" and instance["InstanceId"] != exclude_instance:
             return instance["InstanceId"]
 
     states = [f"{i['InstanceId']}={i['LifecycleState']}" for i in instances]

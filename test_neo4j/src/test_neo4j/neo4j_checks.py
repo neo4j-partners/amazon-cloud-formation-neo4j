@@ -16,7 +16,7 @@ def check_http_api(config: StackConfig, reporter: TestReporter) -> None:
     """GET the discovery endpoint and verify neo4j_version is present."""
     with reporter.test("HTTP API") as ctx:
         try:
-            resp = requests.get(config.browser_url, timeout=10)
+            resp = requests.get(config.browser_url, timeout=10, headers={"Connection": "close"})
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as exc:
@@ -42,6 +42,7 @@ def check_auth(config: StackConfig, reporter: TestReporter) -> None:
                 json={"statements": [{"statement": "RETURN 1"}]},
                 auth=(config.username, config.password),
                 timeout=10,
+                headers={"Connection": "close"},
             )
         except requests.RequestException as exc:
             ctx.fail(f"HTTP request failed: {exc}")

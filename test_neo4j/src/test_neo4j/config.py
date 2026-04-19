@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 import time
 
 from neo4j import Driver, GraphDatabase
-from neo4j.exceptions import ClientError
+from neo4j.exceptions import ClientError, ServiceUnavailable
 
 LOCAL_HTTP_PORT = 7474
 LOCAL_BOLT_PORT = 7687
@@ -75,6 +75,13 @@ class StackConfig:
                         time.sleep(0.5)
                         continue
                     raise
+                except ServiceUnavailable as exc:
+                    drv.close()
+                    if "No write service available" not in str(exc):
+                        raise
+                    last_exc = exc
+                    time.sleep(0.5)
+                    continue
                 except Exception:
                     drv.close()
                     raise

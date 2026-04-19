@@ -11,6 +11,8 @@
 
 set -euo pipefail
 
+export AWS_PROFILE="${AWS_PROFILE:-default}"
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="${SCRIPT_DIR}/.deploy"
 

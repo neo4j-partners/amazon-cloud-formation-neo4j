@@ -214,6 +214,7 @@ def main() -> None:
                 config, reporter, session,
                 replacement_timeout=args.timeout,
                 resource_map=resource_map,
+                tunnel_instance_id=instance_id if config.deployment_mode == "Private" else None,
             )
 
         if args.infra_security:

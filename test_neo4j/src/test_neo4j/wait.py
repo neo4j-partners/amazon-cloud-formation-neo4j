@@ -18,7 +18,7 @@ def wait_for_neo4j(config: StackConfig, timeout: int = 300, interval: int = 10) 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            resp = requests.get(config.browser_url, timeout=5)
+            resp = requests.get(config.browser_url, timeout=5, headers={"Connection": "close"})
             if resp.status_code == 200:
                 elapsed = timeout - (deadline - time.monotonic())
                 log.info("  Neo4j HTTP endpoint is responding (%.0fs elapsed).", elapsed)

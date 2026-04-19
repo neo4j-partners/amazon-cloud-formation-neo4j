@@ -4,17 +4,19 @@ CloudFormation template and tooling for the Neo4j Enterprise Edition AWS Marketp
 
 ## Quick Start — CLI Deployment
 
-All scripts use the `marketplace` AWS CLI profile. Export it once so every command picks it up:
+All scripts read `AWS_PROFILE` from the environment and fall back to the `default` profile if it is not set. Set it once before running any commands:
 
 ```bash
-export AWS_PROFILE=marketplace
+export AWS_PROFILE=<your-profile>   # omit entirely to use your default AWS profile
 ```
+
+> **Marketplace publishing scripts only** (`marketplace/create-ami.sh`, `marketplace/test-ami.sh`): these must run against the `neo4j-marketplace` AWS account (account `385155106615`). Set `AWS_PROFILE=marketplace` before running them. All other scripts (`deploy.sh`, `teardown.sh`, `test-observability.sh`) work with any account that has CloudFormation, SSM, EC2, and IAM permissions.
 
 ### 1. Deploy the Stack
 
 There are two AMI modes depending on what you're testing.
 
-**Marketplace mode** — validates what a live customer receives. No AMI file needed:
+**Marketplace mode** — validates what a live customer receives. The template's published Marketplace AMI is used directly. No local AMI file needed:
 
 ```bash
 ./deploy.sh --marketplace                                                           # t3.medium, 3 nodes, random region, Private mode
@@ -26,14 +28,14 @@ There are two AMI modes depending on what you're testing.
 ./deploy.sh --marketplace --mode Public                                             # internet-facing NLB (opt-in)
 ```
 
-**Local AMI mode** — tests a newly built AMI before it is published to the Marketplace. Build the AMI first, then deploy:
+**Local AMI mode** — tests a newly built AMI before it is published to the Marketplace. Requires the `neo4j-marketplace` account. Build and verify the AMI first:
 
 ```bash
-./marketplace/create-ami.sh          # builds AMI, writes ID to marketplace/ami-id.txt
-./marketplace/test-ami.sh            # verifies SSH hardening and OS (no SSH key needed)
+AWS_PROFILE=marketplace ./marketplace/create-ami.sh     # builds AMI, writes ID to marketplace/ami-id.txt
+AWS_PROFILE=marketplace ./marketplace/test-ami.sh       # verifies SSH hardening and OS (no SSH key needed)
 ```
 
-Then deploy using that AMI:
+Then deploy using that AMI (switch back to your test account profile):
 
 ```bash
 ./deploy.sh                                                            # t3.medium, 3 nodes, random region, Private mode
@@ -233,7 +235,7 @@ The stack also outputs ready-to-copy `Neo4jSSMHTTPCommand` and `Neo4jSSMBoltComm
 
 Application tiers inside AWS reach the internal NLB directly without SSM tunnels. AWS Network Load Balancers support connections from clients over VPC peering, AWS managed VPN, Direct Connect, and third-party VPN solutions.
 
-**Same VPC** — an application running in the same VPC connects to the NLB's internal DNS name on port 7687 (Bolt) or 7474 (HTTP). The `AllowedCIDR` parameter defaults to `10.0.0.0/16` (the VPC CIDR), so no security group changes are needed for in-VPC clients.
+**Same VPC** — an application running in the same VPC connects to the NLB's internal DNS name on port 7687 (Bolt) or 7474 (HTTP). Set `AllowedCIDR` to `10.0.0.0/16` (the VPC CIDR) at stack launch — no additional security group changes are needed for in-VPC clients.
 
 **VPC Peering / Transit Gateway** — an application in a spoke VPC reaches the NLB's private IP addresses through the peering or TGW route. Two prerequisites: (1) a route in the spoke VPC's route table pointing the Neo4j VPC CIDR at the peering connection or TGW attachment, and (2) `AllowedCIDR` must be updated at stack launch to include the spoke VPC's CIDR (e.g. `10.1.0.0/16`). The NLB DNS resolves directly to private IPs; no additional DNS configuration is required on the peering connection.
 

@@ -183,8 +183,14 @@ def run_ee_resilience_tests(
     session: boto3.Session,
     replacement_timeout: int = 600,
     resource_map: dict[str, str] | None = None,
+    tunnel_instance_id: str | None = None,
 ) -> None:
-    """EE Raft resilience: terminate one cluster node, verify ASG replacement and cluster reformation."""
+    """EE Raft resilience: terminate one cluster node, verify ASG replacement and cluster reformation.
+
+    *tunnel_instance_id* is the instance the SSM tunnel is connected to. When provided,
+    that instance is excluded from termination so the tunnel remains live throughout
+    the test, including the post-recovery readiness check.
+    """
     if resource_map is None:
         resource_map = get_stack_resources(session, config.stack_name)
 
@@ -214,7 +220,9 @@ def run_ee_resilience_tests(
         "EE cluster resilience: terminating one of %d nodes...\n", expected_nodes
     )
 
-    original_instance_id = get_asg_instance_id(session, config.stack_name, resource_map)
+    original_instance_id = get_asg_instance_id(
+        session, config.stack_name, resource_map, exclude_instance=tunnel_instance_id
+    )
     log.info("  Original instance: %s\n", original_instance_id)
 
     with reporter.test("Terminate one cluster node") as ctx:
@@ -258,11 +266,13 @@ def run_resilience_tests(
     session: boto3.Session,
     replacement_timeout: int = 600,
     resource_map: dict[str, str] | None = None,
+    tunnel_instance_id: str | None = None,
 ) -> None:
     """Orchestrate resilience tests: Raft cluster recovery (EE) or EBS persistence (CE)."""
     if config.edition == "ee":
         run_ee_resilience_tests(
-            config, reporter, session, replacement_timeout, resource_map
+            config, reporter, session, replacement_timeout, resource_map,
+            tunnel_instance_id=tunnel_instance_id,
         )
         return
 

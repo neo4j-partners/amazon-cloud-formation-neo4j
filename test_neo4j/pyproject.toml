@@ -1,7 +1,7 @@
 [project]
 name = "test-neo4j"
 version = "0.1.0"
-description = "Integration tests for Neo4j CE and EE CloudFormation stacks"
+description = "Integration tests for Neo4j CE CloudFormation stacks"
 
 requires-python = ">=3.11"
 dependencies = [

@@ -128,7 +128,7 @@ Bolt TLS encrypts the client-facing connection on port 7687. It requires a certi
    ```bash
    openssl req -x509 -newkey rsa:4096 \
      -keyout private.key -out public.crt \
-     -days 365 -nodes \
+     -days 365 -noenc \
      -subj "/CN=${NLB_DNS}" \
      -addext "subjectAltName=DNS:${NLB_DNS}"
    ```
@@ -207,7 +207,7 @@ Run the full validation suite:
 uv run validate-private
 ```
 
-This runs six checks through the bastion: Bolt connectivity, APOC availability, server edition, listen address, memory configuration, and data directory. Each check sends an SSM Run Command to the bastion; total time is under 35 seconds.
+This runs five checks through the bastion: Bolt connectivity, server edition, listen address, memory configuration, and data directory. Each check sends an SSM Run Command to the bastion; total time is under 35 seconds.
 
 To target a specific stack by name:
 

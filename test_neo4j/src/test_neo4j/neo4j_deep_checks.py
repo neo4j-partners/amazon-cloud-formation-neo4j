@@ -1,4 +1,4 @@
-"""Deeper Neo4j configuration validation: edition, bindings, memory, data directory."""
+"""Deeper Neo4j configuration validation: bindings, memory, data directory."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ log = logging.getLogger(__name__)
 
 
 def check_server_status(config: StackConfig, reporter: TestReporter) -> None:
-    """Verify Neo4j reports the expected edition via dbms.components()."""
-    expected = "enterprise" if config.edition == "ee" else "community"
+    """Verify Neo4j reports community edition via dbms.components()."""
+    expected = "community"
     with reporter.test("Neo4j server status") as ctx:
         try:
             with config.driver() as driver:
@@ -114,12 +114,8 @@ def check_memory_config(config: StackConfig, reporter: TestReporter) -> None:
 
 
 def check_data_directory(config: StackConfig, reporter: TestReporter) -> None:
-    """Verify server.directories.data matches the expected path for the edition.
-
-    CE mounts a persistent EBS volume at /data and configures Neo4j to use it.
-    EE uses the default RPM install path; cluster replication provides resilience.
-    """
-    expected = "/data" if config.edition == "ce" else "/var/lib/neo4j/data"
+    """Verify server.directories.data is /data (persistent EBS volume mount)."""
+    expected = "/data"
     with reporter.test("Data directory") as ctx:
         try:
             with config.driver() as driver:
@@ -143,7 +139,6 @@ def run_deep_neo4j_checks(config: StackConfig, reporter: TestReporter) -> None:
     """Run all deeper Neo4j configuration validation tests."""
     check_server_status(config, reporter)
     check_listen_address(config, reporter)
-    if config.edition == "ce":
-        check_advertised_address(config, reporter)
+    check_advertised_address(config, reporter)
     check_memory_config(config, reporter)
     check_data_directory(config, reporter)

@@ -127,6 +127,8 @@ The `alarm` step takes up to 7 minutes (5-minute CloudWatch evaluation window). 
 
 ### 4. Connect to a Private Deployment
 
+For a complete operator walkthrough — retrieving the password, opening an admin shell, running the validation suite, and troubleshooting — see [`PRIVATE_ACCESS_GUIDE.md`](PRIVATE_ACCESS_GUIDE.md).
+
 Private mode (the default) places instances in private subnets with no public IP and an internal NLB. Public mode places instances in public subnets with an internet-facing NLB — useful for demos and development.
 
 #### Driver URI scheme and cluster routing

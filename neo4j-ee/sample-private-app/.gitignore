@@ -1,0 +1,11 @@
+cdk.out/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Lambda vendored dependencies (installed via requirements.txt at deploy time)
+lambda/neo4j/
+lambda/neo4j-*.dist-info/
+lambda/pytz/
+lambda/pytz-*.dist-info/

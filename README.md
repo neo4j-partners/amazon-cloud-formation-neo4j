@@ -37,6 +37,10 @@ The AWS word for a deployment is a stack.  Each edition folder contains a `deplo
 
 When complete you can access the Neo4j Browser at the Neo4jBrowserURL given in the stack outputs.
 
+### Connecting an Application in Private Mode
+
+The default deployment uses `DeploymentMode=Private`, which places the cluster behind an internal NLB with no public IPs. The [sample-private-app](neo4j-ee/sample-private-app/) shows how an application workload connects from inside the VPC: a Python Lambda that creates a fintech graph and returns a cluster health report. It uses the Neo4j Python driver over `neo4j://` on the internal NLB DNS and is exposed publicly via a Lambda Function URL with IAM authentication.
+
 ## Deleting a Stack
 To delete your deployment you can either run the command below or use the GUI in the web console [here](https://console.aws.amazon.com/cloudformation/home).
 

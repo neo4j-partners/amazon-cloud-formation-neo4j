@@ -3,7 +3,7 @@
 # Deploy the Neo4j Enterprise Edition CloudFormation stack for local testing.
 #
 # Usage:
-#   ./deploy.sh [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private] [--allowed-cidr CIDR]
+#   ./deploy.sh [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--tls] [--alert-email EMAIL] [--mode Public|Private] [--allowed-cidr CIDR]
 #
 # Stack name is auto-generated as test-ee-<timestamp>.
 # Password is randomly generated and saved to .deploy/<stack-name>.txt.
@@ -35,7 +35,7 @@ export AWS_PROFILE="${AWS_PROFILE:-default}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ---------------------------------------------------------------------------
-# Parse arguments: [instance-family] [--region REGION] [--number-of-servers N] [--marketplace]
+# Parse arguments: [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--tls]
 # ---------------------------------------------------------------------------
 INSTANCE_FAMILY=""
 REGION_OVERRIDE=""
@@ -44,6 +44,7 @@ USE_MARKETPLACE=false
 ALERT_EMAIL=""
 DEPLOYMENT_MODE=""
 ALLOWED_CIDR=""
+ENABLE_TLS=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -71,9 +72,13 @@ while [[ $# -gt 0 ]]; do
       ALLOWED_CIDR="$2"
       shift 2
       ;;
+    --tls)
+      ENABLE_TLS=true
+      shift
+      ;;
     -*)
       echo "ERROR: Unknown option '$1'." >&2
-      echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private] [--allowed-cidr CIDR]" >&2
+      echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--tls] [--alert-email EMAIL] [--mode Public|Private] [--allowed-cidr CIDR]" >&2
       exit 1
       ;;
     *)
@@ -81,7 +86,7 @@ while [[ $# -gt 0 ]]; do
         INSTANCE_FAMILY="$1"
       else
         echo "ERROR: Unexpected argument '$1'." >&2
-        echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--alert-email EMAIL] [--mode Public|Private] [--allowed-cidr CIDR]" >&2
+        echo "Usage: $0 [instance-family] [--region REGION] [--number-of-servers N] [--marketplace] [--tls] [--alert-email EMAIL] [--mode Public|Private] [--allowed-cidr CIDR]" >&2
         exit 1
       fi
       shift
@@ -241,6 +246,7 @@ echo "  Instance:       ${INSTANCE_TYPE} (family: ${INSTANCE_FAMILY})"
 echo "  Servers:        ${NUMBER_OF_SERVERS}"
 echo "  Mode:           ${DEPLOYMENT_MODE}"
 echo "  AllowedCIDR:    ${ALLOWED_CIDR}"
+echo "  TLS:            ${ENABLE_TLS}"
 echo "  AMI source:     ${AMI_SOURCE}"
 if [ "${USE_MARKETPLACE}" = false ]; then
   echo "  AMI:            ${AMI_ID}"
@@ -287,6 +293,107 @@ aws cloudformation wait stack-create-complete \
 trap - EXIT 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
+# TLS: two-phase cert injection (--tls only)
+# ---------------------------------------------------------------------------
+BOLT_TLS_SECRET_ARN=""
+if [ "${ENABLE_TLS}" = true ]; then
+  echo ""
+  echo "--- TLS Phase: generating self-signed cert and updating stack ---"
+
+  # Read NLB DNS from SSM (Private mode only; SSM params are Condition: IsPrivate)
+  NLB_DNS=$(aws ssm get-parameter \
+    --region "${REGION}" \
+    --name "/neo4j-ee/${STACK_NAME}/nlb-dns" \
+    --query Parameter.Value --output text)
+  echo "NLB DNS: ${NLB_DNS}"
+
+  # One SAN is sufficient: server.bolt.advertised_address is the NLB DNS for all nodes.
+  CERT_DIR=$(mktemp -d)
+  trap 'rm -rf "${CERT_DIR}"' EXIT
+  openssl req -x509 -newkey rsa:4096 \
+    -keyout "${CERT_DIR}/private.key" -out "${CERT_DIR}/public.crt" \
+    -days 365 -nodes \
+    -subj "/CN=${NLB_DNS}" \
+    -addext "subjectAltName=DNS:${NLB_DNS}"
+  echo "Self-signed cert generated (SAN: DNS:${NLB_DNS})"
+
+  # Push to Secrets Manager via jq --rawfile (avoids shell quoting of PEM newlines)
+  jq -n \
+    --rawfile cert "${CERT_DIR}/public.crt" \
+    --rawfile key "${CERT_DIR}/private.key" \
+    '{certificate:$cert, private_key:$key}' > "${CERT_DIR}/secret.json"
+  BOLT_TLS_SECRET_ARN=$(aws secretsmanager create-secret \
+    --region "${REGION}" \
+    --name "neo4j-bolt-tls-${STACK_NAME}" \
+    --secret-string "file://${CERT_DIR}/secret.json" \
+    --query ARN --output text)
+  rm -f "${CERT_DIR}/secret.json"
+  echo "Secrets Manager secret created: ${BOLT_TLS_SECRET_ARN}"
+
+  # Stage CA bundle for Lambda — CDK from_asset("lambda") picks up all files in lambda/
+  LAMBDA_DIR="${SCRIPT_DIR}/sample-private-app/lambda"
+  cp "${CERT_DIR}/public.crt" "${LAMBDA_DIR}/neo4j-ca.crt"
+  echo "CA bundle staged at ${LAMBDA_DIR}/neo4j-ca.crt"
+  rm -rf "${CERT_DIR}"
+  trap - EXIT
+
+  echo "Updating stack with BoltCertificateSecretArn..."
+  readarray -t PREV_PARAMS < <(aws cloudformation describe-stacks \
+    --stack-name "${STACK_NAME}" \
+    --region "${REGION}" \
+    --query 'Stacks[0].Parameters[*].ParameterKey' \
+    --output json \
+    | jq -r '.[] | select(. != "BoltCertificateSecretArn") | "ParameterKey=\(.),UsePreviousValue=true"')
+  aws cloudformation update-stack \
+    --stack-name "${STACK_NAME}" \
+    --region "${REGION}" \
+    --template-body "${TEMPLATE_BODY}" \
+    --capabilities CAPABILITY_IAM \
+    --parameters \
+      "ParameterKey=BoltCertificateSecretArn,ParameterValue=${BOLT_TLS_SECRET_ARN}" \
+      "${PREV_PARAMS[@]}"
+
+  echo "Waiting for stack update to complete..."
+  aws cloudformation wait stack-update-complete \
+    --stack-name "${STACK_NAME}" \
+    --region "${REGION}"
+  echo "Stack updated."
+
+  ASG_NAME=$(aws cloudformation describe-stack-resource \
+    --region "${REGION}" \
+    --stack-name "${STACK_NAME}" \
+    --logical-resource-id Neo4jAutoScalingGroup \
+    --query 'StackResourceDetail.PhysicalResourceId' --output text)
+  echo "Starting instance refresh on ASG: ${ASG_NAME}"
+  REFRESH_ID=$(aws autoscaling start-instance-refresh \
+    --region "${REGION}" \
+    --auto-scaling-group-name "${ASG_NAME}" \
+    --preferences '{"MinHealthyPercentage":0,"InstanceWarmup":300}' \
+    --query InstanceRefreshId --output text)
+  echo "Instance refresh started: ${REFRESH_ID}"
+
+  echo "Waiting for instance refresh to complete (EE 3-node: ~5-10 min)..."
+  while true; do
+    STATUS=$(aws autoscaling describe-instance-refreshes \
+      --region "${REGION}" \
+      --auto-scaling-group-name "${ASG_NAME}" \
+      --instance-refresh-ids "${REFRESH_ID}" \
+      --query 'InstanceRefreshes[0].Status' --output text)
+    echo "  Instance refresh status: ${STATUS}"
+    case "${STATUS}" in
+      Successful) echo "Instance refresh complete."; break ;;
+      Failed|Cancelled) echo "ERROR: Instance refresh ${STATUS}." >&2; exit 1 ;;
+      *) sleep 60 ;;
+    esac
+  done
+
+  echo ""
+  echo "TLS enabled on Bolt. To activate on the Lambda:"
+  echo "  cd ${SCRIPT_DIR}/sample-private-app && cdk deploy"
+  echo "(neo4j-ca.crt is already staged in the lambda/ directory)"
+fi
+
+# ---------------------------------------------------------------------------
 # Write outputs to .deploy/<stack-name>.txt
 # ---------------------------------------------------------------------------
 mkdir -p "${SCRIPT_DIR}/.deploy"
@@ -323,6 +430,9 @@ aws cloudformation describe-stacks \
   if [ -n "${COPIED_AMI_ID}" ]; then
     printf "%-20s = %s\n" "CopiedAmiId" "$COPIED_AMI_ID"
     printf "%-20s = %s\n" "SourceRegion" "$SOURCE_REGION"
+  fi
+  if [ -n "${BOLT_TLS_SECRET_ARN}" ]; then
+    printf "%-20s = %s\n" "BoltTlsSecretArn" "${BOLT_TLS_SECRET_ARN}"
   fi
 } | tee -a "${OUTPUTS_FILE}"
 

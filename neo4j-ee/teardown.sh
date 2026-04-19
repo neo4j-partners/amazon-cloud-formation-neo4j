@@ -25,6 +25,14 @@ read_field() {
   grep "^${key}" "$file" | sed 's/^[^=]*= *//' | tr -d '\r'
 }
 
+force_delete_secret() {
+  local secret_id="$1"
+  aws secretsmanager delete-secret \
+    --region "${REGION}" \
+    --secret-id "${secret_id}" \
+    --force-delete-without-recovery 2>/dev/null || true
+}
+
 # ---------------------------------------------------------------------------
 # Resolve the outputs file
 # ---------------------------------------------------------------------------
@@ -112,11 +120,19 @@ fi
 PASSWORD_SECRET_NAME="neo4j/${STACK_NAME}/password"
 echo ""
 echo "Force-deleting password secret ${PASSWORD_SECRET_NAME} (if present)..."
-aws secretsmanager delete-secret \
-  --region "${REGION}" \
-  --secret-id "${PASSWORD_SECRET_NAME}" \
-  --force-delete-without-recovery 2>/dev/null || true
+force_delete_secret "${PASSWORD_SECRET_NAME}"
 echo "Password secret cleanup done."
+
+# ---------------------------------------------------------------------------
+# Step 2c: Force-delete the Bolt TLS cert secret (--tls deploys only)
+# ---------------------------------------------------------------------------
+BOLT_TLS_SECRET_ARN=$(read_field "${OUTPUTS_FILE}" "BoltTlsSecretArn" 2>/dev/null || true)
+if [ -n "${BOLT_TLS_SECRET_ARN}" ]; then
+  echo ""
+  echo "Force-deleting Bolt TLS cert secret ${BOLT_TLS_SECRET_ARN}..."
+  force_delete_secret "${BOLT_TLS_SECRET_ARN}"
+  echo "Bolt TLS cert secret cleanup done."
+fi
 
 # ---------------------------------------------------------------------------
 # Step 3: Clean up copied AMI (cross-region local AMI deploys only)
@@ -145,6 +161,14 @@ fi
 # ---------------------------------------------------------------------------
 # Step 4: Clean up local files
 # ---------------------------------------------------------------------------
+CA_BUNDLE="${SCRIPT_DIR}/sample-private-app/lambda/neo4j-ca.crt"
+if [ -f "${CA_BUNDLE}" ]; then
+  echo ""
+  echo "Removing staged CA bundle ${CA_BUNDLE}..."
+  rm -f "${CA_BUNDLE}"
+  echo "CA bundle removed."
+fi
+
 echo ""
 echo "Removing ${OUTPUTS_FILE}..."
 rm -f "${OUTPUTS_FILE}"

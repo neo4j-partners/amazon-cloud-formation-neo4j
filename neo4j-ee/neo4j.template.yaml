@@ -13,13 +13,18 @@ Metadata:
           - Password
           - NumberOfServers
           - InstanceType
-          - DiskSize
+          - DataDiskSize
+          - DataVolumeIops
+          - DataVolumeThroughput
+          - DataVolumeKmsKeyId
       - Label:
           default: "Security & Monitoring"
         Parameters:
           - DeploymentMode
           - AllowedCIDR
           - AlertEmail
+          - BoltCertificateSecretArn
+          - BoltAdvertisedDNS
     ParameterLabels:
       ImageId:
         default: Image ID
@@ -29,14 +34,24 @@ Metadata:
         default: Number of Servers
       InstanceType:
         default: Instance Type
-      DiskSize:
-        default: Disk Size
+      DataDiskSize:
+        default: Data Disk Size (GB)
+      DataVolumeIops:
+        default: Data Volume IOPS
+      DataVolumeThroughput:
+        default: Data Volume Throughput (MB/s)
+      DataVolumeKmsKeyId:
+        default: Data Volume KMS Key ID
       AlertEmail:
         default: Alert Email Address
       DeploymentMode:
         default: Deployment Mode
       AllowedCIDR:
         default: Allowed CIDR
+      BoltCertificateSecretArn:
+        default: Bolt TLS Certificate Secret ARN
+      BoltAdvertisedDNS:
+        default: Bolt Advertised DNS Name
 
 Parameters:
   ImageId:
@@ -75,11 +90,37 @@ Parameters:
     - r8i.32xlarge
     - r8i.48xlarge
     - r8i.96xlarge
-  DiskSize:
-    Description: Size in GB of the EBS volume on each instance
+  DataDiskSize:
+    Description: >-
+      Size in GB of the persistent Neo4j data volume attached to each cluster
+      node. This volume is retained across instance replacement: a new
+      instance reattaches the existing volume and Raft catches up rather than
+      performing a full store copy. The root volume (OS + Neo4j binaries) is
+      fixed at 20 GB and not user-tunable.
     Type: Number
     Default: 100
     MinValue: 100
+  DataVolumeIops:
+    Description: >-
+      Provisioned IOPS for the gp3 data volume. Valid range 3000–16000.
+    Type: Number
+    Default: 3000
+    MinValue: 3000
+    MaxValue: 16000
+  DataVolumeThroughput:
+    Description: >-
+      Provisioned throughput in MB/s for the gp3 data volume. Valid range
+      125–1000.
+    Type: Number
+    Default: 125
+    MinValue: 125
+    MaxValue: 1000
+  DataVolumeKmsKeyId:
+    Description: >-
+      Optional. KMS key ID or ARN for data volume encryption. Leave blank to
+      use the AWS-managed aws/ebs key.
+    Type: String
+    Default: ''
   AlertEmail:
     Description: Email address for CloudWatch alarm notifications. Leave blank to skip email subscription.
     Type: String
@@ -104,6 +145,24 @@ Parameters:
       that should reach the internet-facing NLB (e.g. 203.0.113.0/24 for a
       known office egress). 0.0.0.0/0 is not accepted.
 
+  BoltCertificateSecretArn:
+    Type: String
+    Default: ''
+    Description: >-
+      ARN of a Secrets Manager secret whose SecretString is JSON with
+      "certificate" (PEM) and "private_key" (PEM) fields. When set, Neo4j
+      enables TLS on Bolt port 7687 (server.bolt.tls_level=REQUIRED). Leave
+      blank to run Bolt without TLS (suitable for dev/test inside a private VPC).
+      ACM Private CA-issued certs are accepted here — no separate parameter needed.
+  BoltAdvertisedDNS:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional. DNS name placed in server.bolt.advertised_address and used as
+      the cert SAN. Provide a stable alias (e.g. a Route53 CNAME → NLB) when
+      deploying in production so certs do not pin the NLB DNS. When blank, the
+      NLB DNS is used (test-rig default; two-phase deploy required).
+
 Conditions:
   CreateCluster: !Not
     - !Equals
@@ -121,6 +180,9 @@ Conditions:
     Fn::And:
       - Condition: IsPrivate
       - Condition: CreateCluster
+  BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
+  UseCustomAdvertisedDNS: !Not [!Equals [!Ref BoltAdvertisedDNS, '']]
+  HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
 
 Resources:
   Neo4jVPC:
@@ -578,37 +640,214 @@ Resources:
       VpcId: !Ref Neo4jVPC
 
   # ---------------------------------------------------------------------------
-  # Auto Scaling Group — placed in private subnets (Private mode) or public subnets (Public mode)
+  # Per-node persistent data volumes
+  #
+  # One gp3 EBS volume per cluster node, retained across instance replacement
+  # (DeletionPolicy: Retain, UpdateReplacePolicy: Retain). Each volume is
+  # pinned to a single AZ; the matching ASG is pinned to the same AZ. When
+  # an instance is replaced, the new instance discovers its volume by tag
+  # (StackID + Role=neo4j-cluster-data + own AZ), reattaches it, and starts
+  # Neo4j against the existing store — so Raft catch-up replaces what would
+  # otherwise be a full store copy.
+  #
+  # Losing a node: the volume survives and is reattached on replacement.
+  # Losing the whole cluster (stack delete, region-wide ASG failure): the
+  # volumes survive stack deletion and can be reattached to a fresh stack,
+  # preserving the data across full-cluster loss.
   # ---------------------------------------------------------------------------
 
-  Neo4jAutoScalingGroup:
+  Neo4jNode1DataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [0, Fn::GetAZs: !Ref 'AWS::Region']
+      Size: !Ref DataDiskSize
+      VolumeType: gp3
+      Iops: !Ref DataVolumeIops
+      Throughput: !Ref DataVolumeThroughput
+      Encrypted: true
+      KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-data-1'
+        - Key: Role
+          Value: neo4j-cluster-data
+        - Key: NodeIndex
+          Value: "1"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jNode2DataVolume:
+    Type: AWS::EC2::Volume
+    Condition: CreateCluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [1, Fn::GetAZs: !Ref 'AWS::Region']
+      Size: !Ref DataDiskSize
+      VolumeType: gp3
+      Iops: !Ref DataVolumeIops
+      Throughput: !Ref DataVolumeThroughput
+      Encrypted: true
+      KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-data-2'
+        - Key: Role
+          Value: neo4j-cluster-data
+        - Key: NodeIndex
+          Value: "2"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jNode3DataVolume:
+    Type: AWS::EC2::Volume
+    Condition: CreateCluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [2, Fn::GetAZs: !Ref 'AWS::Region']
+      Size: !Ref DataDiskSize
+      VolumeType: gp3
+      Iops: !Ref DataVolumeIops
+      Throughput: !Ref DataVolumeThroughput
+      Encrypted: true
+      KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-data-3'
+        - Key: Role
+          Value: neo4j-cluster-data
+        - Key: NodeIndex
+          Value: "3"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
+  # Auto Scaling Groups — one per cluster node, each pinned to a single AZ.
+  #
+  # The three ASGs share a single LaunchTemplate; each launched instance
+  # discovers its own ASG logical-id from the aws:cloudformation:logical-id
+  # tag (auto-applied by CFN) so cfn-signal can route to the correct ASG's
+  # CreationPolicy. Topology is 1:1 between ASG ↔ AZ ↔ data volume, so a
+  # replacement instance always lands in the same AZ as its persistent
+  # volume and reattaches deterministically.
+  #
+  # In 1-node mode, only Node1ASG is created.
+  # ---------------------------------------------------------------------------
+
+  Neo4jNode1ASG:
     Type: AWS::AutoScaling::AutoScalingGroup
     DependsOn:
       - Neo4jPrivateSubnet1RouteTableAssociation
-      - Neo4jPrivateSubnet2RouteTableAssociation
-      - Neo4jPrivateSubnet3RouteTableAssociation
+      - Neo4jNode1DataVolume
     Properties:
-      AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchTemplate:
         LaunchTemplateId: !Ref Neo4jLaunchTemplate
         Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
-      MinSize: !Ref NumberOfServers
-      MaxSize: !Ref NumberOfServers
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
       VPCZoneIdentifier: !If
         - IsPrivate
-        - !If [CreateCluster, [!Ref Neo4jPrivateSubnet1, !Ref Neo4jPrivateSubnet2, !Ref Neo4jPrivateSubnet3], [!Ref Neo4jPrivateSubnet1]]
-        - !If [CreateCluster, [!Ref Neo4jSubnet1, !Ref Neo4jSubnet2, !Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
+        - [!Ref Neo4jPrivateSubnet1]
+        - [!Ref Neo4jSubnet1]
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
-      DesiredCapacity:
-        !Ref NumberOfServers
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
           PropagateAtLaunch: true
         - Key: Name
-          Value: !Ref 'AWS::StackName'
+          Value: !Sub '${AWS::StackName}-node-1'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: neo4j-cluster-node
+          PropagateAtLaunch: true
+        - Key: NodeIndex
+          Value: "1"
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jNode2ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateCluster
+    DependsOn:
+      - Neo4jPrivateSubnet2RouteTableAssociation
+      - Neo4jNode2DataVolume
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      VPCZoneIdentifier: !If
+        - IsPrivate
+        - [!Ref Neo4jPrivateSubnet2]
+        - [!Ref Neo4jSubnet2]
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node-2'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: neo4j-cluster-node
+          PropagateAtLaunch: true
+        - Key: NodeIndex
+          Value: "2"
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jNode3ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateCluster
+    DependsOn:
+      - Neo4jPrivateSubnet3RouteTableAssociation
+      - Neo4jNode3DataVolume
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      VPCZoneIdentifier: !If
+        - IsPrivate
+        - [!Ref Neo4jPrivateSubnet3]
+        - [!Ref Neo4jSubnet3]
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node-3'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: neo4j-cluster-node
+          PropagateAtLaunch: true
+        - Key: NodeIndex
+          Value: "3"
           PropagateAtLaunch: true
         - Key: "aws-apn-id"
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
@@ -628,12 +867,14 @@ Resources:
         IamInstanceProfile:
           Arn: !GetAtt Neo4jInstanceProfile.Arn
         BlockDeviceMappings:
+          # Root volume: OS + Neo4j binaries + plugins + logs + metrics.
+          # Neo4j data lives on a separate per-node EBS volume attached at boot.
           - DeviceName: /dev/xvda
             Ebs:
-              VolumeSize:
-                Ref: DiskSize
+              VolumeSize: 20
               VolumeType: gp3
               Encrypted: true
+              DeleteOnTermination: true
         MetadataOptions:
           HttpTokens: required
           HttpEndpoint: enabled
@@ -665,6 +906,21 @@ Resources:
               - Ref: AWS::Region
               - "\n"
 
+              - "boltCertArn="
+              - !Ref BoltCertificateSecretArn
+              - "\n"
+              - "boltAdvertisedDNS="
+              - !Ref BoltAdvertisedDNS
+              - "\n"
+
+              - "set_neo4j_conf() {\n"
+              - "  local conf=/etc/neo4j/neo4j.conf\n"
+              - "  sed -i \"s|^#\\?$1=.*|$1=$2|\" \"$conf\"\n"
+              - "  if ! grep -q \"^$1=\" \"$conf\"; then\n"
+              - "    echo \"$1=$2\" >> \"$conf\"\n"
+              - "  fi\n"
+              - "}\n"
+              - "\n"
               - "install_neo4j_from_yum() {\n"
               - "  echo \"Installing Graph Database...\"\n"
               - "  rpm --import https://debian.neo4j.com/neotechnology.gpg.key\n"
@@ -680,43 +936,43 @@ Resources:
 
               - "extension_config() {\n"
               - "  echo Configuring extensions and security in neo4j.conf...\n"
-              - "  sed -i s~#server.unmanaged_extension_classes=org.neo4j.examples.server.unmanaged=/examples/unmanaged~server.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf~g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#dbms.security.procedures.unrestricted=my.extensions.example,my.procedures.*/dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*/g /etc/neo4j/neo4j.conf\n"
-              - "  echo \"dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*\" >> /etc/neo4j/neo4j.conf\n"
-              - "  echo \"dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*\" >> /etc/neo4j/neo4j.conf\n"
-              - "  sed -i '/jdwp/Id' /etc/neo4j/neo4j.conf\n"
+              - "  set_neo4j_conf server.unmanaged_extension_classes \"com.neo4j.bloom.server=/bloom,semantics.extension=/rdf\"\n"
+              - "  set_neo4j_conf dbms.security.procedures.unrestricted \"gds.*,apoc.*,bloom.*\"\n"
+              - "  set_neo4j_conf dbms.security.http_auth_allowlist \"/,/browser.*,/bloom.*\"\n"
+              - "  set_neo4j_conf dbms.security.procedures.allowlist \"apoc.*,gds.*,bloom.*\"\n"
+              - "  sed -i '/jdwp/d' /etc/neo4j/neo4j.conf\n"
               - "}\n"
 
               - "build_neo4j_conf_file() {\n"
               - "  local -r privateIP=\"$(hostname -i | awk '{print $NF}')\"\n"
               - "  echo \"Configuring network in neo4j.conf...\"\n"
-              - "  sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/g' /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.default_advertised_address=localhost/server.default_advertised_address=\"${loadBalancerDNSName}\"/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.bolt.listen_address=:7687/server.bolt.listen_address=0.0.0.0:7687/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.bolt.advertised_address=:7687/server.bolt.advertised_address=\"${loadBalancerDNSName}\":7687/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.http.listen_address=:7474/server.http.listen_address=0.0.0.0:7474/g /etc/neo4j/neo4j.conf\n"
-              - "  sed -i s/#server.http.advertised_address=:7474/server.http.advertised_address=\"${loadBalancerDNSName}\":7474/g /etc/neo4j/neo4j.conf\n"
+              - "  set_neo4j_conf server.default_listen_address 0.0.0.0\n"
+              - "  set_neo4j_conf server.default_advertised_address \"${loadBalancerDNSName}\"\n"
+              - "  set_neo4j_conf server.bolt.listen_address 0.0.0.0:7687\n"
+              - "  set_neo4j_conf server.bolt.advertised_address \"${boltAdvertisedDNS:-${loadBalancerDNSName}}:7687\"\n"
+              - "  set_neo4j_conf server.http.listen_address 0.0.0.0:7474\n"
+              - "  set_neo4j_conf server.http.advertised_address \"${loadBalancerDNSName}:7474\"\n"
               - "  neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf\n"
-              - "  echo \"server.metrics.enabled=true\" >> /etc/neo4j/neo4j.conf\n"
-              - "  echo \"server.metrics.jmx.enabled=true\" >> /etc/neo4j/neo4j.conf\n"
-              - "  echo \"server.metrics.prefix=neo4j\" >> /etc/neo4j/neo4j.conf\n"
-              - "  echo \"server.metrics.filter=*\" >> /etc/neo4j/neo4j.conf\n"
-              - "  echo \"server.metrics.csv.interval=5s\" >> /etc/neo4j/neo4j.conf\n"
-              - "  echo \"dbms.routing.default_router=SERVER\" >> /etc/neo4j/neo4j.conf\n"
+              - "  set_neo4j_conf server.metrics.enabled true\n"
+              - "  set_neo4j_conf server.metrics.jmx.enabled true\n"
+              - "  set_neo4j_conf server.metrics.prefix neo4j\n"
+              - "  set_neo4j_conf server.metrics.filter \"*\"\n"
+              - "  set_neo4j_conf server.metrics.csv.interval 5s\n"
+              - "  set_neo4j_conf dbms.routing.default_router SERVER\n"
 
               - "  if [[ ${nodeCount} == 1 ]]; then\n"
               - "    echo \"Running on a single node.\"\n"
               - "  else\n"
               - "    echo \"Running on multiple nodes.  Configuring membership in neo4j.conf...\"\n"
-              - "    sed -i s/#server.cluster.listen_address=:6000/server.cluster.listen_address=0.0.0.0:6000/g /etc/neo4j/neo4j.conf\n"
-              - "    sed -i s/#server.cluster.advertised_address=:6000/server.cluster.advertised_address=\"${privateIP}\":6000/g /etc/neo4j/neo4j.conf\n"
-              - "    sed -i s/#server.cluster.raft.listen_address=:7000/server.cluster.raft.listen_address=0.0.0.0:7000/g /etc/neo4j/neo4j.conf\n"
-              - "    sed -i s/#server.cluster.raft.advertised_address=:7000/server.cluster.raft.advertised_address=\"${privateIP}\":7000/g /etc/neo4j/neo4j.conf\n"
-              - "    sed -i s/#server.routing.listen_address=0.0.0.0:7688/server.routing.listen_address=0.0.0.0:7688/g /etc/neo4j/neo4j.conf\n"
-              - "    sed -i s/#server.routing.advertised_address=:7688/server.routing.advertised_address=\"${privateIP}\":7688/g /etc/neo4j/neo4j.conf\n"
-              - "    sed -i s/#initial.dbms.default_primaries_count=1/initial.dbms.default_primaries_count=3/g /etc/neo4j/neo4j.conf\n"
-              - "    sed -i s/#initial.dbms.default_secondaries_count=0/initial.dbms.default_secondaries_count=$(expr ${nodeCount} - 3)/g /etc/neo4j/neo4j.conf\n"
-              - "    echo \"dbms.cluster.minimum_initial_system_primaries_count=${nodeCount}\" >> /etc/neo4j/neo4j.conf\n"
+              - "    set_neo4j_conf server.cluster.listen_address 0.0.0.0:6000\n"
+              - "    set_neo4j_conf server.cluster.advertised_address \"${privateIP}:6000\"\n"
+              - "    set_neo4j_conf server.cluster.raft.listen_address 0.0.0.0:7000\n"
+              - "    set_neo4j_conf server.cluster.raft.advertised_address \"${privateIP}:7000\"\n"
+              - "    set_neo4j_conf server.routing.listen_address 0.0.0.0:7688\n"
+              - "    set_neo4j_conf server.routing.advertised_address \"${privateIP}:7688\"\n"
+              - "    set_neo4j_conf initial.dbms.default_primaries_count 3\n"
+              - "    set_neo4j_conf initial.dbms.default_secondaries_count \"$(expr ${nodeCount} - 3)\"\n"
+              - "    set_neo4j_conf dbms.cluster.minimum_initial_system_primaries_count \"${nodeCount}\"\n"
               - "    TOKEN=$(curl -X PUT \"http://169.254.169.254/latest/api/token\" -H \"X-aws-ec2-metadata-token-ttl-seconds: 21600\")\n"
               - "    instanceId=$(curl -H \"X-aws-ec2-metadata-token: $TOKEN\" -s http://169.254.169.254/latest/meta-data/instance-id)\n"
               - "    if [[ ${#instanceId} -eq 0 ]]; then\n"
@@ -729,13 +985,29 @@ Resources:
               - "    echo \"CoreMembers = ${coreMembers}\"\n"
               - "    coreMembers=$(echo ${coreMembers} | sed 's/ /:6000,/g')\n"
               - "    coreMembers=$(echo \"${coreMembers}\"):6000\n"
-              - "    echo \"dbms.cluster.discovery.resolver_type=LIST\" >> /etc/neo4j/neo4j.conf\n"
-              - "    echo \"dbms.cluster.endpoints=${coreMembers}\" >> /etc/neo4j/neo4j.conf\n"
+              - "    set_neo4j_conf dbms.cluster.discovery.resolver_type LIST\n"
+              - "    set_neo4j_conf dbms.cluster.endpoints \"${coreMembers}\"\n"
+              - "  fi\n"
+              - "  if [ -n \"${boltCertArn}\" ]; then\n"
+              - "    mkdir -p /var/lib/neo4j/certificates/bolt\n"
+              - "    aws secretsmanager get-secret-value --region \"${region}\" \\\n"
+              - "      --secret-id \"${boltCertArn}\" --query SecretString --output text \\\n"
+              - "      | python3 -c \"import json,sys; d=json.load(sys.stdin); \\\n"
+              - "          open('/var/lib/neo4j/certificates/bolt/private.key','w').write(d['private_key']); \\\n"
+              - "          open('/var/lib/neo4j/certificates/bolt/public.crt','w').write(d['certificate'])\"\n"
+              - "    chown -R neo4j:neo4j /var/lib/neo4j/certificates\n"
+              - "    chmod 600 /var/lib/neo4j/certificates/bolt/private.key\n"
+              - "    set_neo4j_conf dbms.ssl.policy.bolt.enabled true\n"
+              - "    set_neo4j_conf dbms.ssl.policy.bolt.base_directory /var/lib/neo4j/certificates/bolt\n"
+              - "    set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key\n"
+              - "    set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt\n"
+              - "    set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE\n"
+              - "    set_neo4j_conf server.bolt.tls_level REQUIRED\n"
               - "  fi\n"
               - "}\n"
 
               - "add_cypher_ip_blocklist() {\n"
-              - "  echo \"internal.dbms.cypher_ip_blocklist=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8\" >> /etc/neo4j/neo4j.conf\n"
+              - "  set_neo4j_conf internal.dbms.cypher_ip_blocklist \"10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8\"\n"
               - "}\n"
 
               - "start_neo4j() {\n"
@@ -817,13 +1089,34 @@ Resources:
                   - autoscaling:DescribeAutoScalingGroups
                   - cloudformation:DescribeStack*
                   - ec2:DescribeInstances
+                  - ec2:DescribeVolumes
+                  - ec2:DescribeTags
                 Resource: "*"
+              # Instance must be able to attach its persistent data volume at
+              # boot. Scoped to volumes/instances in this stack via StackID
+              # tag condition.
+              - Effect: Allow
+                Action:
+                  - ec2:AttachVolume
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
+                  - !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceTag/StackID': !Ref 'AWS::StackId'
               - Effect: Allow
                 Action:
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                   - logs:DescribeLogStreams
                 Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/neo4j/${AWS::StackName}/application:*'
+              - !If
+                - BoltTLSEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref BoltCertificateSecretArn
+                - !Ref AWS::NoValue
 
   Neo4jASGTagsPolicy:
     Type: AWS::IAM::Policy
@@ -837,7 +1130,9 @@ Resources:
           - Effect: Allow
             Action:
               - autoscaling:CreateOrUpdateTags
-            Resource: !Sub 'arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${Neo4jAutoScalingGroup}'
+            # Matches the three per-node ASGs auto-named
+            # <stack>-Neo4jNode{1,2,3}ASG-<suffix>.
+            Resource: !Sub 'arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${AWS::StackName}-Neo4jNode*'
 
   Neo4jExternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -1372,10 +1667,26 @@ Outputs:
       to the internal NLB. The bastion is deliberately not a Neo4j NLB target, so
       tunneled flows cannot hairpin back to their source.
     Value: !Ref Neo4jOperatorBastion
-  Neo4jASGName:
+  Neo4jNode1ASGName:
     Condition: IsPrivate
-    Description: Auto Scaling Group name for the Neo4j cluster nodes.
-    Value: !Ref Neo4jAutoScalingGroup
+    Description: Auto Scaling Group name for Neo4j cluster node 1.
+    Value: !Ref Neo4jNode1ASG
+  Neo4jNode2ASGName:
+    Condition: IsPrivateCluster
+    Description: Auto Scaling Group name for Neo4j cluster node 2.
+    Value: !Ref Neo4jNode2ASG
+  Neo4jNode3ASGName:
+    Condition: IsPrivateCluster
+    Description: Auto Scaling Group name for Neo4j cluster node 3.
+    Value: !Ref Neo4jNode3ASG
+  Neo4jDataVolumeIds:
+    Description: >-
+      Comma-separated list of persistent data volume IDs. Retained across
+      stack deletion — see teardown.sh --delete-volumes to remove.
+    Value: !If
+      - CreateCluster
+      - !Sub '${Neo4jNode1DataVolume},${Neo4jNode2DataVolume},${Neo4jNode3DataVolume}'
+      - !Ref Neo4jNode1DataVolume
   Neo4jSSMBoltCommand:
     Condition: IsPrivate
     Description: "SSM port-forward for Bolt via operator bastion: run then connect to neo4j://localhost:7687"

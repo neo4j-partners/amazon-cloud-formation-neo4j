@@ -1,20 +1,36 @@
 import json
+import logging
 import os
+import ssl
 
 import boto3
 from neo4j import GraphDatabase
 from neo4j.exceptions import AuthError
 
+log = logging.getLogger(__name__)
+
 ssm = boto3.client("ssm")
 sm = boto3.client("secretsmanager")
 
 _driver = None
+_CA_BUNDLE = "/var/task/neo4j-ca.crt"
+if os.path.exists(_CA_BUNDLE):
+    _SSL_CTX = ssl.create_default_context(cafile=_CA_BUNDLE)
+else:
+    log.warning("neo4j-ca.crt not found — connecting without TLS (plaintext neo4j://)")
+    _SSL_CTX = None
 
 
 def _init_driver():
     nlb_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_NLB_PATH"])["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
-    return GraphDatabase.driver(f"neo4j+s://{nlb_dns}:7687", auth=("neo4j", password))
+    if _SSL_CTX is not None:
+        return GraphDatabase.driver(
+            f"neo4j+s://{nlb_dns}:7687",
+            auth=("neo4j", password),
+            ssl_context=_SSL_CTX,
+        )
+    return GraphDatabase.driver(f"neo4j://{nlb_dns}:7687", auth=("neo4j", password))
 
 
 def _get_driver():

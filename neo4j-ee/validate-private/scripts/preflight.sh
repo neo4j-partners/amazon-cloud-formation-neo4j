@@ -2,15 +2,23 @@
 # preflight.sh — Check that the stack and bastion are ready before running validate-private
 #
 # Checks (in order):
-#   1. CloudFormation stack status = CREATE_COMPLETE
-#   2. Bastion SSM PingStatus = Online
-#   3. neo4j Python driver installed on bastion  (python3 -c "import neo4j")
-#   4. cypher-shell installed on bastion
-#   5. Secrets Manager secret exists
-#   6. All 8 SSM config parameters exist under /neo4j-ee/<stack>/
+#   1.  CloudFormation stack status = CREATE_COMPLETE
+#   2.  Bastion SSM PingStatus = Online
+#   3.  neo4j Python driver installed on bastion  (python3 -c "import neo4j")
+#   4.  cypher-shell installed on bastion
+#   5.  Secrets Manager secret exists
+#   6.  Contract SSM params (5 named: vpc-id, nlb-dns, external-sg-id,
+#         password-secret-arn, vpc-endpoint-sg-id)
+#   7.  Operational SSM params (4 named: region, stack-name,
+#         private-subnet-1-id, private-subnet-2-id) [informational — WARN, not FAIL]
+#   8.  VPC interface endpoints exist (secretsmanager, logs, ssm, ssmmessages)
+#   9.  Endpoint reachable: secretsmanager
+#   10. Endpoint reachable: logs
+#   11. Endpoint reachable: ssm
+#   12. Endpoint reachable: ssmmessages
 #
 # Usage: ./scripts/preflight.sh [stack-name]
-# Typical runtime: 15-30s. Exits 0 only if all checks pass.
+# Typical runtime: 45-75s. Exits 0 only if all required checks pass (check 7 is informational).
 
 set -euo pipefail
 
@@ -42,6 +50,17 @@ _check() {
   else
     echo "  [FAIL] ${label}"
     FAIL_COUNT=$((FAIL_COUNT + 1))
+  fi
+}
+
+# Informational check — prints [INFO] or [WARN] but never increments FAIL_COUNT.
+_info_check() {
+  local label="$1"
+  shift
+  if "$@" 2>/dev/null; then
+    echo "  [INFO] ${label}"
+  else
+    echo "  [WARN] ${label}"
   fi
 }
 
@@ -103,14 +122,73 @@ _secret_exists() {
     --output text >/dev/null
 }
 
-_ssm_params_exist() {
-  local count
-  count=$(aws ssm get-parameters-by-path \
-    --path "/neo4j-ee/${STACK_NAME}/" \
+_contract_params_exist() {
+  local params=(
+    "vpc-id"
+    "nlb-dns"
+    "external-sg-id"
+    "password-secret-arn"
+    "vpc-endpoint-sg-id"
+  )
+  for param in "${params[@]}"; do
+    aws ssm get-parameter \
+      --name "/neo4j-ee/${STACK_NAME}/${param}" \
+      --region "${REGION}" \
+      --query "Parameter.Value" \
+      --output text >/dev/null 2>&1 || return 1
+  done
+}
+
+_operational_params_exist() {
+  local params=(
+    "region"
+    "stack-name"
+    "private-subnet-1-id"
+    "private-subnet-2-id"
+  )
+  for param in "${params[@]}"; do
+    aws ssm get-parameter \
+      --name "/neo4j-ee/${STACK_NAME}/${param}" \
+      --region "${REGION}" \
+      --query "Parameter.Value" \
+      --output text >/dev/null 2>&1 || return 1
+  done
+}
+
+# VPC_ID is read from SSM after check 6 passes and used by checks 8-12.
+_vpc_endpoints_exist() {
+  [ -n "${VPC_ID}" ] || return 1
+  local services
+  services=$(aws ec2 describe-vpc-endpoints \
+    --filters "Name=vpc-id,Values=${VPC_ID}" "Name=vpc-endpoint-state,Values=available" \
     --region "${REGION}" \
-    --query "length(Parameters)" \
-    --output text)
-  [ "${count}" -ge 8 ]
+    --query "VpcEndpoints[].ServiceName" \
+    --output text 2>/dev/null)
+  for svc in \
+    "com.amazonaws.${REGION}.secretsmanager" \
+    "com.amazonaws.${REGION}.logs" \
+    "com.amazonaws.${REGION}.ssm" \
+    "com.amazonaws.${REGION}.ssmmessages"; do
+    echo "${services}" | tr '\t' '\n' | grep -qxF "${svc}" || return 1
+  done
+}
+
+# Reachability probes: curl the regional endpoint hostname via the bastion.
+# Expected result: HTTP 400, 403, or 404 (endpoint refuses unsigned requests —
+# different service control planes return different 4xx codes on the root path).
+# A timeout (000) means SG or DNS is broken; 2xx means PrivateDNS is not in
+# effect and the request reached the public endpoint.
+_endpoint_reachable_secretsmanager() {
+  _send_and_wait "curl -m 5 -sSo /dev/null -w '%{http_code}' https://secretsmanager.${REGION}.amazonaws.com/ | grep -qE '^(400|403|404)$'"
+}
+_endpoint_reachable_logs() {
+  _send_and_wait "curl -m 5 -sSo /dev/null -w '%{http_code}' https://logs.${REGION}.amazonaws.com/ | grep -qE '^(400|403|404)$'"
+}
+_endpoint_reachable_ssm() {
+  _send_and_wait "curl -m 5 -sSo /dev/null -w '%{http_code}' https://ssm.${REGION}.amazonaws.com/ | grep -qE '^(400|403|404)$'"
+}
+_endpoint_reachable_ssmmessages() {
+  _send_and_wait "curl -m 5 -sSo /dev/null -w '%{http_code}' https://ssmmessages.${REGION}.amazonaws.com/ | grep -qE '^(400|403|404)$'"
 }
 
 _check "Stack status = CREATE_COMPLETE"                     _cfn_complete
@@ -118,7 +196,30 @@ _check "Bastion SSM PingStatus = Online"                    _ssm_online
 _check "neo4j Python driver installed on bastion"           _neo4j_driver_installed
 _check "cypher-shell installed on bastion"                  _cypher_shell_installed
 _check "Secret 'neo4j/${STACK_NAME}/password' exists"       _secret_exists
-_check "All 8 SSM config params under /neo4j-ee/${STACK_NAME}/" _ssm_params_exist
+_check "Contract SSM params: vpc-id, nlb-dns, external-sg-id, password-secret-arn, vpc-endpoint-sg-id" \
+  _contract_params_exist
+_info_check "Operational SSM params: region, stack-name, private-subnet-1-id, private-subnet-2-id" \
+  _operational_params_exist
+
+# Read VPC_ID from the contract SSM param. Order is load-bearing: the contract
+# params check above must pass first so a missing /vpc-id surfaces as "contract
+# param missing" rather than a confusing "no such VPC" error in checks 8-12.
+VPC_ID=$(aws ssm get-parameter \
+  --name "/neo4j-ee/${STACK_NAME}/vpc-id" \
+  --region "${REGION}" \
+  --query "Parameter.Value" \
+  --output text 2>/dev/null || echo "")
+
+_check "VPC interface endpoints: secretsmanager, logs, ssm, ssmmessages" \
+  _vpc_endpoints_exist
+_check "Endpoint reachable: secretsmanager.${REGION}.amazonaws.com" \
+  _endpoint_reachable_secretsmanager
+_check "Endpoint reachable: logs.${REGION}.amazonaws.com" \
+  _endpoint_reachable_logs
+_check "Endpoint reachable: ssm.${REGION}.amazonaws.com" \
+  _endpoint_reachable_ssm
+_check "Endpoint reachable: ssmmessages.${REGION}.amazonaws.com" \
+  _endpoint_reachable_ssmmessages
 
 echo ""
 echo "  ${PASS_COUNT} passed, ${FAIL_COUNT} failed"

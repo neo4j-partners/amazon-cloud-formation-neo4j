@@ -51,7 +51,7 @@ require_ssm() {
 # Resolve the EE outputs file
 # ---------------------------------------------------------------------------
 if [ $# -ge 1 ]; then
-  OUTPUTS_FILE="${DEPLOY_DIR}/$1.txt"
+  OUTPUTS_FILE="${DEPLOY_DIR}/${1%.txt}.txt"
 elif [ -d "${DEPLOY_DIR}" ]; then
   OUTPUTS_FILE=$(ls -t "${DEPLOY_DIR}"/*.txt 2>/dev/null | head -1 || true)
 else
@@ -97,11 +97,13 @@ VPC_ID=$(require_ssm "${REGION}" "${SSM_PREFIX}/vpc-id")
 NLB_DNS=$(require_ssm "${REGION}" "${SSM_PREFIX}/nlb-dns")
 EXTERNAL_SG_ID=$(require_ssm "${REGION}" "${SSM_PREFIX}/external-sg-id")
 PASSWORD_SECRET_ARN=$(require_ssm "${REGION}" "${SSM_PREFIX}/password-secret-arn")
+VPC_ENDPOINT_SG_ID=$(require_ssm "${REGION}" "${SSM_PREFIX}/vpc-endpoint-sg-id")
 
 echo "  vpc-id:              ${VPC_ID}"
 echo "  nlb-dns:             ${NLB_DNS}"
 echo "  external-sg-id:      ${EXTERNAL_SG_ID}"
 echo "  password-secret-arn: ${PASSWORD_SECRET_ARN}"
+echo "  vpc-endpoint-sg-id:  ${VPC_ENDPOINT_SG_ID}"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -145,6 +147,7 @@ cdk deploy \
   -c "vpcId=${VPC_ID}" \
   -c "externalSgId=${EXTERNAL_SG_ID}" \
   -c "passwordSecretArn=${PASSWORD_SECRET_ARN}" \
+  -c "vpcEndpointSgId=${VPC_ENDPOINT_SG_ID}" \
   --require-approval never \
   --outputs-file "${OUTPUTS_JSON}"
 

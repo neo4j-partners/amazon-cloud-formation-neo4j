@@ -27,7 +27,7 @@ Bash operator scripts that use the AWS CLI directly. All scripts read `AWS_PROFI
 | Script | What it does | Runtime |
 |---|---|---|
 | `scripts/get-password.sh [stack]` | Print the Neo4j password from Secrets Manager to stdout | <5s |
-| `scripts/preflight.sh [stack]` | Run 6 prerequisite checks: stack status, bastion SSM, Python driver, cypher-shell, secret, SSM params. Exits 0 only if all pass. | 15–30s |
+| `scripts/preflight.sh [stack]` | Run 11 prerequisite checks (+ 1 informational): stack status, bastion SSM, Python driver, cypher-shell, secret, contract SSM params, VPC endpoints, and endpoint reachability probes. Exits 0 only if all required checks pass. | 45–75s |
 | `scripts/smoke-write.sh [stack] [N=20]` | Run N `CREATE ... DELETE` write operations through the cluster. Fails if any iteration fails. | ~60s at N=20 |
 | `scripts/browser-tunnel.sh [stack]` | Open a port-forward tunnel to the NLB on port 7474. Go to `http://localhost:7474` after it opens. | Interactive |
 | `scripts/ssm_check_sessions.sh [stack] [region]` | List active SSM sessions for the stack's ASG instances. | <5s |

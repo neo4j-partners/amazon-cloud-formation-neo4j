@@ -317,32 +317,117 @@ No NAT traffic. No public-internet egress. App identity is its own SG.
 - Document the SM interface endpoint.
 - Add a "Building an app that uses this deployment" section pointing here.
 
+### `neo4j-ee/validate-private/scripts/preflight.sh`
+
+The bastion validator runs from an operator's laptop and uses SSM Run Command
+to drive the bastion. The bastion's SG is already in the endpoint SG ingress
+list, so its **runtime** access patterns are unchanged by this work. What
+*does* need to change is preflight's coverage of the new platform surface so
+that misconfigured/old EE stacks fail fast.
+
+1. **Replace the count-based SSM param check with name enumeration.** Today
+   the script does `[ count >= 9 ]` and labels it "All 9 SSM config params."
+   That is fragile (a missing critical param can be hidden by an unrelated
+   extra one) and the label drifts every time the contract grows.
+
+   Replace with: explicitly assert each contract param exists, by name. The
+   list comes straight from §2:
+
+   ```
+   /neo4j-ee/<stack>/vpc-id
+   /neo4j-ee/<stack>/nlb-dns
+   /neo4j-ee/<stack>/external-sg-id
+   /neo4j-ee/<stack>/password-secret-arn
+   /neo4j-ee/<stack>/vpc-endpoint-sg-id   # new
+   ```
+
+   The other params (`region`, `stack-name`, `private-subnet-1-id`,
+   `private-subnet-2-id`) are operational metadata the bastion path does not
+   strictly need; treat them as optional or add them to a separate
+   "informational" check. **Why:** the validator's job is "this stack
+   satisfies the contract apps will rely on." Asserting the contract directly
+   is more accurate than counting.
+
+2. **Add an existence check for the new VPC interface endpoints.** A stack
+   that pre-dates this work (or one mid-upgrade) will be missing the
+   Secrets Manager and/or Logs endpoints, and apps deployed against it will
+   silently hang. One call:
+
+   ```
+   aws ec2 describe-vpc-endpoints \
+     --filters Name=vpc-id,Values=${VPC_ID} \
+     --query "VpcEndpoints[?contains(['com.amazonaws.${REGION}.secretsmanager','com.amazonaws.${REGION}.logs','com.amazonaws.${REGION}.ssm','com.amazonaws.${REGION}.ssmmessages'], ServiceName)].ServiceName"
+   ```
+
+   Assert all four service names appear. **Why:** the symptoms of a missing
+   endpoint look identical to "my Lambda has a bug" from inside an app, so
+   detecting it at the platform level saves hours.
+
+3. **Add a bastion-side reachability probe to the Secrets Manager endpoint.**
+   This is the ground-truth check: DNS resolves to a private IP *and* the SG
+   path is open. Run on the bastion via SSM Run Command (the existing
+   `_send_and_wait` helper):
+
+   ```
+   curl -m 5 -sS https://secretsmanager.${REGION}.amazonaws.com/ \
+     -o /dev/null -w '%{http_code}\n'
+   ```
+
+   Expect HTTP 400, 403, or 404 — different AWS service control planes return
+   different 4xx codes for unsigned requests to the root path (`ssm` and
+   `ssmmessages` return 400; `secretsmanager` and `logs` return 404).
+   `000`/timeout means SG or DNS is wrong; a 2xx means the request left the
+   VPC and reached a public endpoint, which means PrivateDns is not in effect.
+   **Why:** the same probe is what an app would do at startup; we are
+   validating the path *as the app sees it*, from a known-good in-VPC client
+   (the bastion). A passing probe here is strong evidence apps will work too.
+
+   Apply the same pattern to `logs.<region>.amazonaws.com`, `ssm.<region>.amazonaws.com`,
+   and `ssmmessages.<region>.amazonaws.com` — one probe per endpoint, all
+   expected to return 400, 403, or 404. Four probes total.
+
+The new preflight check tally becomes: stack status, bastion SSM, neo4j
+driver, cypher-shell, secret exists, contract SSM params (named), VPC
+endpoints exist, endpoint reachability (4 probes) = **8 logical checks**
+(probes can be one combined check or four separate, operator preference).
+
 ## 10. Checklist
 
 EE template (`neo4j-ee/neo4j.template.yaml`):
-- [ ] Add `SecretsManagerVpcEndpoint` (interface, Condition: IsPrivate, attached
+- [x] Add `SecretsManagerVpcEndpoint` (interface, Condition: IsPrivate, attached
       to `VpcEndpointSecurityGroup`, `PrivateDnsEnabled: true`).
-- [ ] Add SSM param `Neo4jConfigVpcEndpointSgParameter` publishing
+- [x] Add SSM param `Neo4jConfigVpcEndpointSgParameter` publishing
       `!Ref VpcEndpointSecurityGroup` at `/neo4j-ee/<stack>/vpc-endpoint-sg-id`.
 
 Deploy script (`deploy-sample-private-app.sh`):
-- [ ] `require_ssm` the new `/vpc-endpoint-sg-id` param.
-- [ ] Pass it to `cdk deploy` as `-c vpcEndpointSgId=...`.
-- [ ] Echo it in the "Reading SSM parameters from EE stack..." block.
+- [x] `require_ssm` the new `/vpc-endpoint-sg-id` param.
+- [x] Pass it to `cdk deploy` as `-c vpcEndpointSgId=...`.
+- [x] Echo it in the "Reading SSM parameters from EE stack..." block.
 
 CDK app (`neo4j_demo/neo4j_demo_stack.py`):
-- [ ] Read the new context value via `require_context("vpcEndpointSgId")`.
-- [ ] Look up `endpoint_sg` with `mutable=True` (required — see §3).
-- [ ] Set `mutable=True` on the `Neo4jExternalSecurityGroup` import too, for consistency.
-- [ ] Add `endpoint_sg.add_ingress_rule(lambda_sg, 443, ...)`.
-- [ ] Drop `lambda_sg`'s `0.0.0.0/0:443` egress rule.
-- [ ] Add `lambda_sg` egress 443 → `endpoint_sg`.
-- [ ] Set `log_retention=ONE_MONTH`, `logging_format=JSON`,
+- [x] Read the new context value via `require_context("vpcEndpointSgId")`.
+- [x] Look up `endpoint_sg` with `mutable=True` (required — see §3).
+- [x] Set `mutable=True` on the `Neo4jExternalSecurityGroup` import too, for consistency.
+- [x] Add `endpoint_sg.add_ingress_rule(lambda_sg, 443, ...)`.
+- [x] Drop `lambda_sg`'s `0.0.0.0/0:443` egress rule.
+- [x] Add `lambda_sg` egress 443 → `endpoint_sg`.
+- [x] Set `log_retention=ONE_MONTH`, `logging_format=JSON`,
       `application_log_level_v2=INFO`, `tracing=ACTIVE` on the Function.
 
 Docs:
 - [ ] Update `neo4j-ee/PRIVATE_ACCESS_GUIDE.md` with the new contract param,
       the SM endpoint, and a pointer to this document.
+
+Bastion validator (`neo4j-ee/validate-private/scripts/preflight.sh`):
+- [ ] Replace the count-based `_ssm_params_exist` check with a per-name
+      enumeration of the contract params (`vpc-id`, `nlb-dns`,
+      `external-sg-id`, `password-secret-arn`, `vpc-endpoint-sg-id`).
+- [ ] Add `_vpc_endpoints_exist` check asserting interface endpoints for
+      `secretsmanager`, `logs`, `ssm`, and `ssmmessages` are present in the VPC.
+- [ ] Add bastion-side reachability probes (via SSM Run Command) to
+      `secretsmanager`, `logs`, `ssm`, `ssmmessages` regional endpoints.
+      Expect HTTP 400/403 (signed-request-required); timeout = SG or DNS broken.
+- [ ] Update the script's header comment + README check count to match.
 
 Validation:
 - [ ] Redeploy EE stack (Private mode) and the CDK app cleanly from scratch.

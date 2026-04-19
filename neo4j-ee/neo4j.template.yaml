@@ -486,6 +486,8 @@ Resources:
         - - !Ref 'AWS::StackName'
           - 'nlb'
       Scheme: !If [IsPrivate, internal, internet-facing]
+      SecurityGroups:
+        - !Ref Neo4jExternalSecurityGroup
       Subnets: !If
         - IsPrivate
         - !If [CreateCluster, [!Ref Neo4jPrivateSubnet1, !Ref Neo4jPrivateSubnet2, !Ref Neo4jPrivateSubnet3], [!Ref Neo4jPrivateSubnet1]]
@@ -1045,6 +1047,15 @@ Resources:
       Value: !GetAtt Neo4jExternalSecurityGroup.GroupId
       Description: Neo4j external security group ID (Lambda egress rule target for port 7687).
 
+  Neo4jConfigVpcEndpointSgParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/vpc-endpoint-sg-id'
+      Type: String
+      Value: !GetAtt VpcEndpointSecurityGroup.GroupId
+      Description: Security group ID on all interface VPC endpoints. In-VPC apps add this as an ingress rule source so their SG can reach SSM, Secrets Manager, and CloudWatch Logs via PrivateLink.
+
   Neo4jBastionRole:
     Type: AWS::IAM::Role
     Condition: IsPrivate
@@ -1200,6 +1211,23 @@ Resources:
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
+      VpcId: !Ref Neo4jVPC
+      SubnetIds: !If
+        - IsPrivateCluster
+        - - !Ref Neo4jPrivateSubnet1
+          - !Ref Neo4jPrivateSubnet2
+          - !Ref Neo4jPrivateSubnet3
+        - - !Ref Neo4jPrivateSubnet1
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
+  SecretsManagerVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: IsPrivate
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
       VpcId: !Ref Neo4jVPC
       SubnetIds: !If
         - IsPrivateCluster
@@ -1372,7 +1400,7 @@ Outputs:
     Description: >-
       SSM Parameter Store path prefix for non-secret stack configuration.
       Entries: vpc-id, nlb-dns, region, stack-name, private-subnet-1-id,
-      private-subnet-2-id, password-secret-arn, external-sg-id.
+      private-subnet-2-id, password-secret-arn, external-sg-id, vpc-endpoint-sg-id.
       In-VPC apps read from here instead of the operator's local
       .deploy/<stack>.txt file.
     Value: !Sub '/neo4j-ee/${AWS::StackName}/'

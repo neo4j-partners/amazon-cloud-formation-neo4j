@@ -3,6 +3,7 @@ from aws_cdk import (
     aws_ec2 as ec2,
     aws_iam as iam,
     aws_lambda as lambda_,
+    aws_logs as logs,
     aws_secretsmanager as sm,
 )
 from constructs import Construct
@@ -22,12 +23,17 @@ class Neo4jDemoStack(cdk.Stack):
         external_sg_id = require_context("externalSgId")
         password_secret_arn = require_context("passwordSecretArn")
         neo4j_stack = require_context("neo4jStack")
+        vpc_endpoint_sg_id = require_context("vpcEndpointSgId")
         ssm_prefix = f"/neo4j-ee/{neo4j_stack}"
 
         vpc = ec2.Vpc.from_lookup(self, "Neo4jVpc", vpc_id=vpc_id)
 
         neo4j_external_sg = ec2.SecurityGroup.from_security_group_id(
-            self, "Neo4jExternalSG", external_sg_id
+            self, "Neo4jExternalSG", external_sg_id, mutable=True
+        )
+
+        endpoint_sg = ec2.SecurityGroup.from_security_group_id(
+            self, "VpcEndpointSG", vpc_endpoint_sg_id, mutable=True
         )
 
         lambda_sg = ec2.SecurityGroup(
@@ -43,9 +49,19 @@ class Neo4jDemoStack(cdk.Stack):
             description="Bolt to Neo4j NLB",
         )
         lambda_sg.add_egress_rule(
-            peer=ec2.Peer.any_ipv4(),
+            peer=endpoint_sg,
             connection=ec2.Port.tcp(443),
-            description="HTTPS for AWS API calls",
+            description="HTTPS to VPC interface endpoints",
+        )
+        endpoint_sg.add_ingress_rule(
+            peer=lambda_sg,
+            connection=ec2.Port.tcp(443),
+            description="Allow Lambda SG to reach VPC interface endpoints",
+        )
+        neo4j_external_sg.add_ingress_rule(
+            peer=lambda_sg,
+            connection=ec2.Port.tcp(7687),
+            description="Allow Lambda Bolt to NLB",
         )
 
         password_secret = sm.Secret.from_secret_complete_arn(
@@ -72,6 +88,13 @@ class Neo4jDemoStack(cdk.Stack):
         )
         password_secret.grant_read(fn_role)
 
+        fn_log_group = logs.LogGroup(
+            self,
+            "Neo4jDemoFunctionLogGroup",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+        )
+
         demo_fn = lambda_.Function(
             self,
             "Neo4jDemoFunction",
@@ -88,6 +111,10 @@ class Neo4jDemoStack(cdk.Stack):
                 "NEO4J_SSM_NLB_PATH": f"{ssm_prefix}/nlb-dns",
                 "NEO4J_SECRET_ARN": password_secret_arn,
             },
+            log_group=fn_log_group,
+            logging_format=lambda_.LoggingFormat.JSON,
+            application_log_level_v2=lambda_.ApplicationLogLevel.INFO,
+            tracing=lambda_.Tracing.ACTIVE,
         )
 
         fn_url = demo_fn.add_function_url(

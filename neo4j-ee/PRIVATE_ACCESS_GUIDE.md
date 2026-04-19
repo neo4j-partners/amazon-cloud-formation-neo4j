@@ -66,9 +66,15 @@ Expected output when everything is ready:
   [PASS] neo4j Python driver installed on bastion
   [PASS] cypher-shell installed on bastion
   [PASS] Secret 'neo4j/test-ee-1776575131/password' exists
-  [PASS] All 8 SSM config params under /neo4j-ee/test-ee-1776575131/
+  [PASS] Contract SSM params: vpc-id, nlb-dns, external-sg-id, password-secret-arn, vpc-endpoint-sg-id
+  [INFO] Operational SSM params: region, stack-name, private-subnet-1-id, private-subnet-2-id
+  [PASS] VPC interface endpoints: secretsmanager, logs, ssm, ssmmessages
+  [PASS] Endpoint reachable: secretsmanager.us-east-1.amazonaws.com
+  [PASS] Endpoint reachable: logs.us-east-1.amazonaws.com
+  [PASS] Endpoint reachable: ssm.us-east-1.amazonaws.com
+  [PASS] Endpoint reachable: ssmmessages.us-east-1.amazonaws.com
 
-  6 passed, 0 failed
+  11 passed, 0 failed
   All checks passed.
 ```
 
@@ -254,3 +260,64 @@ aws ssm send-command \
   --region <region>
 ```
 Then retrieve with `aws ssm get-command-invocation`.
+
+---
+
+## 9. Platform contract (SSM parameters and VPC endpoints)
+
+The EE stack publishes all resource IDs via SSM so that applications and tooling can wire themselves up without knowing stack internals. `preflight.sh` checks two groups.
+
+**Contract SSM parameters** — required; all five must exist for the platform to be usable:
+
+| Parameter | Purpose |
+|---|---|
+| `/neo4j-ee/<stack>/vpc-id` | VPC the app should attach to |
+| `/neo4j-ee/<stack>/nlb-dns` | Internal NLB DNS for Bolt connections |
+| `/neo4j-ee/<stack>/external-sg-id` | SG with 7687 ingress to Neo4j instances |
+| `/neo4j-ee/<stack>/password-secret-arn` | Secrets Manager ARN for the Neo4j password |
+| `/neo4j-ee/<stack>/vpc-endpoint-sg-id` | SG attached to the interface VPC endpoints |
+
+**Operational SSM parameters** — informational; `preflight.sh` prints `[INFO]`/`[WARN]` but does not fail if these are missing:
+
+| Parameter | Purpose |
+|---|---|
+| `/neo4j-ee/<stack>/region` | AWS region |
+| `/neo4j-ee/<stack>/stack-name` | Stack name |
+| `/neo4j-ee/<stack>/private-subnet-1-id` | First private subnet |
+| `/neo4j-ee/<stack>/private-subnet-2-id` | Second private subnet |
+
+**VPC interface endpoints**
+
+A Private-mode stack provisions interface VPC endpoints for `ssm`, `ssmmessages`, `logs`, and `secretsmanager` with `PrivateDnsEnabled: true`. All four regional hostnames resolve to private IPs inside the VPC automatically — no endpoint URL overrides needed in application code.
+
+The `secretsmanager` endpoint is required so Lambda functions (and Neo4j instances on first boot) can call `secretsmanager:GetSecretValue` without leaving the VPC via NAT. See `sample-private-app/PRIVATE_APP_ARCHITECTURE.md §4` for the full rationale.
+
+**Why `preflight.sh` reads VPC_ID from the SSM contract param**
+
+The VPC endpoint checks (checks 8–12) need the VPC ID. It is read from `/neo4j-ee/<stack>/vpc-id` rather than from CloudFormation outputs or EC2 describe APIs for three reasons:
+
+1. **Contract pattern.** The platform publishes IDs via SSM; consumers look them up. `preflight.sh` is a consumer. Using the SSM lookup means preflight exercises the same path applications exercise — bug-for-bug equivalence.
+2. **Implicit validation.** Check 6 (contract params) already asserts `/vpc-id` exists. If check 6 passes, the value is available and the VPC endpoint checks reuse it with no new failure mode.
+3. **No template change needed.** Alternatives — adding `VpcId` to CloudFormation outputs or deriving it from `describe-instances` — both work but cost more. One extra `ssm get-parameter` call is sufficient.
+
+The checks are ordered: contract params (check 6) before VPC_ID read, before VPC endpoint checks (8–12). A missing `/vpc-id` surfaces as "contract param missing" rather than an opaque "no such VPC" error downstream.
+
+---
+
+## 10. Building an application that uses this deployment
+
+For the full architecture, rationale, and implementation guide for building an application that connects to a Private-mode Neo4j EE stack, see:
+
+```
+neo4j-ee/sample-private-app/PRIVATE_APP_ARCHITECTURE.md
+```
+
+That document covers:
+
+- The architectural contract: how the platform publishes IDs and how apps consume them
+- Why `/vpc-endpoint-sg-id` is a contract parameter (three-option decision trace)
+- CDK implementation: SG wiring, `mutable=True` semantics, Lambda observability settings
+- Why CloudWatch Logs is silently broken without the endpoint SG wiring
+- The complete implementation checklist
+
+The `sample-private-app/` directory contains a working CDK app (`neo4j_demo/neo4j_demo_stack.py`) and deploy script (`deploy-sample-private-app.sh`) that implement this contract.

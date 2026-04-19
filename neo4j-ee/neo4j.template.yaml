@@ -390,6 +390,7 @@ Resources:
   Neo4jPrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Condition: IsPrivate
+    DependsOn: Neo4jPrivateRoute1
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable1
       SubnetId: !Ref Neo4jPrivateSubnet1
@@ -397,6 +398,7 @@ Resources:
   Neo4jPrivateSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Condition: IsPrivateCluster
+    DependsOn: Neo4jPrivateRoute2
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable2
       SubnetId: !Ref Neo4jPrivateSubnet2
@@ -404,6 +406,7 @@ Resources:
   Neo4jPrivateSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Condition: IsPrivateCluster
+    DependsOn: Neo4jPrivateRoute3
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable3
       SubnetId: !Ref Neo4jPrivateSubnet3
@@ -534,6 +537,12 @@ Resources:
       HealthCheckIntervalSeconds: 10
       Matcher:
         HttpCode: '200'
+      # preserve_client_ip.enabled=false prevents NLB NAT-loopback (hairpin)
+      # failures when operator tunnels reach the NLB from a cluster member.
+      # See README "Private mode networking" and worklog/FIX_SSM_V7.md §9.
+      TargetGroupAttributes:
+        - Key: preserve_client_ip.enabled
+          Value: "false"
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -554,6 +563,9 @@ Resources:
       Port: 7687
       Protocol: TCP
       HealthCheckIntervalSeconds: 10
+      TargetGroupAttributes:
+        - Key: preserve_client_ip.enabled
+          Value: "false"
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -569,6 +581,10 @@ Resources:
 
   Neo4jAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - Neo4jPrivateSubnet1RouteTableAssociation
+      - Neo4jPrivateSubnet2RouteTableAssociation
+      - Neo4jPrivateSubnet3RouteTableAssociation
     Properties:
       AvailabilityZones: !If [CreateCluster, [!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 1, Fn::GetAZs: !Ref 'AWS::Region' ] , !Select [ 2, Fn::GetAZs: !Ref 'AWS::Region' ]],[!Select [ 0, Fn::GetAZs: !Ref 'AWS::Region' ]]]
       LaunchTemplate:
@@ -906,6 +922,197 @@ Resources:
       SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
 
   # ---------------------------------------------------------------------------
+  # Operator bastion (Private mode only)
+  # A non-Neo4j-target t4g.nano used as the SSM Session Manager entry point
+  # for operator port-forwarding to the internal NLB. It is deliberately NOT
+  # registered in any NLB target group — that topology makes NAT-loopback
+  # (hairpin) failures impossible for flows originating from the bastion, so
+  # operator tunnels to :7474/:7687 via the NLB always route to a different
+  # instance than the flow source. See README "Private mode networking" and
+  # neo4j-ee/worklog/FIX_SSM_V7.md §9 for the full analysis.
+  # ---------------------------------------------------------------------------
+
+  Neo4jBastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: IsPrivate
+    Properties:
+      GroupDescription: Operator bastion - no ingress; outbound via VPC endpoints and NLB
+      VpcId: !Ref Neo4jVPC
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-bastion-sg'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
+  # Stack-owned credential + configuration (Private mode only)
+  #
+  # Secrets Manager holds the Neo4j admin password. SSM Parameter Store holds
+  # non-secret stack configuration (VPC ID, NLB DNS, subnet IDs, region) so
+  # in-VPC apps — starting with the bastion test helper and extending to any
+  # future reference Lambda — can discover this stack without needing the
+  # operator's local .deploy/<stack>.txt file.
+  #
+  # Both are stack-owned: they are deleted when the stack is deleted.
+  # teardown.sh additionally force-deletes the secret to skip the default
+  # 30-day recovery window (which would otherwise block re-deploying the same
+  # stack name).
+  # ---------------------------------------------------------------------------
+  Neo4jPasswordSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub 'neo4j/${AWS::StackName}/password'
+      Description: !Sub 'Neo4j admin password for stack ${AWS::StackName}'
+      SecretString: !Ref Password
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jConfigVpcIdParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/vpc-id'
+      Type: String
+      Value: !Ref Neo4jVPC
+      Description: VPC ID for the Neo4j EE stack.
+
+  Neo4jConfigNlbDnsParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/nlb-dns'
+      Type: String
+      Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+      Description: Internal NLB DNS name (connect via neo4j://<dns>:7687 from in-VPC).
+
+  Neo4jConfigRegionParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/region'
+      Type: String
+      Value: !Ref 'AWS::Region'
+      Description: AWS region for the Neo4j EE stack.
+
+  Neo4jConfigStackNameParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/stack-name'
+      Type: String
+      Value: !Ref 'AWS::StackName'
+      Description: CloudFormation stack name.
+
+  Neo4jConfigPrivateSubnet1Parameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-subnet-1-id'
+      Type: String
+      Value: !Ref Neo4jPrivateSubnet1
+      Description: First private subnet ID (Lambda / reference app placement).
+
+  Neo4jConfigPrivateSubnet2Parameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-subnet-2-id'
+      Type: String
+      Value: !Ref Neo4jPrivateSubnet2
+      Description: Second private subnet ID (Lambda / reference app placement).
+
+  Neo4jBastionRole:
+    Type: AWS::IAM::Role
+    Condition: IsPrivate
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: Neo4jBastionSecretAndConfigRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: !Ref Neo4jPasswordSecret
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/neo4j-ee/${AWS::StackName}/*'
+
+  Neo4jBastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: IsPrivate
+    Properties:
+      Roles:
+        - !Ref Neo4jBastionRole
+
+  Neo4jOperatorBastion:
+    Type: AWS::EC2::Instance
+    Condition: IsPrivate
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT10M
+    Properties:
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}'
+      InstanceType: t4g.nano
+      SubnetId: !Ref Neo4jPrivateSubnet1
+      SecurityGroupIds:
+        - !Ref Neo4jBastionSecurityGroup
+      IamInstanceProfile: !Ref Neo4jBastionInstanceProfile
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            Encrypted: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+          dnf install -y python3-pip
+          dnf update -y aws-cfn-bootstrap
+          python3 -m pip install --upgrade pip
+          python3 -m pip install 'neo4j>=5,<6'
+
+          systemctl is-active amazon-ssm-agent
+
+          /opt/aws/bin/cfn-signal --success true \
+            --stack ${AWS::StackName} \
+            --resource Neo4jOperatorBastion \
+            --region ${AWS::Region}
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-bastion'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
   # VPC endpoints for Systems Manager (Private mode only)
   # Routes SSM control-plane traffic through AWS PrivateLink rather than NAT.
   # Required: ssm (registration/polling), ssmmessages (Session Manager),
@@ -918,13 +1125,17 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Condition: IsPrivate
     Properties:
-      GroupDescription: Allow HTTPS from Neo4j instances to VPC interface endpoints
+      GroupDescription: Allow HTTPS from Neo4j instances and operator bastion to VPC interface endpoints
       VpcId: !Ref Neo4jVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           SourceSecurityGroupId: !Ref Neo4jExternalSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref Neo4jBastionSecurityGroup
 
   SsmVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
@@ -949,23 +1160,6 @@ Resources:
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
-      VpcId: !Ref Neo4jVPC
-      SubnetIds: !If
-        - IsPrivateCluster
-        - - !Ref Neo4jPrivateSubnet1
-          - !Ref Neo4jPrivateSubnet2
-          - !Ref Neo4jPrivateSubnet3
-        - - !Ref Neo4jPrivateSubnet1
-      SecurityGroupIds:
-        - !Ref VpcEndpointSecurityGroup
-      PrivateDnsEnabled: true
-
-  Ec2MessagesVpcEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Condition: IsPrivate
-    Properties:
-      VpcEndpointType: Interface
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2messages'
       VpcId: !Ref Neo4jVPC
       SubnetIds: !If
         - IsPrivateCluster
@@ -1120,22 +1314,44 @@ Outputs:
     Condition: IsPrivate
     Description: Internal NLB DNS name (not internet-reachable; use SSM port-forwarding to connect)
     Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
-  Neo4jASGName:
+  Neo4jOperatorBastionId:
     Condition: IsPrivate
     Description: >-
-      Auto Scaling Group name. To get an instance ID for SSM access, run:
-      aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names <value>
-      --query 'AutoScalingGroups[0].Instances[?LifecycleState==`InService`].InstanceId|[0]'
-      --output text
+      Operator bastion instance ID. Use this as the SSM --target for port-forwarding
+      to the internal NLB. The bastion is deliberately not a Neo4j NLB target, so
+      tunneled flows cannot hairpin back to their source.
+    Value: !Ref Neo4jOperatorBastion
+  Neo4jASGName:
+    Condition: IsPrivate
+    Description: Auto Scaling Group name for the Neo4j cluster nodes.
     Value: !Ref Neo4jAutoScalingGroup
   Neo4jSSMBoltCommand:
     Condition: IsPrivate
-    Description: "SSM port-forward for Bolt: replace INSTANCE-ID with an ID from Neo4jASGName, then connect to neo4j://localhost:7687"
-    Value: !Sub "aws ssm start-session --target INSTANCE-ID --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7687,localPortNumber=7687' --region ${AWS::Region}"
+    Description: "SSM port-forward for Bolt via operator bastion: run then connect to neo4j://localhost:7687"
+    Value: !Sub "aws ssm start-session --target ${Neo4jOperatorBastion} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7687,localPortNumber=7687' --region ${AWS::Region}"
   Neo4jSSMHTTPCommand:
     Condition: IsPrivate
-    Description: "SSM port-forward for Browser: replace INSTANCE-ID with an ID from Neo4jASGName, then open http://localhost:7474"
-    Value: !Sub "aws ssm start-session --target INSTANCE-ID --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7474,localPortNumber=7474' --region ${AWS::Region}"
+    Description: "SSM port-forward for Browser via operator bastion: run then open http://localhost:7474"
+    Value: !Sub "aws ssm start-session --target ${Neo4jOperatorBastion} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7474,localPortNumber=7474' --region ${AWS::Region}"
+  Neo4jPasswordSecretArn:
+    Condition: IsPrivate
+    Description: >-
+      Secrets Manager ARN holding the Neo4j admin password. The plaintext
+      password is deliberately not exposed as a CFN Output — reading it
+      requires separate secretsmanager:GetSecretValue IAM on this ARN.
+    Value: !Ref Neo4jPasswordSecret
+  Neo4jPasswordRetrieveCommand:
+    Condition: IsPrivate
+    Description: "Copy-paste CLI to retrieve the Neo4j password from Secrets Manager."
+    Value: !Sub "aws secretsmanager get-secret-value --secret-id ${Neo4jPasswordSecret} --query SecretString --output text --region ${AWS::Region}"
+  Neo4jConfigParameterPrefix:
+    Condition: IsPrivate
+    Description: >-
+      SSM Parameter Store path prefix for non-secret stack configuration.
+      Entries: vpc-id, nlb-dns, region, stack-name, private-subnet-1-id,
+      private-subnet-2-id. In-VPC apps read from here instead of the
+      operator's local .deploy/<stack>.txt file.
+    Value: !Sub '/neo4j-ee/${AWS::StackName}/'
 
   # Common outputs
   Username:

@@ -100,6 +100,25 @@ if [ -n "${SSM_PARAM_PATH}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Step 2b: Force-delete the Neo4j password secret (Private mode only)
+#
+# The stack owns AWS::SecretsManager::Secret at neo4j/<stack-name>/password.
+# CFN's stack delete schedules the secret for deletion with a 30-day recovery
+# window, which blocks re-deploying the same stack name until the window
+# expires. Force-delete purges it immediately. --force-delete-without-recovery
+# works on secrets already in "scheduled deletion" state, so running this
+# after stack delete is safe and idempotent.
+# ---------------------------------------------------------------------------
+PASSWORD_SECRET_NAME="neo4j/${STACK_NAME}/password"
+echo ""
+echo "Force-deleting password secret ${PASSWORD_SECRET_NAME} (if present)..."
+aws secretsmanager delete-secret \
+  --region "${REGION}" \
+  --secret-id "${PASSWORD_SECRET_NAME}" \
+  --force-delete-without-recovery 2>/dev/null || true
+echo "Password secret cleanup done."
+
+# ---------------------------------------------------------------------------
 # Step 3: Clean up copied AMI (cross-region local AMI deploys only)
 # ---------------------------------------------------------------------------
 if [ -n "${COPIED_AMI_ID}" ]; then

@@ -63,7 +63,11 @@ class StackConfig:
             bolt_uri = f"bolt://localhost:{LOCAL_BOLT_PORT}"
             last_exc: Exception | None = None
             for _ in range(10):
-                drv = GraphDatabase.driver(bolt_uri, auth=(self.username, self.password))
+                drv = GraphDatabase.driver(
+                    bolt_uri,
+                    auth=(self.username, self.password),
+                    max_transaction_retry_time=2.0,
+                )
                 try:
                     drv.execute_query("CREATE (n:_LeaderProbe) DELETE n")
                     yield drv

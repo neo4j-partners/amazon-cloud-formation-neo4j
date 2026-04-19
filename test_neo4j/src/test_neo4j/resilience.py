@@ -143,38 +143,51 @@ def _check_cluster_overview(
     reporter: TestReporter,
     expected_nodes: int,
 ) -> None:
-    """Verify the cluster has reformed: expected node count with exactly one LEADER."""
+    """Verify the cluster has reformed: expected node count with exactly one writer.
+
+    dbms.cluster.overview() was removed in Neo4j 5. Uses SHOW SERVERS (system db)
+    for node count + health, and dbms.routing.getRoutingTable for writer/reader split.
+    """
     with reporter.test("Cluster overview after node replacement") as ctx:
         try:
             with config.driver() as driver:
-                records, _, _ = driver.execute_query(
-                    "CALL dbms.cluster.overview() YIELD id, addresses, role "
-                    "RETURN id, addresses, role"
+                server_records, _, _ = driver.execute_query(
+                    "SHOW SERVERS",
+                    database_="system",
                 )
-                actual_count = len(records)
-                roles = [r["role"] for r in records]
-                leader_count = sum(1 for r in roles if r == "LEADER")
+                actual_count = len(server_records)
+                unhealthy = [
+                    r["name"]
+                    for r in server_records
+                    if r["health"] != "Available" or r["state"] != "Enabled"
+                ]
+
+                routing_records, _, _ = driver.execute_query(
+                    "CALL dbms.routing.getRoutingTable({}) YIELD servers RETURN servers"
+                )
+                servers = routing_records[0]["servers"]
+                write_entry = next((s for s in servers if s["role"] == "WRITE"), None)
+                read_entry = next((s for s in servers if s["role"] == "READ"), None)
+                writer_count = len(write_entry["addresses"]) if write_entry else 0
+                reader_count = len(read_entry["addresses"]) if read_entry else 0
 
                 issues = []
                 if actual_count != expected_nodes:
                     issues.append(f"expected {expected_nodes} nodes, got {actual_count}")
-                if leader_count != 1:
-                    issues.append(f"expected 1 LEADER, got {leader_count}")
+                if unhealthy:
+                    issues.append(f"unhealthy nodes: {unhealthy}")
+                if writer_count != 1:
+                    issues.append(f"expected 1 writer, got {writer_count}")
 
                 if not issues:
-                    follower_count = actual_count - leader_count
                     ctx.pass_(
                         f"Cluster has {actual_count} nodes "
-                        f"(1 LEADER, {follower_count} FOLLOWER)"
+                        f"(1 writer, {reader_count} reader(s))"
                     )
                 else:
-                    role_summary = ", ".join(roles)
-                    ctx.fail(
-                        f"Cluster check failed: {'; '.join(issues)} "
-                        f"(roles: {role_summary})"
-                    )
+                    ctx.fail(f"Cluster check failed: {'; '.join(issues)}")
         except Exception as exc:
-            ctx.fail(f"Failed to query dbms.cluster.overview(): {exc}")
+            ctx.fail(f"Failed to query cluster state: {exc}")
 
 
 def run_ee_resilience_tests(

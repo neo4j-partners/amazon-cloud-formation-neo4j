@@ -163,8 +163,10 @@ def main() -> None:
 
         from test_neo4j.aws_helpers import (  # noqa: PLC0415
             get_asg_instance_id,
+            get_bastion_instance_id,
             get_stack_resources,
             ssm_port_forward,
+            wait_for_ssm_ready,
         )
 
         session = boto3.Session(region_name=config.region)
@@ -173,12 +175,20 @@ def main() -> None:
     fwd_stack = contextlib.ExitStack()
 
     if config.deployment_mode == "Private":
-        instance_id = get_asg_instance_id(session, config.stack_name, resource_map)
-        log.info("  SSM target:   %s", instance_id)
+        if config.edition == "ee":
+            # EE Private mode tunnels via a dedicated non-target bastion so
+            # flows to the internal NLB cannot hairpin back to their source.
+            instance_id = get_bastion_instance_id(session, config.stack_name, resource_map)
+            log.info("  SSM target:   %s (operator bastion — non-NLB-target)", instance_id)
+        else:
+            instance_id = get_asg_instance_id(session, config.stack_name, resource_map)
+            log.info("  SSM target:   %s", instance_id)
         log.info("  NLB:          %s", config.nlb_dns)
         log.info("  Local HTTP:   localhost:%d -> %s:7474", LOCAL_HTTP_PORT, config.nlb_dns)
         log.info("  Local Bolt:   localhost:%d -> %s:7687", LOCAL_BOLT_PORT, config.nlb_dns)
         log.info("")
+        log.info("Waiting for SSM agent to be ready...")
+        wait_for_ssm_ready(session, instance_id)
         log.info("Opening SSM tunnels...")
         fwd_stack.enter_context(
             ssm_port_forward(instance_id, config.nlb_dns, 7474, LOCAL_HTTP_PORT, config.region)

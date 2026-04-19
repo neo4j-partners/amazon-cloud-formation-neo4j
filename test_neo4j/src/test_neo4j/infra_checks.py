@@ -601,15 +601,24 @@ def check_vpc_endpoint_sg_uses_sg_source(
     reporter: TestReporter,
     resource_map: dict[str, str],
 ) -> None:
-    """Verify VpcEndpointSecurityGroup port-443 ingress uses SG source, not CIDR."""
+    """Verify VpcEndpointSecurityGroup port-443 ingress uses SG sources, not CIDR.
+
+    Expected sources: Neo4jExternalSecurityGroup (cluster members) and
+    Neo4jBastionSecurityGroup (operator bastion). Fails if any CIDR is
+    present or if either expected SG is missing.
+    """
     with reporter.test("VPC endpoint SG uses SG source (not CIDR)") as ctx:
         ep_sg_id = resource_map.get("VpcEndpointSecurityGroup")
         ext_sg_id = resource_map.get("Neo4jExternalSecurityGroup")
+        bastion_sg_id = resource_map.get("Neo4jBastionSecurityGroup")
         if not ep_sg_id:
             ctx.fail("VpcEndpointSecurityGroup not found in stack resources")
             return
         if not ext_sg_id:
             ctx.fail("Neo4jExternalSecurityGroup not found in stack resources")
+            return
+        if not bastion_sg_id:
+            ctx.fail("Neo4jBastionSecurityGroup not found in stack resources")
             return
 
         try:
@@ -625,21 +634,32 @@ def check_vpc_endpoint_sg_uses_sg_source(
                 ctx.fail(f"{ep_sg_id} has no port-443 ingress rule")
                 return
 
-            issues = []
+            all_cidrs: list[str] = []
+            all_sg_sources: set[str] = set()
             for rule in port_443_rules:
-                if rule.get("IpRanges"):
-                    cidrs = [r["CidrIp"] for r in rule["IpRanges"]]
-                    issues.append(f"CIDR ranges present: {cidrs}")
-                pairs = rule.get("UserIdGroupPairs", [])
-                sg_sources = [p["GroupId"] for p in pairs]
-                if ext_sg_id not in sg_sources:
-                    issues.append(
-                        f"Neo4jExternalSecurityGroup ({ext_sg_id}) not in SG sources: {sg_sources}"
-                    )
+                all_cidrs.extend(r["CidrIp"] for r in rule.get("IpRanges", []))
+                all_sg_sources.update(
+                    p["GroupId"] for p in rule.get("UserIdGroupPairs", [])
+                )
+
+            issues = []
+            if all_cidrs:
+                issues.append(f"CIDR ranges present: {all_cidrs}")
+            if ext_sg_id not in all_sg_sources:
+                issues.append(
+                    f"Neo4jExternalSecurityGroup ({ext_sg_id}) not in SG sources: "
+                    f"{sorted(all_sg_sources)}"
+                )
+            if bastion_sg_id not in all_sg_sources:
+                issues.append(
+                    f"Neo4jBastionSecurityGroup ({bastion_sg_id}) not in SG sources: "
+                    f"{sorted(all_sg_sources)}"
+                )
 
             if not issues:
                 ctx.pass_(
-                    f"{ep_sg_id} port-443 ingress locked to SG source {ext_sg_id}"
+                    f"{ep_sg_id} port-443 ingress locked to SG sources "
+                    f"(external={ext_sg_id}, bastion={bastion_sg_id})"
                 )
             else:
                 ctx.fail(f"{ep_sg_id} port-443 rule issues: {'; '.join(issues)}")
@@ -679,6 +699,111 @@ def check_nat_gateways_available(
                 )
         except Exception as exc:
             ctx.fail(f"Failed to describe NAT Gateways for {vpc_id}: {exc}")
+
+
+def check_operator_bastion(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify the operator bastion exists, is SSM-registered, and is not an NLB target.
+
+    The bastion's whole purpose is to carry operator tunnels from an IP that is
+    not in any NLB target group, so that NLB flow-hash cannot route a tunnelled
+    flow back to its source. This check guards against template edits that would
+    silently reintroduce the hairpin failure mode (removing the bastion entirely
+    or, worse, accidentally registering it as a target).
+    """
+    with reporter.test("Operator bastion exists and is non-NLB-target") as ctx:
+        bastion_id = resource_map.get("Neo4jOperatorBastion")
+        http_tg_arn = resource_map.get("Neo4jHTTPTargetGroup")
+        bolt_tg_arn = resource_map.get("Neo4jBoltTargetGroup")
+
+        if not bastion_id:
+            ctx.fail("Neo4jOperatorBastion not found in stack resources")
+            return
+        if not http_tg_arn or not bolt_tg_arn:
+            ctx.fail("NLB target groups not found in stack resources")
+            return
+
+        try:
+            ssm = session.client("ssm")
+            info = ssm.describe_instance_information(
+                Filters=[{"Key": "InstanceIds", "Values": [bastion_id]}]
+            )["InstanceInformationList"]
+            if not info or info[0].get("PingStatus") != "Online":
+                ping = info[0].get("PingStatus") if info else "not-registered"
+                ctx.fail(
+                    f"Bastion {bastion_id} not Online in SSM (PingStatus={ping})"
+                )
+                return
+
+            elbv2 = session.client("elbv2")
+            for tg_arn, label in ((http_tg_arn, "HTTP"), (bolt_tg_arn, "Bolt")):
+                health = elbv2.describe_target_health(TargetGroupArn=tg_arn)[
+                    "TargetHealthDescriptions"
+                ]
+                target_ids = {d["Target"]["Id"] for d in health}
+                if bastion_id in target_ids:
+                    ctx.fail(
+                        f"Bastion {bastion_id} is registered in the {label} "
+                        f"target group ({tg_arn}) — this reintroduces NLB hairpin"
+                    )
+                    return
+
+            ctx.pass_(
+                f"Bastion {bastion_id} is Online in SSM and not registered "
+                "in either NLB target group"
+            )
+        except Exception as exc:
+            ctx.fail(f"Failed to check bastion {bastion_id}: {exc}")
+
+
+def check_target_group_client_ip_disabled(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify preserve_client_ip.enabled=false on both NLB target groups.
+
+    Required second layer (together with the non-target bastion) to prevent
+    NLB NAT-loopback hairpin failures. See README "Why the operator bastion
+    exists — NLB hairpin".
+    """
+    with reporter.test("NLB target groups disable client IP preservation") as ctx:
+        http_tg_arn = resource_map.get("Neo4jHTTPTargetGroup")
+        bolt_tg_arn = resource_map.get("Neo4jBoltTargetGroup")
+        if not http_tg_arn or not bolt_tg_arn:
+            ctx.fail("NLB target groups not found in stack resources")
+            return
+
+        try:
+            elbv2 = session.client("elbv2")
+            issues = []
+            for tg_arn, label in ((http_tg_arn, "HTTP"), (bolt_tg_arn, "Bolt")):
+                attrs = {
+                    a["Key"]: a["Value"]
+                    for a in elbv2.describe_target_group_attributes(
+                        TargetGroupArn=tg_arn
+                    )["Attributes"]
+                }
+                value = attrs.get("preserve_client_ip.enabled")
+                if value != "false":
+                    issues.append(
+                        f"{label} target group preserve_client_ip.enabled="
+                        f"{value!r} (expected 'false')"
+                    )
+
+            if not issues:
+                ctx.pass_(
+                    "Both target groups have preserve_client_ip.enabled=false"
+                )
+            else:
+                ctx.fail("; ".join(issues))
+        except Exception as exc:
+            ctx.fail(f"Failed to check target group attributes: {exc}")
 
 
 def check_vpc_dns_support(
@@ -738,6 +863,8 @@ def run_private_mode_checks(
     check_vpc_endpoint_sg_uses_sg_source(session, config, reporter, resource_map)
     check_nat_gateways_available(session, config, reporter, resource_map)
     check_vpc_dns_support(session, config, reporter, resource_map)
+    check_operator_bastion(session, config, reporter, resource_map)
+    check_target_group_client_ip_disabled(session, config, reporter, resource_map)
 
 
 def run_network_security_checks(

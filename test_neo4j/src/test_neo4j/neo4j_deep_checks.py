@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from neo4j import RoutingControl
+
 from test_neo4j.config import StackConfig
 from test_neo4j.reporting import TestReporter
 
@@ -18,7 +20,8 @@ def check_server_status(config: StackConfig, reporter: TestReporter) -> None:
             with config.driver() as driver:
                 records, _, _ = driver.execute_query(
                     "CALL dbms.components() YIELD name, versions, edition "
-                    "RETURN name, versions[0] AS version, edition"
+                    "RETURN name, versions[0] AS version, edition",
+                    routing_=RoutingControl.READ,
                 )
                 row = records[0]
                 name = row["name"]
@@ -40,7 +43,8 @@ def check_listen_address(config: StackConfig, reporter: TestReporter) -> None:
             with config.driver() as driver:
                 records, _, _ = driver.execute_query(
                     "CALL dbms.listConfig('server.default_listen_address') "
-                    "YIELD value RETURN value"
+                    "YIELD value RETURN value",
+                    routing_=RoutingControl.READ,
                 )
                 value = records[0]["value"]
                 if value == "0.0.0.0":
@@ -60,7 +64,8 @@ def check_advertised_address(config: StackConfig, reporter: TestReporter) -> Non
             with config.driver() as driver:
                 records, _, _ = driver.execute_query(
                     "CALL dbms.listConfig('server.default_advertised_address') "
-                    "YIELD value RETURN value"
+                    "YIELD value RETURN value",
+                    routing_=RoutingControl.READ,
                 )
                 value = records[0]["value"]
                 if value == config.host:
@@ -88,7 +93,8 @@ def check_memory_config(config: StackConfig, reporter: TestReporter) -> None:
                     "  'server.memory.heap.max_size',"
                     "  'server.memory.pagecache.size'"
                     "] "
-                    "RETURN name, value"
+                    "RETURN name, value",
+                    routing_=RoutingControl.READ,
                 )
                 settings = {r["name"]: r["value"] for r in records}
                 heap = settings.get("server.memory.heap.max_size", "")
@@ -119,7 +125,8 @@ def check_data_directory(config: StackConfig, reporter: TestReporter) -> None:
             with config.driver() as driver:
                 records, _, _ = driver.execute_query(
                     "CALL dbms.listConfig('server.directories.data') "
-                    "YIELD value RETURN value"
+                    "YIELD value RETURN value",
+                    routing_=RoutingControl.READ,
                 )
                 value = records[0]["value"]
                 if value == expected:

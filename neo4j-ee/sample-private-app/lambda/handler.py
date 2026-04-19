@@ -3,6 +3,7 @@ import os
 
 import boto3
 from neo4j import GraphDatabase
+from neo4j.exceptions import AuthError
 
 ssm = boto3.client("ssm")
 sm = boto3.client("secretsmanager")
@@ -10,15 +11,24 @@ sm = boto3.client("secretsmanager")
 _driver = None
 
 
-def _get_driver():
-    global _driver
-    if _driver is not None:
-        return _driver
-
+def _init_driver():
     nlb_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_NLB_PATH"])["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
+    return GraphDatabase.driver(f"neo4j+s://{nlb_dns}:7687", auth=("neo4j", password))
 
-    _driver = GraphDatabase.driver(f"neo4j://{nlb_dns}:7687", auth=("neo4j", password))
+
+def _get_driver():
+    global _driver
+    if _driver is None:
+        _driver = _init_driver()
+    return _driver
+
+
+def _reset_driver():
+    global _driver
+    if _driver is not None:
+        _driver.close()
+    _driver = _init_driver()
     return _driver
 
 
@@ -54,8 +64,15 @@ MERGE (t3)-[:AT]->(m3)
 
 
 def lambda_handler(event, context):
-    driver = _get_driver()
+    try:
+        driver = _get_driver()
+        return _run(driver)
+    except AuthError:
+        driver = _reset_driver()
+        return _run(driver)
 
+
+def _run(driver):
     with driver.session(database="neo4j") as session:
         result = session.run(_MERGE_FINTECH)
         summary = result.consume()
@@ -69,6 +86,14 @@ def lambda_handler(event, context):
 
         routing_rows = session.run(
             "CALL dbms.routing.getRoutingTable({}, 'neo4j')"
+        ).data()
+
+        graph_sample = session.run(
+            """
+            MATCH (c:Customer)-[:OWNS]->(a:Account)-[:ORIGINATED_FROM]->(t:Transaction)-[:AT]->(m:Merchant)
+            RETURN c.name AS customer, a.type AS account_type, t.amount AS amount, m.name AS merchant
+            ORDER BY t.ts
+            """
         ).data()
 
     with driver.session(database="system") as sys_session:
@@ -88,6 +113,7 @@ def lambda_handler(event, context):
         "edition": edition,
         "nodes_created": nodes_created,
         "relationships_created": rels_created,
+        "graph_sample": graph_sample,
         "servers": [
             {
                 "name": s.get("name", s.get("address", "")),

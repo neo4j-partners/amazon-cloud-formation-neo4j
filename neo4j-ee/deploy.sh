@@ -160,7 +160,8 @@ fi
 # Stack configuration
 # ---------------------------------------------------------------------------
 STACK_NAME="test-ee-$(date +%s)"
-TEMPLATE_BODY="file://neo4j.template.yaml"
+CFN_BUCKET=""
+CERT_DIR=""
 # Password must satisfy the template AllowedPattern (letters + numbers).
 # Append a random digit to guarantee the pattern matches.
 Password="$(openssl rand -base64 12)$(( RANDOM % 10 ))"
@@ -169,8 +170,34 @@ Password="$(openssl rand -base64 12)$(( RANDOM % 10 ))"
 # AMI resolution (local mode only)
 # ---------------------------------------------------------------------------
 COPIED_AMI_ID=""
+CLEANUP_AMI_ON_EXIT=false
 SSM_PARAM_PATH=""
 AMI_SOURCE="marketplace"
+
+cleanup() {
+  if [ -n "${CFN_BUCKET}" ]; then
+    echo "Cleaning up temporary S3 bucket ${CFN_BUCKET}..."
+    aws s3 rm "s3://${CFN_BUCKET}/neo4j.template.yaml" --region "${REGION}" 2>/dev/null || true
+    aws s3api delete-bucket --bucket "${CFN_BUCKET}" --region "${REGION}" 2>/dev/null || true
+    CFN_BUCKET=""
+  fi
+  if [ "${CLEANUP_AMI_ON_EXIT}" = true ] && [ -n "${COPIED_AMI_ID}" ]; then
+    echo ""
+    echo "Cleaning up copied AMI ${COPIED_AMI_ID} in ${REGION}..."
+    aws ec2 deregister-image --region "${REGION}" --image-id "${COPIED_AMI_ID}" 2>/dev/null || true
+    aws ec2 describe-snapshots \
+      --region "${REGION}" \
+      --filters "Name=description,Values=*${COPIED_AMI_ID}*" \
+      --query "Snapshots[].SnapshotId" \
+      --output text 2>/dev/null | while read -r snap_id; do
+        [ -n "${snap_id}" ] && aws ec2 delete-snapshot --region "${REGION}" --snapshot-id "${snap_id}" 2>/dev/null || true
+      done
+  fi
+  if [ -n "${CERT_DIR:-}" ] && [ -d "${CERT_DIR}" ]; then
+    rm -rf "${CERT_DIR}"
+  fi
+}
+trap cleanup EXIT
 
 if [ "${USE_MARKETPLACE}" = false ]; then
   AMI_SOURCE="local"
@@ -185,21 +212,6 @@ if [ "${USE_MARKETPLACE}" = false ]; then
   SOURCE_AMI_ID="$(cat "${AMI_ID_FILE}")"
 
   # Cross-region AMI copy
-  cleanup_copied_ami() {
-    if [ -n "${COPIED_AMI_ID}" ]; then
-      echo ""
-      echo "Cleaning up copied AMI ${COPIED_AMI_ID} in ${REGION}..."
-      aws ec2 deregister-image --region "${REGION}" --image-id "${COPIED_AMI_ID}" 2>/dev/null || true
-      aws ec2 describe-snapshots \
-        --region "${REGION}" \
-        --filters "Name=description,Values=*${COPIED_AMI_ID}*" \
-        --query "Snapshots[].SnapshotId" \
-        --output text 2>/dev/null | while read -r snap_id; do
-          [ -n "${snap_id}" ] && aws ec2 delete-snapshot --region "${REGION}" --snapshot-id "${snap_id}" 2>/dev/null || true
-        done
-    fi
-  }
-
   if [ "${REGION}" != "${SOURCE_REGION}" ]; then
     echo "Copying AMI ${SOURCE_AMI_ID} from ${SOURCE_REGION} to ${REGION}..."
     COPIED_AMI_ID=$(aws ec2 copy-image \
@@ -210,9 +222,8 @@ if [ "${USE_MARKETPLACE}" = false ]; then
       --description "Copied from ${SOURCE_AMI_ID} in ${SOURCE_REGION} for ${STACK_NAME}" \
       --query "ImageId" \
       --output text)
+    CLEANUP_AMI_ON_EXIT=true
     echo "Copied AMI: ${COPIED_AMI_ID} — waiting for it to become available..."
-
-    trap cleanup_copied_ami EXIT
 
     aws ec2 wait image-available --region "${REGION}" --image-ids "${COPIED_AMI_ID}"
     echo "AMI available in ${REGION}."
@@ -261,6 +272,21 @@ echo "============================================="
 echo ""
 
 # ---------------------------------------------------------------------------
+# Upload template to S3 (template exceeds 51,200-byte inline CFN limit)
+# ---------------------------------------------------------------------------
+_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+CFN_BUCKET="neo4j-ee-cfn-${_ACCOUNT_ID}-${REGION}-$(date +%s)"
+echo "Uploading template to s3://${CFN_BUCKET}..."
+if [ "${REGION}" = "us-east-1" ]; then
+  aws s3api create-bucket --bucket "${CFN_BUCKET}" --region "${REGION}" > /dev/null
+else
+  aws s3api create-bucket --bucket "${CFN_BUCKET}" --region "${REGION}" \
+    --create-bucket-configuration LocationConstraint="${REGION}" > /dev/null
+fi
+aws s3 cp "${SCRIPT_DIR}/neo4j.template.yaml" "s3://${CFN_BUCKET}/neo4j.template.yaml" > /dev/null
+TEMPLATE_URL="https://${CFN_BUCKET}.s3.${REGION}.amazonaws.com/neo4j.template.yaml"
+
+# ---------------------------------------------------------------------------
 # Create stack
 # ---------------------------------------------------------------------------
 PARAMS="ParameterKey=Password,ParameterValue=${Password}"
@@ -279,7 +305,7 @@ echo "Creating stack ${STACK_NAME}..."
 aws cloudformation create-stack \
   --capabilities CAPABILITY_IAM \
   --stack-name "$STACK_NAME" \
-  --template-body "$TEMPLATE_BODY" \
+  --template-url "$TEMPLATE_URL" \
   --region "$REGION" \
   --disable-rollback \
   --parameters $PARAMS
@@ -289,8 +315,8 @@ aws cloudformation wait stack-create-complete \
   --stack-name "$STACK_NAME" \
   --region "$REGION"
 
-# Stack succeeded — disarm the AMI cleanup trap
-trap - EXIT 2>/dev/null || true
+# Stack succeeded — disarm AMI cleanup (S3 bucket cleanup still runs on exit)
+CLEANUP_AMI_ON_EXIT=false
 
 # ---------------------------------------------------------------------------
 # TLS: two-phase cert injection (--tls only)
@@ -309,11 +335,10 @@ if [ "${ENABLE_TLS}" = true ]; then
 
   # One SAN is sufficient: server.bolt.advertised_address is the NLB DNS for all nodes.
   CERT_DIR=$(mktemp -d)
-  trap 'rm -rf "${CERT_DIR}"' EXIT
   openssl req -x509 -newkey rsa:4096 \
     -keyout "${CERT_DIR}/private.key" -out "${CERT_DIR}/public.crt" \
     -days 365 -noenc \
-    -subj "/CN=${NLB_DNS}" \
+    -subj "/CN=neo4j-bolt" \
     -addext "subjectAltName=DNS:${NLB_DNS}"
   echo "Self-signed cert generated (SAN: DNS:${NLB_DNS})"
 
@@ -335,10 +360,12 @@ if [ "${ENABLE_TLS}" = true ]; then
   cp "${CERT_DIR}/public.crt" "${LAMBDA_DIR}/neo4j-ca.crt"
   echo "CA bundle staged at ${LAMBDA_DIR}/neo4j-ca.crt"
   rm -rf "${CERT_DIR}"
-  trap - EXIT
 
   echo "Updating stack with BoltCertificateSecretArn..."
-  readarray -t PREV_PARAMS < <(aws cloudformation describe-stacks \
+  PREV_PARAMS=()
+  while IFS= read -r line; do
+    PREV_PARAMS+=("$line")
+  done < <(aws cloudformation describe-stacks \
     --stack-name "${STACK_NAME}" \
     --region "${REGION}" \
     --query 'Stacks[0].Parameters[*].ParameterKey' \
@@ -347,7 +374,7 @@ if [ "${ENABLE_TLS}" = true ]; then
   aws cloudformation update-stack \
     --stack-name "${STACK_NAME}" \
     --region "${REGION}" \
-    --template-body "${TEMPLATE_BODY}" \
+    --template-url "${TEMPLATE_URL}" \
     --capabilities CAPABILITY_IAM \
     --parameters \
       "ParameterKey=BoltCertificateSecretArn,ParameterValue=${BOLT_TLS_SECRET_ARN}" \

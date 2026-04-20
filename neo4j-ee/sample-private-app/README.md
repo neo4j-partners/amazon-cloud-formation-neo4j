@@ -1,6 +1,8 @@
 # Neo4j Private Cluster — Lambda Demo App
 
-The neo4j-ee stack deploys its cluster in private subnets behind an internal NLB with no public IPs. The operator README covers how to connect a laptop via SSM port-forwarding. This CDK app answers a different question: how does an application workload connect to that same cluster from inside the VPC?
+The neo4j-ee stack deploys its cluster in private subnets behind an internal NLB with no public IPs. [`OPERATOR_GUIDE.md`](../OPERATOR_GUIDE.md) covers how to connect a laptop via SSM port-forwarding. This CDK app answers a different question: how does an application workload connect to that same cluster from inside the VPC?
+
+For the full architecture, security group wiring, and design decisions behind this pattern, see [`APP_GUIDE.md`](../APP_GUIDE.md).
 
 The answer is a Python Lambda in the cluster's private subnets. It connects via `neo4j://` on the internal NLB DNS, creates a small fintech graph, then returns a cluster health report. A Lambda Function URL with `authType: AWS_IAM` exposes it publicly without requiring API Gateway.
 

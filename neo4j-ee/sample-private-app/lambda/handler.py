@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import ssl
 
 import boto3
 from neo4j import GraphDatabase
@@ -13,24 +12,14 @@ ssm = boto3.client("ssm")
 sm = boto3.client("secretsmanager")
 
 _driver = None
-_CA_BUNDLE = "/var/task/neo4j-ca.crt"
-if os.path.exists(_CA_BUNDLE):
-    _SSL_CTX = ssl.create_default_context(cafile=_CA_BUNDLE)
-else:
-    log.warning("neo4j-ca.crt not found — connecting without TLS (plaintext neo4j://)")
-    _SSL_CTX = None
+_BOLT_TLS = os.environ.get("NEO4J_BOLT_TLS") == "true"
+_BOLT_SCHEME = "neo4j+ssc" if _BOLT_TLS else "neo4j"
 
 
 def _init_driver():
     nlb_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_NLB_PATH"])["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
-    if _SSL_CTX is not None:
-        return GraphDatabase.driver(
-            f"neo4j+s://{nlb_dns}:7687",
-            auth=("neo4j", password),
-            ssl_context=_SSL_CTX,
-        )
-    return GraphDatabase.driver(f"neo4j://{nlb_dns}:7687", auth=("neo4j", password))
+    return GraphDatabase.driver(f"{_BOLT_SCHEME}://{nlb_dns}:7687", auth=("neo4j", password))
 
 
 def _get_driver():
@@ -126,6 +115,8 @@ def _run(driver):
                 readers += len(server.get("addresses", []))
 
     body = {
+        "tls_enabled": _BOLT_TLS,
+        "bolt_scheme": _BOLT_SCHEME,
         "edition": edition,
         "nodes_created": nodes_created,
         "relationships_created": rels_created,

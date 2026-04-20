@@ -6,10 +6,10 @@
 # script while the stack is in DELETE_IN_PROGRESS unblocks the deletion.
 #
 # Usage:
-#   ./force-delete-lambda-enis.sh [cdk-stack-name]
+#   ./force-delete-lambda-enis.sh [ee-stack-name]
 #
-# If cdk-stack-name is omitted, uses the most recently modified cdk-*.json
-# file in the parent neo4j-ee/.deploy/ directory.
+# If ee-stack-name is omitted, uses the most recently modified
+# sample-private-app-*.json file in the parent neo4j-ee/.deploy/ directory.
 
 set -euo pipefail
 
@@ -19,22 +19,22 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)/.deploy"
 
 # ---------------------------------------------------------------------------
-# Resolve the CDK outputs file
+# Resolve the app outputs file
 # ---------------------------------------------------------------------------
 if [ $# -ge 1 ]; then
-  CDK_FILE="${DEPLOY_DIR}/cdk-$1.json"
+  APP_FILE="${DEPLOY_DIR}/sample-private-app-$1.json"
 else
-  CDK_FILE=$(ls -t "${DEPLOY_DIR}"/cdk-*.json 2>/dev/null | head -1 || true)
+  APP_FILE=$(ls -t "${DEPLOY_DIR}"/sample-private-app-*.json 2>/dev/null | head -1 || true)
 fi
 
-if [ -z "${CDK_FILE}" ] || [ ! -f "${CDK_FILE}" ]; then
-  echo "ERROR: No CDK deployment found." >&2
-  echo "Usage: $0 [cdk-stack-name]" >&2
+if [ -z "${APP_FILE}" ] || [ ! -f "${APP_FILE}" ]; then
+  echo "ERROR: No sample-private-app deployment found." >&2
+  echo "Usage: $0 [ee-stack-name]" >&2
   exit 1
 fi
 
-FUNCTION_ARN=$(python3 -c "import json; d=json.load(open('${CDK_FILE}')); print(d['function_arn'])")
-REGION=$(python3 -c "import json; d=json.load(open('${CDK_FILE}')); print(d['region'])")
+FUNCTION_ARN=$(python3 -c "import json; d=json.load(open('${APP_FILE}')); print(d['function_arn'])")
+REGION=$(python3 -c "import json; d=json.load(open('${APP_FILE}')); print(d['region'])")
 FUNCTION_NAME="${FUNCTION_ARN##*:function:}"
 ENI_DESC_PREFIX="AWS Lambda VPC ENI-${FUNCTION_NAME}"
 

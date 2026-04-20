@@ -83,6 +83,16 @@ fi
 SSM_PREFIX="/neo4j-ee/${NEO4J_STACK}"
 APP_STACK_NAME="neo4j-sample-private-app-${NEO4J_STACK}"
 
+NEO4J_STACK_ID=$(aws cloudformation describe-stacks \
+  --region "${REGION}" \
+  --stack-name "${NEO4J_STACK}" \
+  --query "Stacks[0].StackId" \
+  --output text)
+if [ -z "${NEO4J_STACK_ID}" ] || [ "${NEO4J_STACK_ID}" = "None" ]; then
+  echo "ERROR: Could not resolve stack ID for ${NEO4J_STACK}." >&2
+  exit 1
+fi
+
 echo "=== Neo4j Sample Private App Deploy ==="
 echo ""
 echo "  EE Stack:       ${NEO4J_STACK}"
@@ -186,6 +196,7 @@ aws cloudformation deploy \
     "PasswordSecretArn=${PASSWORD_SECRET_ARN}" \
     "BoltTlsEnabled=${BOLT_TLS_ENABLED}" \
     "Neo4jStackName=${NEO4J_STACK}" \
+    "Neo4jStackId=${NEO4J_STACK_ID}" \
     "LambdaS3Bucket=${DEPLOY_BUCKET}" \
     "LambdaS3Key=${LAMBDA_KEY}" \
     "LambdaS3ObjectVersion=${LAMBDA_VERSION_ID}"

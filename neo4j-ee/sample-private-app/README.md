@@ -103,7 +103,7 @@ On first invocation, nodes and relationships are created. Subsequent invocations
 `validate.sh` calls the second Lambda's Function URL. That Lambda:
 
 1. Calls `CALL dbms.cluster.overview()` over the NLB to find the LEADER and FOLLOWER server UUIDs for the `neo4j` database.
-2. Calls `ec2:DescribeInstances` filtered by `tag:aws:cloudformation:stack-name = <Neo4j EE stack>` to list the three cluster EC2 instances.
+2. Calls `ec2:DescribeInstances` filtered by `tag:StackID = <Neo4j EE stack ARN>` and `tag:Role = neo4j-cluster-node` to list the cluster EC2 instances. (The EE ASG propagates its own `StackID` / `Role` tags to launched instances; `aws:cloudformation:stack-name` is only on the ASG itself, not its instances.)
 3. Maps instance-ID → Neo4j server UUID by running `cat /var/lib/neo4j/data/server_id` on all three instances in parallel via SSM `send-command`.
 4. Picks a random follower, runs `systemctl stop neo4j` via SSM, polls `SHOW SERVERS` until that server's `health` is no longer `Available` (expect `Unavailable` within ~10–20s).
 5. Runs `systemctl start neo4j` via SSM, polls `SHOW SERVERS` until `health == 'Available'` again (expect ~20–60s for Raft rejoin).
@@ -133,7 +133,9 @@ Sample output:
 
 ### IAM scoping
 
-The resilience Lambda's role has `ssm:SendCommand` on `AWS-RunShellScript` scoped to EC2 instances via `aws:ResourceTag/aws:cloudformation:stack-name = <Neo4jStackName>` — so it can only issue shell commands to instances launched by the paired EE stack. `ec2:DescribeInstances` is `*` (the service doesn't support resource-level authorization) but is read-only. The main invoke Lambda has none of these permissions.
+The resilience Lambda's role has `ssm:SendCommand` on `AWS-RunShellScript` scoped to EC2 instances via `aws:ResourceTag/StackID = <full EE stack ARN>` — so it can only issue shell commands to instances launched by the paired EE stack. `ec2:DescribeInstances` is `*` (the service doesn't support resource-level authorization) but is read-only. The main invoke Lambda has none of these permissions.
+
+This stack also provisions an `ec2` VPC interface endpoint (reusing the EE stack's endpoint SG). The EE stack provides `ssm`, `ssmmessages`, `logs`, and `secretsmanager` endpoints but no `ec2` endpoint, and the resilience Lambda has no internet egress — without this endpoint, `DescribeInstances` would hang until timeout.
 
 ### Lambda timeout
 

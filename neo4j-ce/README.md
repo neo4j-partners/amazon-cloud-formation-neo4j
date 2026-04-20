@@ -62,10 +62,10 @@ This builds the base OS AMI (Neo4j is installed at deploy time from yum) and wri
 ### 3. Deploy the Stack
 
 ```bash
-./deploy.sh                        # default: t3.medium, random region
-./deploy.sh r8i                    # memory optimized (r8i.large)
-./deploy.sh --region eu-west-1     # specific region (AMI auto-copied)
-./deploy.sh r8i --region us-east-2 # both
+./deploy.py                        # default: t3.medium, random region
+./deploy.py r8i                    # memory optimized (r8i.large)
+./deploy.py --region eu-west-1     # specific region (AMI auto-copied)
+./deploy.py r8i --region us-east-2 # both
 ```
 
 The script reads the AMI ID from `marketplace/ami-id.txt` (written by `create-ami.sh`), picks a random region (or uses `--region`), copies the AMI cross-region if needed, deploys the stack, waits for completion, then writes connection details and deploy context to `.deploy/<stack-name>.txt`.
@@ -84,7 +84,7 @@ This returns the Neo4j Browser URL (`http://<EIP>:7474`), Bolt URI, username, an
 
 ### 4. Test the Stack
 
-Both test tools read connection details from `.deploy/<stack-name>.txt`. If the stack was created with `deploy.sh`, this file already exists. For stacks created through the Marketplace console (or any other method), generate it first:
+Both test tools read connection details from `.deploy/<stack-name>.txt`. If the stack was created with `deploy.py`, this file already exists. For stacks created through the Marketplace console (or any other method), generate it first:
 
 ```bash
 ./generate-outputs.sh --stack-name <stack-name> --region <region>
@@ -141,7 +141,7 @@ uv run test-ce --timeout 900                # ASG replacement timeout in seconds
 ./teardown.sh <stack-name>     # tears down a specific deployment
 ```
 
-Deletes the CloudFormation stack, the SSM parameter created by `deploy.sh`, any cross-region AMI copy, and removes the deployment file from `.deploy/`.
+Deletes the CloudFormation stack, the SSM parameter created by `deploy.py`, any cross-region AMI copy, and removes the deployment file from `.deploy/`.
 
 ## What Gets Deployed
 
@@ -156,7 +156,7 @@ Deletes the CloudFormation stack, the SSM parameter created by `deploy.sh`, any 
 | File | Purpose |
 |---|---|
 | `neo4j.template.yaml` | CloudFormation template |
-| `deploy.sh` | Local deploy helper — creates stack, waits, writes outputs to `.deploy/` |
+| `deploy.py` | Local deploy helper — creates stack, waits, writes outputs to `.deploy/` |
 | `generate-outputs.sh` | Creates `.deploy/<stack>.txt` from any existing stack (Marketplace deploys, etc.) |
 | `test-stack.sh` | Bash test suite (HTTP, Bolt, auth, stack status, security groups, Neo4j config, APOC) |
 | `test_ce/` | Python test suite — connectivity, Neo4j config, infrastructure, EBS resilience |

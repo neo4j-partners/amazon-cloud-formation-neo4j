@@ -1,7 +1,7 @@
 #!/bin/bash
 # test-observability.sh — Automated Phase 1 observability checks for Neo4j EE
 #
-# Reads .deploy/<stack-name>.txt written by deploy.sh and verifies each
+# Reads .deploy/<stack-name>.txt written by deploy.py and verifies each
 # Phase 1 observability component is working. Prints [PASS] or [FAIL] for
 # each automated check and a [MANUAL REQUIRED] reminder for SNS email delivery.
 #

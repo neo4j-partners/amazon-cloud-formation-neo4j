@@ -43,7 +43,7 @@ def load_config(
 ) -> StackConfig:
     if not outputs_path.exists():
         raise FileNotFoundError(
-            f"{outputs_path} not found. Run deploy.sh first to create a stack."
+            f"{outputs_path} not found. Run deploy.py first to create a stack."
         )
 
     fields = _parse_outputs(outputs_path)

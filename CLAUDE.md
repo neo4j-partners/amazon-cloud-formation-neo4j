@@ -23,10 +23,10 @@ All commands run from the edition directory (e.g., `neo4j-ce/`):
 ./marketplace/test-ami.sh
 
 # Deploy stack (reads marketplace/ami-id.txt, writes .deploy/<stack-name>.txt)
-./deploy.sh                        # default: t3.medium, random region
-./deploy.sh r8i                    # memory optimized: r8i.large
-./deploy.sh --region eu-west-1     # specific region (AMI auto-copied)
-./deploy.sh r8i --region us-east-2 # both
+./deploy.py                        # default: t3.medium, random region
+./deploy.py r8i                    # memory optimized: r8i.large
+./deploy.py --region eu-west-1     # specific region (AMI auto-copied)
+./deploy.py r8i --region us-east-2 # both
 
 # Test stack (reads .deploy/<stack-name>.txt)
 cd test_ce
@@ -63,7 +63,7 @@ Nitro instances expose EBS as NVMe devices with non-deterministic names. The Use
 
 ### Key File Flow
 
-`create-ami.sh` → writes `marketplace/ami-id.txt` → `deploy.sh` reads it, deploys stack (random region, copies AMI if needed), writes `.deploy/<stack-name>.txt` → `test_ce/` and `test-stack.sh` read from `.deploy/` (newest by default, or `--stack <name>`) → `teardown.sh` cleans up (stack, SSM param, copied AMI, output file).
+`create-ami.sh` → writes `marketplace/ami-id.txt` → `deploy.py` reads it, deploys stack (random region, copies AMI if needed), writes `.deploy/<stack-name>.txt` → `test_ce/` and `test-stack.sh` read from `.deploy/` (newest by default, or `--stack <name>`) → `teardown.sh` cleans up (stack, SSM param, copied AMI, output file).
 
 ## Test Suite (test_ce/)
 

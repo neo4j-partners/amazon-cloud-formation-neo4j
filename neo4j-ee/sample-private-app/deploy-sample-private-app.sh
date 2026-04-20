@@ -60,7 +60,7 @@ fi
 
 if [ -z "${OUTPUTS_FILE}" ] || [ ! -f "${OUTPUTS_FILE}" ]; then
   echo "ERROR: No EE deployment found." >&2
-  echo "Run ../deploy.sh first, then ./deploy-sample-private-app.sh [stack-name]." >&2
+  echo "Run ../deploy.py first, then ./deploy-sample-private-app.sh [stack-name]." >&2
   exit 1
 fi
 

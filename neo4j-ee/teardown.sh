@@ -1,7 +1,7 @@
 #!/bin/bash
 # teardown.sh — Delete a Neo4j EE CloudFormation stack and clean up resources
 #
-# Reads .deploy/<stack-name>.txt (written by deploy.sh) to determine the stack
+# Reads .deploy/<stack-name>.txt (written by deploy.py) to determine the stack
 # name, region, SSM parameter path, and any copied AMI to clean up.
 #
 # Usage:

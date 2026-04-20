@@ -44,7 +44,7 @@ def _resolve_outputs_path(stack: str | None) -> Path:
             return txt_files[0]
     raise FileNotFoundError(
         f"No deployment found in {_DEPLOY_DIR}. "
-        "Run deploy.sh first, or pass a stack name as the first argument."
+        "Run deploy.py first, or pass a stack name as the first argument."
     )
 
 

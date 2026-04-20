@@ -66,7 +66,7 @@ The test checks SSH hardening and OS configuration via SSM — no SSH key requir
 From the `neo4j-ee/` directory:
 
 ```bash
-./deploy.sh --number-of-servers 3 --region us-east-1
+./deploy.py --number-of-servers 3 --region us-east-1
 ```
 
 Pinning the region avoids a cross-region AMI copy that adds 10-20 minutes. Omitting `--region` picks a random supported region.
@@ -88,7 +88,7 @@ Stack creation takes 5-10 minutes. The deploy script writes outputs to `.deploy/
 For a single-instance deployment:
 
 ```bash
-./deploy.sh --number-of-servers 1 --region us-east-1
+./deploy.py --number-of-servers 1 --region us-east-1
 ```
 
 ---
@@ -97,10 +97,10 @@ For a single-instance deployment:
 
 Bolt TLS encrypts the client-facing connection on port 7687. The certificate's Subject Alternative Name must match the address Neo4j advertises in its routing table, which is the NLB DNS. Because the NLB DNS does not exist until the stack creates the NLB, the cert cannot be generated before deployment.
 
-`deploy.sh --tls` handles this with a two-phase flow:
+`deploy.py --tls` handles this with a two-phase flow:
 
 ```bash
-./deploy.sh --number-of-servers 3 --region us-east-1 --tls
+./deploy.py --number-of-servers 3 --region us-east-1 --tls
 ```
 
 **What `--tls` does, step by step:**

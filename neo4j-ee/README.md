@@ -10,7 +10,7 @@ All scripts read `AWS_PROFILE` from the environment and fall back to the `defaul
 export AWS_PROFILE=<your-profile>   # omit to use your default AWS profile
 ```
 
-> **Marketplace publishing scripts only** (`marketplace/create-ami.sh`, `marketplace/test-ami.sh`): these must run against the `neo4j-marketplace` AWS account (account `385155106615`). Set `AWS_PROFILE=marketplace` before running them. All other scripts (`deploy.sh`, `teardown.sh`, `test-observability.sh`) work with any account that has CloudFormation, SSM, EC2, and IAM permissions.
+> **Marketplace publishing scripts only** (`marketplace/create-ami.sh`, `marketplace/test-ami.sh`): these must run against the `neo4j-marketplace` AWS account (account `385155106615`). Set `AWS_PROFILE=marketplace` before running them. All other scripts (`deploy.py`, `teardown.sh`, `test-observability.sh`) work with any account that has CloudFormation, SSM, EC2, and IAM permissions.
 
 ### 1. Deploy the Stack
 
@@ -19,12 +19,12 @@ Two AMI modes depending on what you are testing.
 **Marketplace mode** — uses the published Marketplace AMI directly. No local AMI file needed:
 
 ```bash
-./deploy.sh --marketplace                                  # t3.medium, 3 nodes, random region, Private mode
-./deploy.sh --marketplace r8i                              # memory optimized (r8i.xlarge)
-./deploy.sh --marketplace --number-of-servers 1            # single instance
-./deploy.sh --marketplace --region eu-west-1               # specific region
-./deploy.sh --marketplace --mode Public                    # internet-facing NLB (opt-in)
-./deploy.sh --marketplace --alert-email you@example.com    # enable CloudWatch alarm emails
+./deploy.py --marketplace                                  # t3.medium, 3 nodes, random region, Private mode
+./deploy.py --marketplace r8i                              # memory optimized (r8i.xlarge)
+./deploy.py --marketplace --number-of-servers 1            # single instance
+./deploy.py --marketplace --region eu-west-1               # specific region
+./deploy.py --marketplace --mode Public                    # internet-facing NLB (opt-in)
+./deploy.py --marketplace --alert-email you@example.com    # enable CloudWatch alarm emails
 ```
 
 **Local AMI mode** — tests a newly built AMI before it is published. Build and verify the AMI first (requires the `neo4j-marketplace` account):
@@ -37,12 +37,12 @@ AWS_PROFILE=marketplace ./marketplace/test-ami.sh     # verifies SSH hardening a
 Then deploy using that AMI:
 
 ```bash
-./deploy.sh                                    # t3.medium, 3 nodes, random region, Private mode
-./deploy.sh r8i                                # memory optimized (r8i.xlarge)
-./deploy.sh --number-of-servers 1              # single instance
-./deploy.sh --region eu-west-1                 # specific region (AMI auto-copied)
-./deploy.sh --mode Public                      # internet-facing NLB (opt-in)
-./deploy.sh --alert-email you@example.com      # enable CloudWatch alarm emails
+./deploy.py                                    # t3.medium, 3 nodes, random region, Private mode
+./deploy.py r8i                                # memory optimized (r8i.xlarge)
+./deploy.py --number-of-servers 1              # single instance
+./deploy.py --region eu-west-1                 # specific region (AMI auto-copied)
+./deploy.py --mode Public                      # internet-facing NLB (opt-in)
+./deploy.py --alert-email you@example.com      # enable CloudWatch alarm emails
 ```
 
 In local AMI mode, the script creates a temporary SSM parameter for the AMI ID and copies the AMI cross-region if needed. Cross-region copies take 10-20+ minutes — use `--region us-east-1` to skip the copy.
@@ -113,7 +113,7 @@ Deletes the CloudFormation stack, the SSM parameter created in local AMI mode, a
 | File | Purpose |
 |---|---|
 | `neo4j.template.yaml` | CloudFormation template |
-| `deploy.sh` | Deploy helper — creates stack, waits, writes outputs to `.deploy/` |
+| `deploy.py` | Deploy helper — creates stack, waits, writes outputs to `.deploy/` |
 | `teardown.sh` | Deletes the stack, SSM parameter, copied AMI, and deployment file |
 | `test-observability.sh` | Automated observability checks (CloudWatch, logs, flow logs, alarm, CloudTrail) |
 | `marketplace/` | AMI build and test scripts, Marketplace publishing instructions |

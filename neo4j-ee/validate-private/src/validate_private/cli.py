@@ -33,7 +33,7 @@ def _resolve_outputs_path(explicit: Path | None, stack: str | None) -> Path:
             return txt_files[0]
     raise FileNotFoundError(
         f"No deployment found in {_DEPLOY_DIR}. "
-        "Run deploy.sh first, or pass --stack <name>."
+        "Run deploy.py first, or pass --stack <name>."
     )
 
 

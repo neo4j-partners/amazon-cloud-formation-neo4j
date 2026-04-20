@@ -221,7 +221,7 @@ Expected output on a healthy stack:
 ## 8. Troubleshooting
 
 **"No deployment found"**
-No `.deploy/*.txt` file exists. Run `deploy.sh` first, or pass the stack name explicitly.
+No `.deploy/*.txt` file exists. Run `deploy.py` first, or pass the stack name explicitly.
 
 **"Bastion SSM PingStatus = Online" fails**
 The bastion's UserData may still be running (common in the first 3 minutes after stack creation). Check the bastion's SSM status directly:

@@ -32,7 +32,7 @@ resolve_stack() {
     else
       echo "  No .txt files in ${DEPLOY_DIR}/" >&2
     fi
-    echo "  Run deploy.sh first, or pass a stack name." >&2
+    echo "  Run deploy.py first, or pass a stack name." >&2
     exit 1
   fi
 

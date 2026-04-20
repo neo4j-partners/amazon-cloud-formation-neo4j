@@ -30,7 +30,7 @@ The Lambda's security group has two egress rules: TCP 7687 to the Neo4j external
 
 ## Prerequisites
 
-- An existing neo4j-ee Private-mode stack (run `../deploy.sh --marketplace --mode Private`)
+- An existing neo4j-ee Private-mode stack (run `../deploy.py --marketplace --mode Private`)
 - AWS CDK v2 and Python 3 installed locally
 - `AWS_PROFILE` pointing to an account with permissions for CloudFormation, Lambda, IAM, EC2, SSM, and Secrets Manager
 

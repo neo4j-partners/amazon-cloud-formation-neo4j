@@ -196,7 +196,7 @@ sample-private-app/
 └── lambda/
     ├── handler.py                # Lambda handler: connect, merge, check servers, return report
     ├── requirements.txt          # neo4j>=5.0
-    └── neo4j-ca.crt              # Staged by deploy.sh --tls; absent on plain Bolt deployments
+    └── neo4j-ca.crt              # Staged by deploy.py --tls; absent on plain Bolt deployments
 ```
 
 ---

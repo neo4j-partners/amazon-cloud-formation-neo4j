@@ -51,22 +51,10 @@ aws cloudformation delete-stack \
   --region "${REGION}"
 
 echo "Waiting for stack deletion to complete..."
-echo "(If this stalls, Lambda VPC ENIs may still be detaching — run ./force-delete-lambda-enis.sh in another terminal to unblock.)"
 aws cloudformation wait stack-delete-complete \
   --stack-name "${STACK_NAME}" \
   --region "${REGION}"
 echo "Stack deleted."
-
-# ---------------------------------------------------------------------------
-# Delete SSM parameter written by deploy-sample-private-app.sh
-# ---------------------------------------------------------------------------
-APP_SSM_PARAM="/neo4j-sample-private-app/${STACK_NAME}/function-url"
-echo ""
-echo "Deleting SSM parameter ${APP_SSM_PARAM}..."
-aws ssm delete-parameter \
-  --region "${REGION}" \
-  --name "${APP_SSM_PARAM}" 2>/dev/null || true
-echo "SSM parameter deleted."
 
 # ---------------------------------------------------------------------------
 # Clean up the Lambda zip from S3 (all versions of the key)
@@ -101,6 +89,7 @@ echo ""
 echo "Removing ${APP_FILE}..."
 rm -f "${APP_FILE}"
 rm -f "${SCRIPT_DIR}/invoke.sh"
+rm -f "${SCRIPT_DIR}/validate.sh"
 
 echo ""
 echo "============================================="

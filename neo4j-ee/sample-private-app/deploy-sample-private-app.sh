@@ -174,8 +174,10 @@ aws cloudformation deploy \
   --stack-name "${APP_STACK_NAME}" \
   --template-file "${TEMPLATE_FILE}" \
   --capabilities CAPABILITY_IAM \
-  --parameter-overrides \
+  --tags \
+    "Project=neo4j-sample-private-app" \
     "Neo4jStack=${NEO4J_STACK}" \
+  --parameter-overrides \
     "SsmPrefix=${SSM_PREFIX}" \
     "VpcId=${VPC_ID}" \
     "SubnetIds=${PRIVATE_SUBNET_1_ID},${PRIVATE_SUBNET_2_ID}" \
@@ -183,6 +185,7 @@ aws cloudformation deploy \
     "VpcEndpointSgId=${VPC_ENDPOINT_SG_ID}" \
     "PasswordSecretArn=${PASSWORD_SECRET_ARN}" \
     "BoltTlsEnabled=${BOLT_TLS_ENABLED}" \
+    "Neo4jStackName=${NEO4J_STACK}" \
     "LambdaS3Bucket=${DEPLOY_BUCKET}" \
     "LambdaS3Key=${LAMBDA_KEY}" \
     "LambdaS3ObjectVersion=${LAMBDA_VERSION_ID}"
@@ -196,27 +199,16 @@ OUTPUTS_JSON=$(aws cloudformation describe-stacks \
   --query 'Stacks[0].Outputs' \
   --output json)
 
-read -r FUNCTION_URL FUNCTION_ARN < <(echo "${OUTPUTS_JSON}" | python3 -c "
+read -r FUNCTION_URL FUNCTION_ARN VALIDATE_URL VALIDATE_ARN < <(echo "${OUTPUTS_JSON}" | python3 -c "
 import json, sys
 outs = {o['OutputKey']: o['OutputValue'] for o in json.load(sys.stdin)}
-print(outs['FunctionUrl'], outs['FunctionArn'])")
+print(outs['FunctionUrl'], outs['FunctionArn'], outs['ResilienceFunctionUrl'], outs['ResilienceFunctionArn'])")
 
 echo ""
-echo "  Function URL: ${FUNCTION_URL}"
-echo "  Function ARN: ${FUNCTION_ARN}"
-
-# ---------------------------------------------------------------------------
-# Write Function URL to SSM
-# ---------------------------------------------------------------------------
-APP_SSM_PARAM="/neo4j-sample-private-app/${APP_STACK_NAME}/function-url"
-echo ""
-echo "Writing Function URL to SSM ${APP_SSM_PARAM}..."
-aws ssm put-parameter \
-  --region "${REGION}" \
-  --name "${APP_SSM_PARAM}" \
-  --type String \
-  --value "${FUNCTION_URL}" \
-  --overwrite > /dev/null
+echo "  Function URL:  ${FUNCTION_URL}"
+echo "  Function ARN:  ${FUNCTION_ARN}"
+echo "  Validate URL:  ${VALIDATE_URL}"
+echo "  Validate ARN:  ${VALIDATE_ARN}"
 
 # ---------------------------------------------------------------------------
 # Write local convenience file (invoke.sh reads the newest match)
@@ -229,7 +221,9 @@ cat > "${APP_LOCAL_FILE}" <<JSONEOF
   "neo4j_stack": "${NEO4J_STACK}",
   "region": "${REGION}",
   "function_url": "${FUNCTION_URL}",
-  "function_arn": "${FUNCTION_ARN}"
+  "function_arn": "${FUNCTION_ARN}",
+  "validate_url": "${VALIDATE_URL}",
+  "validate_arn": "${VALIDATE_ARN}"
 }
 JSONEOF
 echo "Wrote ${APP_LOCAL_FILE}"
@@ -264,10 +258,38 @@ INVOKE_EOF
 chmod +x "${INVOKE_SCRIPT}"
 echo "Wrote ${INVOKE_SCRIPT}"
 
+VALIDATE_SCRIPT="${SCRIPT_DIR}/validate.sh"
+cat > "${VALIDATE_SCRIPT}" <<'VALIDATE_EOF'
+#!/bin/bash
+# validate.sh — Trigger the resilience test: stop a follower via SSM, verify it rejoins.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_FILE=$(ls -t "${SCRIPT_DIR}/../.deploy"/sample-private-app-*.json 2>/dev/null | head -1 || true)
+if [ -z "${APP_FILE}" ]; then
+  echo "ERROR: No sample-private-app deployment found. Run ./deploy-sample-private-app.sh first." >&2
+  exit 1
+fi
+
+VALIDATE_URL=$(python3 -c "import json; d=json.load(open('${APP_FILE}')); print(d['validate_url'])")
+REGION=$(python3 -c "import json; d=json.load(open('${APP_FILE}')); print(d['region'])")
+
+eval "$(aws configure export-credentials --format env 2>/dev/null)"
+
+curl --silent --max-time 310 --aws-sigv4 "aws:amz:${REGION}:lambda" \
+  --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
+  -H "x-amz-security-token: ${AWS_SESSION_TOKEN}" \
+  -H "Content-Type: application/json" \
+  "${VALIDATE_URL}" | python3 -m json.tool
+VALIDATE_EOF
+chmod +x "${VALIDATE_SCRIPT}"
+echo "Wrote ${VALIDATE_SCRIPT}"
+
 echo ""
 echo "============================================="
 echo "  Deploy complete."
 echo "  To invoke:    ./invoke.sh"
+echo "  To validate:  ./validate.sh  (stops a follower, waits for recovery; ~60-120s)"
 echo "  To tear down: ./teardown-sample-private-app.sh"
 echo "  (Always tear down the sample app BEFORE the parent EE stack —"
 echo "   this stack owns ingress rules on the EE security groups.)"

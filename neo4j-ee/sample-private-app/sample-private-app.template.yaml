@@ -6,11 +6,9 @@ Description: >
   endpoints. Replaces the prior CDK implementation; see LAMBDA_PAINS.md.
 
 Parameters:
-  Neo4jStack:
-    Type: String
-    Description: Name of the parent Neo4j EE CloudFormation stack.
   SsmPrefix:
     Type: String
+    AllowedPattern: '^/[A-Za-z0-9._/-]+$'
     Description: SSM parameter prefix used by the parent EE stack (e.g. /neo4j-ee/<stack>).
   VpcId:
     Type: AWS::EC2::VPC::Id
@@ -32,6 +30,12 @@ Parameters:
     Default: 'false'
     AllowedValues: ['true', 'false']
     Description: When true, Lambda uses neo4j+ssc scheme.
+  Neo4jStackName:
+    Type: String
+    Description: CloudFormation stack name of the parent Neo4j EE stack (used for logging/env).
+  Neo4jStackId:
+    Type: String
+    Description: Full CloudFormation stack ARN of the parent Neo4j EE stack. The EE ASG propagates this as tag "StackID" to each cluster instance; the resilience Lambda filters and IAM scopes on it.
   LambdaS3Bucket:
     Type: String
     Description: S3 bucket holding the packaged Lambda zip.
@@ -127,6 +131,9 @@ Resources:
       LogGroupName: !Sub '/aws/lambda/${AWS::StackName}'
       RetentionInDays: 30
 
+  # FunctionName and FunctionLogGroup.LogGroupName both derive from ${AWS::StackName}.
+  # Lambda function-name rules are stricter than CloudFormation stack-name rules; keep
+  # stack names to the neo4j-sample-private-app-<ee-stack> pattern to stay within both.
   Function:
     Type: AWS::Lambda::Function
     DependsOn: FunctionLogGroup
@@ -163,8 +170,129 @@ Resources:
       TargetFunctionArn: !GetAtt Function.Arn
       AuthType: AWS_IAM
 
+  FunctionUrlSsmParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/neo4j-sample-private-app/${AWS::StackName}/function-url'
+      Type: String
+      Value: !GetAtt FunctionUrl.FunctionUrl
+      Description: Function URL of the Neo4j sample private app Lambda.
+
+  # The EE stack provisions ssm/ssmmessages/logs/secretsmanager VPC endpoints but
+  # not an ec2 endpoint. The resilience Lambda calls ec2:DescribeInstances, so
+  # this stack adds that endpoint, reusing the EE stack's endpoint SG.
+  Ec2VpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2'
+      PrivateDnsEnabled: true
+      SubnetIds: !Ref SubnetIds
+      SecurityGroupIds:
+        - !Ref VpcEndpointSgId
+
+  ResilienceFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: Neo4jResilienceInline
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SsmPrefix}/*'
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref PasswordSecretArn
+              - Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: '*'
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript'
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    aws:ResourceTag/StackID: !Ref Neo4jStackId
+              - Effect: Allow
+                Action:
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommandInvocations
+                Resource: '*'
+
+  ResilienceFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-resilience'
+      RetentionInDays: 30
+
+  ResilienceFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ResilienceFunctionLogGroup
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-resilience'
+      Runtime: python3.13
+      Handler: handler.resilience_handler
+      Role: !GetAtt ResilienceFunctionRole.Arn
+      MemorySize: 512
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      LoggingConfig:
+        LogGroup: !Ref ResilienceFunctionLogGroup
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+      VpcConfig:
+        SubnetIds: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+      Environment:
+        Variables:
+          NEO4J_SSM_NLB_PATH: !Sub '${SsmPrefix}/nlb-dns'
+          NEO4J_SECRET_ARN: !Ref PasswordSecretArn
+          NEO4J_BOLT_TLS: !If [BoltTlsEnabledCond, 'true', !Ref 'AWS::NoValue']
+          NEO4J_STACK_NAME: !Ref Neo4jStackName
+          NEO4J_STACK_ID: !Ref Neo4jStackId
+      Code:
+        S3Bucket: !Ref LambdaS3Bucket
+        S3Key: !Ref LambdaS3Key
+        S3ObjectVersion: !If [HasObjectVersion, !Ref LambdaS3ObjectVersion, !Ref 'AWS::NoValue']
+
+  ResilienceFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt ResilienceFunction.Arn
+      AuthType: AWS_IAM
+
+  ResilienceFunctionUrlSsmParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/neo4j-sample-private-app/${AWS::StackName}/validate-url'
+      Type: String
+      Value: !GetAtt ResilienceFunctionUrl.FunctionUrl
+      Description: Function URL of the Neo4j sample private app resilience Lambda.
+
 Outputs:
   FunctionUrl:
     Value: !GetAtt FunctionUrl.FunctionUrl
   FunctionArn:
     Value: !GetAtt Function.Arn
+  ResilienceFunctionUrl:
+    Value: !GetAtt ResilienceFunctionUrl.FunctionUrl
+  ResilienceFunctionArn:
+    Value: !GetAtt ResilienceFunction.Arn

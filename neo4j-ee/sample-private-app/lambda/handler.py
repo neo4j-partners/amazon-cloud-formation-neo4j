@@ -241,16 +241,22 @@ def _resilience(driver):
 
 def _cluster_roles(driver):
     with driver.session(database="system") as s:
-        rows = s.run("CALL dbms.cluster.overview()").data()
+        servers = s.run("SHOW SERVERS YIELD name, address").data()
+        db_rows = s.run("SHOW DATABASE neo4j YIELD address, writer").data()
+
+    addr_to_uuid = {r["address"]: r["name"] for r in servers}
+
     followers = []
     leader = None
-    for r in rows:
-        role = (r.get("databases") or {}).get("neo4j")
-        sid = r.get("id")
-        if role == "FOLLOWER":
-            followers.append(sid)
-        elif role == "LEADER":
-            leader = sid
+    for row in db_rows:
+        uuid = addr_to_uuid.get(row["address"])
+        if uuid is None:
+            continue
+        if row["writer"]:
+            leader = uuid
+        else:
+            followers.append(uuid)
+
     return followers, leader
 
 

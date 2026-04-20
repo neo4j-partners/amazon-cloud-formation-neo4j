@@ -19,6 +19,7 @@ class StackConfig:
     nlb_dns: str
     password: str
     install_apoc: bool
+    bolt_tls_secret_arn: str = ""
 
 
 def _parse_outputs(path: Path) -> dict[str, str]:
@@ -95,4 +96,5 @@ def load_config(
         nlb_dns=fields["Neo4jInternalDNS"],
         password=password,
         install_apoc=fields.get("InstallAPOC", "no").lower() == "yes",
+        bolt_tls_secret_arn=fields.get("BoltTlsSecretArn", ""),
     )

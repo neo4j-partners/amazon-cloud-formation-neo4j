@@ -2,9 +2,9 @@
 # preflight.sh — Check that the stack and bastion are ready before running validate-private
 #
 # Checks (in order):
-#   1.  CloudFormation stack status = CREATE_COMPLETE
+#   1.  CloudFormation stack status = CREATE_COMPLETE or UPDATE_COMPLETE
 #   2.  Bastion SSM PingStatus = Online
-#   3.  neo4j Python driver installed on bastion  (python3 -c "import neo4j")
+#   3.  neo4j Python driver installed on bastion  (python3.11 -c "import neo4j")
 #   4.  cypher-shell installed on bastion
 #   5.  Secrets Manager secret exists
 #   6.  Contract SSM params (5 named: vpc-id, nlb-dns, external-sg-id,
@@ -71,7 +71,7 @@ _cfn_complete() {
     --region "${REGION}" \
     --query "Stacks[0].StackStatus" \
     --output text)
-  [ "$status" = "CREATE_COMPLETE" ]
+  [[ "$status" == "CREATE_COMPLETE" || "$status" == "UPDATE_COMPLETE" ]]
 }
 
 _ssm_online() {
@@ -111,7 +111,7 @@ _send_and_wait() {
   return 1
 }
 
-_neo4j_driver_installed() { _send_and_wait "python3 -c 'import neo4j; print(neo4j.__version__)'"; }
+_neo4j_driver_installed() { _send_and_wait "python3.11 -c 'import neo4j; print(neo4j.__version__)'"; }
 _cypher_shell_installed()  { _send_and_wait "cypher-shell --version"; }
 
 _secret_exists() {
@@ -191,7 +191,7 @@ _endpoint_reachable_ssmmessages() {
   _send_and_wait "curl -m 5 -sSo /dev/null -w '%{http_code}' https://ssmmessages.${REGION}.amazonaws.com/ | grep -qE '^(400|403|404)$'"
 }
 
-_check "Stack status = CREATE_COMPLETE"                     _cfn_complete
+_check "Stack status = CREATE_COMPLETE or UPDATE_COMPLETE"  _cfn_complete
 _check "Bastion SSM PingStatus = Online"                    _ssm_online
 _check "neo4j Python driver installed on bastion"           _neo4j_driver_installed
 _check "cypher-shell installed on bastion"                  _cypher_shell_installed

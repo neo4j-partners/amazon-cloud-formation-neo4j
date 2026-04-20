@@ -175,22 +175,47 @@ def main():
         ec2 = boto3.client("ec2", region_name=region)
 
         if region != SOURCE_REGION:
-            print(f"Copying AMI {source_ami_id} from {SOURCE_REGION} to {region}...")
-            resp = ec2.copy_image(
-                SourceRegion=SOURCE_REGION,
-                SourceImageId=source_ami_id,
-                Name=f"neo4j-ee-copy-{stack_name}",
-                Description=f"Copied from {source_ami_id} in {SOURCE_REGION} for {stack_name}",
+            existing = ec2.describe_images(
+                Owners=["self"],
+                Filters=[{"Name": "description", "Values": [f"Copied from {source_ami_id} in {SOURCE_REGION}"]}],
+            )["Images"]
+            available = sorted(
+                [img for img in existing if img["State"] == "available"],
+                key=lambda img: img["CreationDate"], reverse=True,
             )
-            copied_ami_id = resp["ImageId"]
-            cleanup_state["copied_ami_id"] = copied_ami_id
-            cleanup_state["cleanup_ami"] = True
-            print(f"Copied AMI: {copied_ami_id} — waiting for it to become available...")
-            ec2.get_waiter("image_available").wait(
-                ImageIds=[copied_ami_id],
-                WaiterConfig={"Delay": 30, "MaxAttempts": 60},
-            )
-            print(f"AMI available in {region}.")
+            pending = [img for img in existing if img["State"] == "pending"]
+            if available:
+                copied_ami_id = available[0]["ImageId"]
+                print(f"Reusing existing copied AMI {copied_ami_id} in {region}.")
+                cleanup_state["copied_ami_id"] = copied_ami_id
+                cleanup_state["cleanup_ami"] = False
+            elif pending:
+                copied_ami_id = pending[0]["ImageId"]
+                print(f"Found in-progress AMI copy {copied_ami_id} in {region} — waiting for it to become available...")
+                ec2.get_waiter("image_available").wait(
+                    ImageIds=[copied_ami_id],
+                    WaiterConfig={"Delay": 30, "MaxAttempts": 60},
+                )
+                print(f"AMI available in {region}.")
+                cleanup_state["copied_ami_id"] = copied_ami_id
+                cleanup_state["cleanup_ami"] = False
+            else:
+                print(f"Copying AMI {source_ami_id} from {SOURCE_REGION} to {region}...")
+                resp = ec2.copy_image(
+                    SourceRegion=SOURCE_REGION,
+                    SourceImageId=source_ami_id,
+                    Name=f"neo4j-ee-copy-{source_ami_id}",
+                    Description=f"Copied from {source_ami_id} in {SOURCE_REGION}",
+                )
+                copied_ami_id = resp["ImageId"]
+                cleanup_state["copied_ami_id"] = copied_ami_id
+                cleanup_state["cleanup_ami"] = True
+                print(f"Copied AMI: {copied_ami_id} — waiting for it to become available...")
+                ec2.get_waiter("image_available").wait(
+                    ImageIds=[copied_ami_id],
+                    WaiterConfig={"Delay": 30, "MaxAttempts": 60},
+                )
+                print(f"AMI available in {region}.")
             ami_id = copied_ami_id
         else:
             ami_id = source_ami_id
@@ -379,7 +404,7 @@ def main():
         extra.append(("AlertEmail", args.alert_email))
     if ssm_param_path:
         extra.extend([("SSMParamPath", ssm_param_path), ("AmiId", ami_id)])
-    if cleanup_state["copied_ami_id"]:
+    if cleanup_state["copied_ami_id"] and cleanup_state["cleanup_ami"]:
         extra.extend([("CopiedAmiId", cleanup_state["copied_ami_id"]), ("SourceRegion", SOURCE_REGION)])
     if bolt_tls_secret_arn:
         extra.append(("BoltTlsSecretArn", bolt_tls_secret_arn))

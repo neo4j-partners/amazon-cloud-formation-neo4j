@@ -50,7 +50,7 @@ Metadata:
 Parameters:
   ImageId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/marketplace/prod-vwigx4rbvvb5s/2025.12.0
+    Default: /aws/service/marketplace/prod-vwigx4rbvvb5s/2026.03.1
   Password:
     Description: >
       Password for the neo4j admin user. Must be at least 8 characters
@@ -961,13 +961,31 @@ Resources:
               - "  fi\n"
               - "  _data_vol_id=\"${_vols}\"\n"
               - "  echo \"Data volume: ${_data_vol_id} in ${_az}\"\n"
-              # Retry the attach call itself. On ASG replacement the previous
-              # instance's detach may still be in progress (VolumeInUse /
-              # IncorrectState) when the replacement boots — a single-shot
-              # attach would abort UserData right in the recovery scenario this
-              # design exists for. Retry for up to 60s before giving up.
+              # Wait for the volume to reach 'available' before attaching.
+              # On simultaneous ASG replacement of all nodes the prior instances
+              # are terminated at once, so all three volumes detach concurrently.
+              # EBS detach can take several minutes after a hard termination; the
+              # old 12×5s=60s blind-retry loop exhausted before volumes freed up.
+              # Polling on State='available' lets the instance wait as long as
+              # needed (up to 10 min) without wasting API calls on attach attempts
+              # that will always fail while the volume is still detaching.
+              - "  echo \"  Waiting for volume ${_data_vol_id} to reach 'available' state (up to 10 min)...\"\n"
+              - "  local _vol_top_state _wait_s=0\n"
+              - "  while true; do\n"
+              - "    _vol_top_state=$(aws ec2 describe-volumes --region \"$region\" \\\n"
+              - "      --volume-ids \"${_data_vol_id}\" \\\n"
+              - "      --query \"Volumes[0].State\" --output text 2>/dev/null || echo \"unknown\")\n"
+              - "    [[ \"${_vol_top_state}\" == \"available\" ]] && break\n"
+              - "    if (( _wait_s >= 600 )); then\n"
+              - "      echo \"ERROR: Volume ${_data_vol_id} did not become available after 10 min (state=${_vol_top_state}). Exiting.\"\n"
+              - "      exit 1\n"
+              - "    fi\n"
+              - "    echo \"  Volume state: ${_vol_top_state}, waiting 10s... (${_wait_s}s elapsed)\"\n"
+              - "    sleep 10\n"
+              - "    _wait_s=$(( _wait_s + 10 ))\n"
+              - "  done\n"
               - "  local _attach_ok=false\n"
-              - "  for _attach_try in $(seq 1 12); do\n"
+              - "  for _attach_try in $(seq 1 3); do\n"
               - "    if aws ec2 attach-volume --region \"$region\" \\\n"
               - "        --volume-id \"${_data_vol_id}\" \\\n"
               - "        --instance-id \"${_instance_id}\" \\\n"
@@ -975,11 +993,11 @@ Resources:
               - "      _attach_ok=true\n"
               - "      break\n"
               - "    fi\n"
-              - "    echo \"  attach-volume attempt ${_attach_try}/12 failed (volume may still be detaching from a prior instance), retrying in 5s...\"\n"
+              - "    echo \"  attach-volume attempt ${_attach_try}/3 failed, retrying in 5s...\"\n"
               - "    sleep 5\n"
               - "  done\n"
               - "  if [[ \"${_attach_ok}\" != \"true\" ]]; then\n"
-              - "    echo \"ERROR: Could not attach volume ${_data_vol_id} to ${_instance_id} after 60s. Exiting.\"\n"
+              - "    echo \"ERROR: Could not attach volume ${_data_vol_id} to ${_instance_id}. Exiting.\"\n"
               - "    exit 1\n"
               - "  fi\n"
               - "  echo \"Waiting for volume ${_data_vol_id} to reach 'attached' state (up to 2 min)...\"\n"
@@ -1529,6 +1547,13 @@ Resources:
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
                 Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/neo4j-ee/${AWS::StackName}/*'
+              - !If
+                - BoltTLSEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref BoltCertificateSecretArn
+                - !Ref AWS::NoValue
 
   Neo4jBastionInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -1566,14 +1591,14 @@ Resources:
           set -euo pipefail
           exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 
-          dnf install -y python3-pip
+          dnf install -y python3.11 python3.11-pip
           dnf update -y aws-cfn-bootstrap
-          python3 -m pip install 'neo4j>=5,<6' boto3
+          python3.11 -m pip install 'neo4j>=6,<7' boto3
 
           # Neo4j yum repo + cypher-shell for interactive admin via:
           #   aws ssm start-session --target <bastion> → cypher-shell -a neo4j://<nlb>:7687
           rpm --import https://debian.neo4j.com/neotechnology.gpg.key
-          printf '[neo4j]\nname=Neo4j RPM Repository\nbaseurl=https://yum.neo4j.com/stable/5\nenabled=1\ngpgcheck=1\n' >/etc/yum.repos.d/neo4j.repo
+          printf '[neo4j]\nname=Neo4j RPM Repository\nbaseurl=https://yum.neo4j.com/stable/latest\nenabled=1\ngpgcheck=1\n' >/etc/yum.repos.d/neo4j.repo
           dnf install -y cypher-shell
 
           systemctl is-active amazon-ssm-agent

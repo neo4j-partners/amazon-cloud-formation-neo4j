@@ -252,7 +252,7 @@ The stack was torn down. `teardown.sh` force-deletes the secret immediately to u
 The NLB routed a write to a follower. Use `uv run admin-shell` for writes — `neo4j://` routing directs writes to the leader automatically.
 
 **Bastion Python checks fail but SSM is Online**
-The bastion's UserData finished but package installation failed. Check the cloud-init log on the bastion:
+The bastion's UserData finished but package installation failed. The bastion installs Python 3.11 (`python3.11`) alongside the AL2023 system `python3` (3.9), and installs the `neo4j` driver and `boto3` under 3.11. All validate-private tooling invokes `python3.11` on the bastion explicitly. Check the cloud-init log on the bastion:
 
 ```bash
 aws ssm send-command \
@@ -263,6 +263,28 @@ aws ssm send-command \
 ```
 
 Then retrieve the output with `aws ssm get-command-invocation`.
+
+To verify 3.11 and its packages directly:
+
+```bash
+aws ssm send-command \
+  --instance-ids <bastion-id> \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["python3.11 --version && python3.11 -c \"import neo4j, boto3; print(neo4j.__version__, boto3.__version__)\""]' \
+  --region <region>
+```
+
+If 3.11 is present but a package is missing (for example, `boto3` not installed), the UserData `pip install` step failed — reinstall manually via SSM or rebuild the bastion:
+
+```bash
+aws ssm send-command \
+  --instance-ids <bastion-id> \
+  --document-name AWS-RunShellScript \
+  --parameters "commands=[\"python3.11 -m pip install 'neo4j>=6,<7' boto3\"]" \
+  --region <region>
+```
+
+Note: UserData only runs on first boot. Updating the template's UserData requires replacing the bastion instance (or running the install commands manually via SSM as above).
 
 ---
 

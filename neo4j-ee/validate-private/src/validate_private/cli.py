@@ -17,6 +17,8 @@ log = logging.getLogger(__name__)
 _NEO4J_EE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 _DEPLOY_DIR = _NEO4J_EE_DIR / ".deploy"
 
+_FAILOVER_CASES = {"follower-with-data", "leader", "rolling", "reads"}
+
 
 def _resolve_outputs_path(explicit: Path | None, stack: str | None) -> Path:
     if explicit:
@@ -37,6 +39,25 @@ def _resolve_outputs_path(explicit: Path | None, stack: str | None) -> Path:
     )
 
 
+def _run_failover_suite(config, reporter) -> None:
+    from validate_private.failover import (  # noqa: PLC0415
+        run_follower_with_data,
+        run_leader,
+        run_reads,
+        run_rolling,
+    )
+    run_follower_with_data(config, reporter)
+    run_leader(config, reporter)
+    run_rolling(config, reporter)
+    run_reads(config, reporter)
+
+
+def _run_resilience_suite(config, reporter, timeout: int | None) -> None:
+    from validate_private.resilience import run_single_loss, run_total_loss  # noqa: PLC0415
+    run_single_loss(config, reporter, timeout=timeout or 900)
+    run_total_loss(config, reporter, timeout=timeout or 1200)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Validate a deployed EE Private Neo4j stack via the operator bastion"
@@ -54,20 +75,37 @@ def main() -> None:
         "--password",
         help="Override the password (skips Secrets Manager fetch)",
     )
-    parser.add_argument(
+
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--case",
-        choices=["single-loss", "total-loss"],
+        choices=[
+            "single-loss", "total-loss", "server-ids",
+            "follower-with-data", "leader", "rolling", "reads",
+        ],
         help=(
-            "Run a destructive resilience test case instead of connectivity checks. "
-            "single-loss: terminate one cluster node; verify volume reattach + data persistence. "
-            "total-loss: terminate all three nodes; verify full cluster recovery from retained volumes. "
-            "Expected runtime: ~5 min (single-loss), ~10-15 min (total-loss)."
+            "Run a specific test case. "
+            "Resilience (terminate/EBS): single-loss (~5 min), total-loss (~10-15 min). "
+            "Failover (systemctl stop/start): follower-with-data (~60s), leader (~90s), "
+            "rolling (~4-15 min), reads (~90s). "
+            "Diagnostic: server-ids (~30s)."
+        ),
+    )
+    mode_group.add_argument(
+        "--suite",
+        choices=["failover", "resilience", "all"],
+        help=(
+            "Run a suite of test cases. "
+            "failover: follower-with-data, leader, rolling, reads. "
+            "resilience: single-loss, total-loss. "
+            "all: failover then resilience (resilience skipped if failover has any failures)."
         ),
     )
     parser.add_argument(
         "--timeout",
         type=int,
-        help="Override the ASG replacement timeout in seconds (default: 900 single-loss, 1200 total-loss)",
+        help="Override the ASG replacement timeout in seconds (resilience cases only; "
+             "default: 900 single-loss, 1200 total-loss)",
     )
     args = parser.parse_args()
 
@@ -89,18 +127,38 @@ def main() -> None:
     log.info("  Bastion: %s", config.bastion_id)
     log.info("  NLB:     %s", config.nlb_dns)
     if args.case:
-        log.info("  Mode:    resilience/%s", args.case)
+        if args.case in _FAILOVER_CASES:
+            module = "failover"
+        elif args.case == "server-ids":
+            module = "diagnostic"
+        else:
+            module = "resilience"
+        log.info("  Mode:    %s/%s", module, args.case)
+    elif args.suite:
+        log.info("  Mode:    suite/%s", args.suite)
     log.info("")
 
     if args.case:
-        from validate_private.resilience import run_single_loss, run_total_loss  # noqa: PLC0415
-
-        if args.case == "single-loss":
-            timeout = args.timeout or 900
-            run_single_loss(config, reporter, timeout=timeout)
+        if args.case == "server-ids":
+            from validate_private.checks import run_server_id_check  # noqa: PLC0415
+            run_server_id_check(config, reporter)
+        elif args.case in _FAILOVER_CASES:
+            from validate_private import failover  # noqa: PLC0415
+            getattr(failover, f"run_{args.case.replace('-', '_')}")(config, reporter)
         else:
-            timeout = args.timeout or 1200
-            run_total_loss(config, reporter, timeout=timeout)
+            from validate_private.resilience import run_single_loss, run_total_loss  # noqa: PLC0415
+            if args.case == "single-loss":
+                run_single_loss(config, reporter, timeout=args.timeout or 900)
+            else:
+                run_total_loss(config, reporter, timeout=args.timeout or 1200)
+    elif args.suite:
+        if args.suite in ("failover", "all"):
+            _run_failover_suite(config, reporter)
+        if args.suite in ("resilience", "all"):
+            if args.suite == "all" and reporter.had_failures():
+                log.info("  Failover suite had failures — skipping resilience suite.\n")
+            else:
+                _run_resilience_suite(config, reporter, args.timeout)
     else:
         run_checks(config, reporter)
 

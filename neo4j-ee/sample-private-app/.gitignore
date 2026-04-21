@@ -12,3 +12,4 @@ lambda/pytz-*.dist-info/
 
 # Generated at deploy time by deploy-sample-private-app.sh
 invoke.sh
+lambda.zip

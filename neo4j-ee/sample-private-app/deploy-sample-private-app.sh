@@ -3,9 +3,11 @@
 # an existing EE stack, using plain CloudFormation (no CDK).
 #
 # Usage:
-#   ./deploy-sample-private-app.sh [stack-name]
+#   ./deploy-sample-private-app.sh [stack-name] [--suffix <suffix>]
 #
 # If stack-name is omitted, uses the most recently modified file in .deploy/.
+# --suffix appends a string to the app stack name, allowing parallel deployments
+# against the same EE stack (e.g. while a previous app stack is being torn down).
 # Reads /neo4j-ee/<stack-name>/ SSM parameters written by the EE CloudFormation
 # stack, packages the Lambda, uploads it, deploys the template, then writes the
 # Function URL to SSM and .deploy/.
@@ -49,6 +51,25 @@ require_ssm() {
 }
 
 # ---------------------------------------------------------------------------
+# Parse arguments: optional positional stack-name and optional --suffix
+# ---------------------------------------------------------------------------
+SUFFIX=""
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --suffix)
+      SUFFIX="-${2:?--suffix requires a value}"
+      shift 2
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
+
+# ---------------------------------------------------------------------------
 # Resolve the EE outputs file
 # ---------------------------------------------------------------------------
 if [ $# -ge 1 ]; then
@@ -81,7 +102,7 @@ if [ "${DEPLOYMENT_MODE}" != "Private" ]; then
 fi
 
 SSM_PREFIX="/neo4j-ee/${NEO4J_STACK}"
-APP_STACK_NAME="neo4j-sample-private-app-${NEO4J_STACK}"
+APP_STACK_NAME="neo4j-sample-private-app-${NEO4J_STACK}${SUFFIX}"
 
 NEO4J_STACK_ID=$(aws cloudformation describe-stacks \
   --region "${REGION}" \
@@ -225,7 +246,7 @@ echo "  Validate ARN:  ${VALIDATE_ARN}"
 # Write local convenience file (invoke.sh reads the newest match)
 # ---------------------------------------------------------------------------
 mkdir -p "${DEPLOY_DIR}"
-APP_LOCAL_FILE="${DEPLOY_DIR}/sample-private-app-${NEO4J_STACK}.json"
+APP_LOCAL_FILE="${DEPLOY_DIR}/sample-private-app-${NEO4J_STACK}${SUFFIX}.json"
 cat > "${APP_LOCAL_FILE}" <<JSONEOF
 {
   "stack_name": "${APP_STACK_NAME}",

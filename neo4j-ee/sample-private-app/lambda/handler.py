@@ -158,11 +158,19 @@ POLL_INTERVAL_S = 3
 
 def resilience_handler(event, context):
     try:
-        driver = _get_driver()
-        return _resilience(driver)
-    except AuthError:
-        driver = _reset_driver()
-        return _resilience(driver)
+        try:
+            driver = _get_driver()
+            return _resilience(driver)
+        except AuthError:
+            driver = _reset_driver()
+            return _resilience(driver)
+    except Exception as exc:
+        log.exception("resilience_handler failed")
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": type(exc).__name__, "message": str(exc)}),
+        }
 
 
 def _resilience(driver):
@@ -177,7 +185,7 @@ def _resilience(driver):
 
     followers, leader = _cluster_roles(driver)
     if not followers:
-        raise RuntimeError("No FOLLOWER members found in dbms.cluster.overview()")
+        raise RuntimeError("No FOLLOWER members found in SHOW DATABASE neo4j YIELD serverID, writer")
 
     instance_ids = _neo4j_instance_ids(ee_stack_id)
     if len(instance_ids) < 2:
@@ -241,22 +249,9 @@ def _resilience(driver):
 
 def _cluster_roles(driver):
     with driver.session(database="system") as s:
-        servers = s.run("SHOW SERVERS YIELD name, address").data()
-        db_rows = s.run("SHOW DATABASE neo4j YIELD address, writer").data()
-
-    addr_to_uuid = {r["address"]: r["name"] for r in servers}
-
-    followers = []
-    leader = None
-    for row in db_rows:
-        uuid = addr_to_uuid.get(row["address"])
-        if uuid is None:
-            continue
-        if row["writer"]:
-            leader = uuid
-        else:
-            followers.append(uuid)
-
+        db_rows = s.run("SHOW DATABASE neo4j YIELD serverID, writer").data()
+    followers = [r["serverID"] for r in db_rows if not r["writer"]]
+    leader = next((r["serverID"] for r in db_rows if r["writer"]), None)
     return followers, leader
 
 
@@ -276,7 +271,9 @@ def _read_server_ids(instance_ids):
     cmd_id = _ssm.send_command(
         InstanceIds=instance_ids,
         DocumentName="AWS-RunShellScript",
-        Parameters={"commands": ["cat /var/lib/neo4j/data/server_id"]},
+        Parameters={"commands": [
+            "python3 -c \"import uuid; d=open('/var/lib/neo4j/data/server_id','rb').read(); print(str(uuid.UUID(bytes=d[1:])))\""
+        ]},
     )["Command"]["CommandId"]
 
     mapping = {}

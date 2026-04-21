@@ -18,7 +18,11 @@ import uuid
 from typing import TYPE_CHECKING
 
 from botocore.config import Config
-from validate_private.runner import Neo4jQueryError, run_cypher_on_bastion, run_shell_on_instance
+from validate_private.aws_helpers import asg_instances as _asg_instances
+from validate_private.aws_helpers import stack_resources as _stack_resources
+from validate_private.quorum import check_quorum
+from validate_private.runner import run_cypher_on_bastion, run_shell_on_instance
+from validate_private.sentinel import cleanup_sentinel, verify_sentinel, write_sentinel
 
 if TYPE_CHECKING:
     from validate_private.config import StackConfig
@@ -34,23 +38,6 @@ _RETRY_CFG = Config(retries={"mode": "standard"})
 # ---------------------------------------------------------------------------
 # AWS helpers — accept pre-created clients; no boto3 imports inside helpers
 # ---------------------------------------------------------------------------
-
-def _stack_resources(cfn, stack_name: str) -> dict[str, str]:
-    paginator = cfn.get_paginator("list_stack_resources")
-    result = {}
-    for page in paginator.paginate(StackName=stack_name):
-        for r in page["StackResourceSummaries"]:
-            result[r["LogicalResourceId"]] = r["PhysicalResourceId"]
-    return result
-
-
-def _asg_instances(asg, asg_name: str) -> list[str]:
-    """Return InService instance IDs in an ASG."""
-    groups = asg.describe_auto_scaling_groups(AutoScalingGroupNames=[asg_name])["AutoScalingGroups"]
-    if not groups:
-        return []
-    return [i["InstanceId"] for i in groups[0]["Instances"] if i["LifecycleState"] == "InService"]
-
 
 def _terminate_instance(ec2, instance_id: str) -> None:
     ec2.terminate_instances(InstanceIds=[instance_id])
@@ -173,103 +160,6 @@ def _wait_neo4j(config: "StackConfig", timeout: int) -> bool:
     return False
 
 
-def _write_sentinel(config: "StackConfig", test_run_id: str) -> tuple[bool, str]:
-    try:
-        run_cypher_on_bastion(
-            config,
-            "CREATE (s:ResilienceSentinel {test_id: $tid, value: 'persistence-check'})",
-            params={"tid": test_run_id},
-        )
-        rows = run_cypher_on_bastion(
-            config,
-            "MATCH (s:ResilienceSentinel {test_id: $tid}) RETURN s.value AS v",
-            params={"tid": test_run_id},
-        )
-        if rows and rows[0].get("v") == "persistence-check":
-            return True, f"Sentinel written (id={test_run_id[:8]}…)"
-        return False, "Sentinel not found immediately after creation"
-    except (Neo4jQueryError, Exception) as exc:
-        return False, str(exc)
-
-
-def _verify_sentinel(config: "StackConfig", test_run_id: str) -> tuple[bool, str]:
-    try:
-        rows = run_cypher_on_bastion(
-            config,
-            "MATCH (s:ResilienceSentinel {test_id: $tid}) RETURN s.value AS v",
-            params={"tid": test_run_id},
-        )
-        if not rows:
-            return False, "Sentinel NOT found — data volume was lost or reformatted"
-        if rows[0].get("v") == "persistence-check":
-            return True, f"Sentinel intact (id={test_run_id[:8]}…)"
-        return False, f"Unexpected sentinel value: {rows[0].get('v')!r}"
-    except (Neo4jQueryError, Exception) as exc:
-        return False, str(exc)
-
-
-def _cleanup_sentinel(config: "StackConfig", test_run_id: str) -> None:
-    try:
-        run_cypher_on_bastion(
-            config,
-            "MATCH (s:ResilienceSentinel {test_id: $tid}) DELETE s",
-            params={"tid": test_run_id},
-        )
-    except Exception:
-        log.warning("  Sentinel cleanup failed (non-fatal) — run manually if needed:")
-        log.warning("    MATCH (s:ResilienceSentinel {test_id: '%s'}) DELETE s", test_run_id)
-
-
-def _check_quorum(
-    config: "StackConfig",
-    reporter: "TestReporter",
-    expected_nodes: int,
-) -> None:
-    """Verify cluster quorum: expected node count, all healthy, exactly 1 writer."""
-    start = time.monotonic()
-    try:
-        server_rows = run_cypher_on_bastion(config, "SHOW SERVERS", database="system")
-        actual_count = len(server_rows)
-        unhealthy = [
-            r.get("name", r.get("serverId", "?"))
-            for r in server_rows
-            if r.get("health") != "Available" or r.get("state") != "Enabled"
-        ]
-
-        routing_rows = run_cypher_on_bastion(
-            config,
-            "CALL dbms.routing.getRoutingTable({}) YIELD servers RETURN servers",
-        )
-        servers = routing_rows[0]["servers"] if routing_rows else []
-        write_entry = next((s for s in servers if s["role"] == "WRITE"), None)
-        read_entry = next((s for s in servers if s["role"] == "READ"), None)
-        writer_count = len(write_entry["addresses"]) if write_entry else 0
-        reader_count = len(read_entry["addresses"]) if read_entry else 0
-
-        issues = []
-        if actual_count != expected_nodes:
-            issues.append(f"expected {expected_nodes} nodes, got {actual_count}")
-        if unhealthy:
-            issues.append(f"unhealthy: {unhealthy}")
-        if writer_count != 1:
-            issues.append(f"expected 1 writer, got {writer_count}")
-
-        if issues:
-            reporter.record(
-                "Cluster quorum", False,
-                "Quorum check failed: " + "; ".join(issues),
-                time.monotonic() - start,
-            )
-        else:
-            reporter.record(
-                "Cluster quorum", True,
-                f"{actual_count} nodes (1 writer, {reader_count} reader(s))",
-                time.monotonic() - start,
-            )
-    except Exception as exc:
-        reporter.record("Cluster quorum", False, str(exc), time.monotonic() - start)
-
-
 # ---------------------------------------------------------------------------
 # Test cases
 # ---------------------------------------------------------------------------
@@ -304,7 +194,7 @@ def run_single_loss(
     test_run_id = uuid.uuid4().hex
 
     start = time.monotonic()
-    ok, detail = _write_sentinel(config, test_run_id)
+    ok, detail = write_sentinel(config, test_run_id)
     reporter.record("Write sentinel", ok, detail, time.monotonic() - start)
     if not ok:
         return
@@ -380,11 +270,11 @@ def run_single_loss(
         return
 
     start = time.monotonic()
-    ok, detail = _verify_sentinel(config, test_run_id)
+    ok, detail = verify_sentinel(config, test_run_id)
     reporter.record("Sentinel persisted", ok, detail, time.monotonic() - start)
 
-    _check_quorum(config, reporter, expected_nodes=len(asg_map))
-    _cleanup_sentinel(config, test_run_id)
+    check_quorum(config, reporter, expected_nodes=len(asg_map))
+    cleanup_sentinel(config, test_run_id)
     log.info("")
 
 
@@ -418,7 +308,7 @@ def run_total_loss(
     test_run_id = uuid.uuid4().hex
 
     start = time.monotonic()
-    ok, detail = _write_sentinel(config, test_run_id)
+    ok, detail = write_sentinel(config, test_run_id)
     reporter.record("Write sentinel", ok, detail, time.monotonic() - start)
     if not ok:
         return
@@ -539,9 +429,9 @@ def run_total_loss(
         return
 
     start = time.monotonic()
-    ok, detail = _verify_sentinel(config, test_run_id)
+    ok, detail = verify_sentinel(config, test_run_id)
     reporter.record("Sentinel persisted", ok, detail, time.monotonic() - start)
 
-    _check_quorum(config, reporter, expected_nodes=len(asg_map))
-    _cleanup_sentinel(config, test_run_id)
+    check_quorum(config, reporter, expected_nodes=len(asg_map))
+    cleanup_sentinel(config, test_run_id)
     log.info("")

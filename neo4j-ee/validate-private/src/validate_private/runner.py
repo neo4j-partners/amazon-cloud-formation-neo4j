@@ -67,7 +67,7 @@ class Neo4jQueryError(RuntimeError):
     pass
 
 
-def _run_ssm_command(
+def run_ssm_command(
     ssm,
     command_id: str,
     instance_id: str,
@@ -169,7 +169,7 @@ def run_cypher_on_bastion(
     command_id = resp["Command"]["CommandId"]
     log.debug("SSM command %s dispatched to bastion %s", command_id, config.bastion_id)
 
-    status, stdout, stderr = _run_ssm_command(ssm, command_id, config.bastion_id, timeout_s)
+    status, stdout, stderr = run_ssm_command(ssm, command_id, config.bastion_id, timeout_s)
 
     if status != "Success":
         raise BastionCommandError(
@@ -221,5 +221,5 @@ def run_shell_on_instance(
         return False, "", str(exc)
 
     command_id = resp["Command"]["CommandId"]
-    status, stdout, stderr = _run_ssm_command(ssm, command_id, instance_id, timeout_s)
+    status, stdout, stderr = run_ssm_command(ssm, command_id, instance_id, timeout_s)
     return status == "Success", stdout, stderr

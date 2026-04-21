@@ -12,6 +12,9 @@ class TestReporter:
     def __init__(self) -> None:
         self._results: list[tuple[str, bool, str, float]] = []
 
+    def had_failures(self) -> bool:
+        return any(not ok for _, ok, _, _ in self._results)
+
     def record(self, name: str, passed: bool, detail: str, elapsed: float) -> None:
         self._results.append((name, passed, detail, elapsed))
         status = "PASS" if passed else "FAIL"

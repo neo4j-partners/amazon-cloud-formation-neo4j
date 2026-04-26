@@ -105,6 +105,19 @@ def check_apoc(config: "StackConfig", reporter: "TestReporter") -> None:
     _run(config, reporter, "APOC plugin", cypher, _check)
 
 
+def check_gds(config: "StackConfig", reporter: "TestReporter") -> None:
+    if not config.install_gds:
+        return
+
+    cypher = "RETURN gds.version() AS version"
+
+    def _check(rows):
+        version = rows[0]["version"] if rows else None
+        return bool(version), f"GDS {version}" if version else "no result"
+
+    _run(config, reporter, "GDS plugin", cypher, _check)
+
+
 def check_cluster_roles(config: "StackConfig", reporter: "TestReporter") -> None:
     """Verify SHOW DATABASE returns per-node serverId with exactly one writer."""
     start = time.monotonic()
@@ -245,4 +258,5 @@ def run_checks(config: "StackConfig", reporter: "TestReporter") -> None:
     check_memory_config(config, reporter)
     check_data_directory(config, reporter)
     check_apoc(config, reporter)
+    check_gds(config, reporter)
     check_cluster_roles(config, reporter)

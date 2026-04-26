@@ -12,7 +12,7 @@ These commands use the Neo4j Python driver and boto3 via SSM to reach the cluste
 
 | Command | What it does | Runtime |
 |---|---|---|
-| `uv run validate-private [--stack <name>]` | Run 6 validation checks: Bolt, server edition, listen address, memory config, data directory, APOC | 25–35s |
+| `uv run validate-private [--stack <name>]` | Run 8 validation checks: Bolt, server edition, listen address, memory config, data directory, APOC, GDS, cluster roles | 25–35s |
 | `uv run run-cypher [stack] '<cypher>'` | Execute a Cypher query and print JSON rows to stdout | 5–10s |
 | `uv run admin-shell [stack]` | Open an interactive `cypher-shell` session on the bastion | Interactive |
 

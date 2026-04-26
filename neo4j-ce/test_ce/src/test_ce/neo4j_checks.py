@@ -88,9 +88,28 @@ def check_apoc(config: StackConfig, reporter: TestReporter) -> None:
             ctx.fail(f"APOC query failed: {exc}")
 
 
+def check_gds(config: StackConfig, reporter: TestReporter) -> None:
+    """Verify gds.version() is callable (skipped if GDS not installed)."""
+    if not config.install_gds:
+        log.info("--- Skipping GDS test (install_gds=%s) ---\n", config.install_gds)
+        return
+
+    with reporter.test("GDS plugin") as ctx:
+        try:
+            with config.driver() as driver:
+                records, _, _ = driver.execute_query(
+                    "RETURN gds.version() AS version"
+                )
+                version = records[0]["version"]
+                ctx.pass_(f"GDS is available, version: {version}")
+        except Exception as exc:
+            ctx.fail(f"GDS query failed: {exc}")
+
+
 def run_simple_tests(config: StackConfig, reporter: TestReporter) -> None:
     """Run all simple connectivity tests in order."""
     check_http_api(config, reporter)
     check_auth(config, reporter)
     check_bolt(config, reporter)
     check_apoc(config, reporter)
+    check_gds(config, reporter)

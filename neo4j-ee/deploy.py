@@ -345,6 +345,7 @@ def main():
         {"ParameterKey": "NumberOfServers", "ParameterValue": str(args.number_of_servers)},
         {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
         {"ParameterKey": "AllowedCIDR", "ParameterValue": allowed_cidr},
+        {"ParameterKey": "InstallGDS", "ParameterValue": "true"},
     ]
     if ssm_param_path:
         cfn_params.append({"ParameterKey": "ImageId", "ParameterValue": ssm_param_path})
@@ -483,6 +484,8 @@ def main():
         ("Edition", "ee"),
         ("DeploymentMode", args.mode),
         ("AmiSource", ami_source),
+        ("InstallAPOC", "yes"),
+        ("InstallGDS", "true"),
     ]
     if args.alert_email:
         extra.append(("AlertEmail", args.alert_email))

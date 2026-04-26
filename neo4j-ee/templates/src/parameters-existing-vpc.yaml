@@ -5,6 +5,9 @@
     Type: String
     Description: >-
       First private subnet ID (must be in a different AZ from Subnet 2 and 3).
+  PrivateRouteTable1Id:
+    Type: String
+    Description: Route table ID associated with PrivateSubnet1Id.
   PrivateSubnet2Id:
     Type: String
     Default: ''

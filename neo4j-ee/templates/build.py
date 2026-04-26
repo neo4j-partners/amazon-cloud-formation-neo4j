@@ -47,6 +47,9 @@ _PREAMBLE_COMMON = [
     '"region="',
     "Ref: AWS::Region",
     '"\\n"',
+    '"installGDS="',
+    "Ref: InstallGDS",
+    '"\\n"',
 ]
 
 # Present in all three templates — Bolt over an internet-facing NLB must be

@@ -56,3 +56,12 @@
     Description: Email address for CloudWatch alarm notifications. Leave blank to skip email subscription.
     Type: String
     Default: ''
+  InstallGDS:
+    Description: >-
+      Install the Graph Data Science plugin at deploy time. Intended for testing
+      with deploy.py only; leave false for Marketplace deployments.
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'

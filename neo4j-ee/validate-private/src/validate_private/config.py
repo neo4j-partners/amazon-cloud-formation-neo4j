@@ -19,6 +19,7 @@ class StackConfig:
     nlb_dns: str
     password: str
     install_apoc: bool
+    install_gds: bool
     bolt_tls_secret_arn: str = ""
 
 
@@ -96,5 +97,6 @@ def load_config(
         nlb_dns=fields["Neo4jInternalDNS"],
         password=password,
         install_apoc=fields.get("InstallAPOC", "no").lower() == "yes",
+        install_gds=fields.get("InstallGDS", "false").lower() == "true",
         bolt_tls_secret_arn=fields.get("BoltTlsSecretArn", ""),
     )

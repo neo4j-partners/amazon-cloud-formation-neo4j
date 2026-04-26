@@ -151,6 +151,15 @@ gpgcheck=1
   yum -y install neo4j-enterprise
   systemctl enable neo4j
 }
+install_apoc() {
+  echo "Installing APOC plugin..."
+  cp /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || \
+  cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true
+}
+install_gds() {
+  echo "Installing Graph Data Science plugin..."
+  cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins/
+}
 extension_config() {
   echo Configuring extensions and security in neo4j.conf...
   set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
@@ -307,6 +316,10 @@ rm -rf /tmp/awscliv2.zip /tmp/aws
 pin_neo4j_user
 attach_and_mount_data_volume
 install_neo4j_from_yum
+install_apoc
+if [[ "${installGDS}" == "true" ]]; then
+  install_gds
+fi
 extension_config
 build_neo4j_conf_file
 add_cypher_ip_blocklist

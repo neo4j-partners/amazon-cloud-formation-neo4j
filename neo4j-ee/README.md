@@ -131,7 +131,7 @@ Run `preflight.sh` first to confirm the stack and bastion are ready:
 
 ```bash
 cd validate-private
-scripts/preflight.sh                     # 11 prerequisite checks: stack status, bastion SSM, VPC endpoints
+./scripts/preflight.sh                     # 11 prerequisite checks: stack status, bastion SSM, VPC endpoints
 ```
 
 Then validate the cluster:

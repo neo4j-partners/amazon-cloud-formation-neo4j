@@ -50,6 +50,14 @@
       Value: !Ref Neo4jPrivateSubnet1
       Description: First private subnet ID (Lambda / reference app placement).
 
+  Neo4jConfigPrivateRouteTable1Parameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-route-table-1-id'
+      Type: String
+      Value: !Ref Neo4jPrivateRouteTable1
+      Description: First private route table ID (Lambda / reference app placement).
+
   Neo4jConfigPrivateSubnet2Parameter:
     Type: AWS::SSM::Parameter
     Condition: CreateCluster

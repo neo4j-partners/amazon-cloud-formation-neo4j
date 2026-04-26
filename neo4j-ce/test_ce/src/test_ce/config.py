@@ -33,6 +33,7 @@ class StackConfig:
     stack_name: str
     region: str
     install_apoc: bool
+    install_gds: bool
     host: str  # bare hostname (EIP) extracted from browser_url
 
     @contextlib.contextmanager
@@ -76,6 +77,7 @@ def load_config(outputs_path: Path, password_override: str | None = None) -> Sta
     browser_url = fields["Neo4jBrowserURL"]
     neo4j_uri = fields["Neo4jURI"]
     install_apoc = fields.get("InstallAPOC", "no").lower() == "yes"
+    install_gds = fields.get("InstallGDS", "no").lower() == "yes"
 
     password = (
         password_override
@@ -100,5 +102,6 @@ def load_config(outputs_path: Path, password_override: str | None = None) -> Sta
         stack_name=fields["StackName"],
         region=fields["Region"],
         install_apoc=install_apoc,
+        install_gds=install_gds,
         host=host,
     )

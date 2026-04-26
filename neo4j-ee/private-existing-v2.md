@@ -4,6 +4,28 @@ End-to-end plan for deploying and validating `templates/neo4j-private-existing-v
 
 ---
 
+## Latest Test Run
+
+**Run date**: 2026-04-26  
+**Stack**: `test-ee-1777190947` (us-west-2, 3 nodes, ExistingVpc, `CreateVpcEndpoints=true`)  
+**Path**: A — Fresh VPC, Template Creates Endpoints
+
+| Phase | Description | Result | Notes |
+|-------|-------------|--------|-------|
+| 0 | Create Test VPC | PASS | VPC `vpc-09a9e6fef4d2b579e`, 3 AZs, 3 NAT gateways |
+| 1 | Deploy | PASS | `CREATE_COMPLETE`, 3-node cluster |
+| S3 | Temp bucket cleanup | N/A | Already removed at test start |
+| 2 | Preflight (11 checks) | PASS | All 11 checks passed incl. endpoint reachability |
+| 3 | Basic checks (6 checks) | PASS | Bolt, edition, listen addr, memory, data dir, cluster roles (1w/2f) |
+| 4 | Failover suite (45 checks) | PASS | follower-with-data, leader, rolling, reads — all passed (491.8s) |
+| 5 | Resilience suite (26 checks) | PASS | single-loss (76.9s ASG), total-loss (62.6s ASG) — all passed (476.9s) |
+| 6 | Teardown EE stack | PASS | Stack deleted, 3×100GB volumes deleted, copied AMI deregistered |
+| 7 | Teardown Test VPC | PASS | VPC `vpc-09a9e6fef4d2b579e` deleted, all resources cleaned up |
+
+**Total test time**: ~80 min (Phases 2–5)
+
+---
+
 ## Test Matrix
 
 | Path | Trigger | Servers | `CreateVpcEndpoints` | Focus |

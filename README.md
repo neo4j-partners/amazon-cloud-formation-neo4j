@@ -1,5 +1,5 @@
-# amazon-cloud-formation-neo4j
-This repo contains Amazon CloudFormation Templates (CFT) that deploy Neo4j on AWS.
+# neo4j-aws-cloudformation
+This repo contains AWS CloudFormation Templates (CFT) that deploy Neo4j on AWS.
 
 ## Editions
 
@@ -26,8 +26,8 @@ You can confirm the CLI is working properly by running:
 
 Then you'll want to clone this repo.  You can do that with the command:
 
-    git clone https://github.com/neo4j-partners/amazon-cloud-formation-neo4j.git
-    cd amazon-cloud-formation-neo4j
+    git clone https://github.com/neo4j-partners/neo4j-aws-cloudformation.git
+    cd neo4j-aws-cloudformation
 
 ## Creating a Stack
 The AWS word for a deployment is a stack.  Each edition folder contains a `deploy.sh` helper script.  Take a look at it and modify any variables, then run it as:

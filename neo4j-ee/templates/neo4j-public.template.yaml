@@ -902,11 +902,10 @@ Resources:
                 build_neo4j_conf_file
                 add_cypher_ip_blocklist
                 start_neo4j
-                # Switch python3 default to 3.11 only after all aws-cli calls are complete.
-                # awscli2 RPM installs its modules under python3.9 site-packages; switching
-                # the alternative earlier breaks /usr/bin/aws (shebang: #!/usr/bin/python3).
-                alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 100
+                # cfn-signal shebang (#!/usr/bin/python3 -s) requires cfnbootstrap under python3.9;
+                # switch the default only after signaling so cfn-signal can find its dependencies.
                 cfn-signal --success true --stack "$stackName" --resource "$logicalId" --region "$region"
+                alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 100
 
   Neo4jVPC:
     Type: AWS::EC2::VPC

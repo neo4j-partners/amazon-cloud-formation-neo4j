@@ -129,7 +129,7 @@ def _wait_volume_mounted(ssm, instance_id: str, timeout: int = 300) -> bool:
             "mountpoint -q /var/lib/neo4j/data && echo MOUNTED || echo NOT_MOUNTED",
             timeout_s=30,
         )
-        if ok and "MOUNTED" in stdout:
+        if ok and stdout.strip() == "MOUNTED":
             return True
         time.sleep(15)
     return False

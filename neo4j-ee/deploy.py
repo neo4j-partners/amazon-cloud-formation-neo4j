@@ -186,7 +186,6 @@ def main():
     cleanup_state = {
         "cfn_bucket": None,
         "copied_ami_id": None,
-        "cleanup_ami": False,
         "tls_secret_arn": None,
     }
 
@@ -203,19 +202,6 @@ def main():
                 s3.delete_bucket(Bucket=bucket)
             except Exception as e:
                 print(f"  Warning: could not fully clean up S3 bucket {bucket}: {e}")
-        if cleanup_state["cleanup_ami"] and cleanup_state["copied_ami_id"]:
-            ami = cleanup_state["copied_ami_id"]
-            print(f"\nCleaning up copied AMI {ami} in {region}...")
-            try:
-                ec2 = boto3.client("ec2", region_name=region)
-                ec2.deregister_image(ImageId=ami)
-                snaps = ec2.describe_snapshots(
-                    Filters=[{"Name": "description", "Values": [f"*{ami}*"]}]
-                )["Snapshots"]
-                for snap in snaps:
-                    ec2.delete_snapshot(SnapshotId=snap["SnapshotId"])
-            except Exception as e:
-                print(f"  Warning: could not fully clean up AMI {ami}: {e}")
         if cleanup_state["tls_secret_arn"]:
             arn = cleanup_state["tls_secret_arn"]
             print(f"\nCleaning up TLS secret {arn}...")
@@ -258,7 +244,6 @@ def main():
                 copied_ami_id = available[0]["ImageId"]
                 print(f"Reusing existing copied AMI {copied_ami_id} in {region}.")
                 cleanup_state["copied_ami_id"] = copied_ami_id
-                cleanup_state["cleanup_ami"] = False
             elif pending:
                 copied_ami_id = pending[0]["ImageId"]
                 print(f"Found in-progress AMI copy {copied_ami_id} in {region} — waiting for it to become available...")
@@ -268,7 +253,6 @@ def main():
                 )
                 print(f"AMI available in {region}.")
                 cleanup_state["copied_ami_id"] = copied_ami_id
-                cleanup_state["cleanup_ami"] = False
             else:
                 print(f"Copying AMI {source_ami_id} from {SOURCE_REGION} to {region}...")
                 resp = ec2.copy_image(
@@ -279,7 +263,6 @@ def main():
                 )
                 copied_ami_id = resp["ImageId"]
                 cleanup_state["copied_ami_id"] = copied_ami_id
-                cleanup_state["cleanup_ami"] = True
                 print(f"Copied AMI: {copied_ami_id} — waiting for it to become available...")
                 ec2.get_waiter("image_available").wait(
                     ImageIds=[copied_ami_id],
@@ -370,8 +353,6 @@ def main():
         StackName=stack_name,
         WaiterConfig={"Delay": 15, "MaxAttempts": 120},
     )
-
-    cleanup_state["cleanup_ami"] = False
 
     bolt_tls_secret_arn = ""
     if args.tls:
@@ -489,7 +470,7 @@ def main():
             extra.append(("ExistingEndpointSgId", args.existing_endpoint_sg_id))
     if ssm_param_path:
         extra.extend([("SSMParamPath", ssm_param_path), ("AmiId", ami_id)])
-    if cleanup_state["copied_ami_id"] and cleanup_state["cleanup_ami"]:
+    if cleanup_state["copied_ami_id"]:
         extra.extend([("CopiedAmiId", cleanup_state["copied_ami_id"]), ("SourceRegion", SOURCE_REGION)])
     if bolt_tls_secret_arn:
         extra.append(("BoltTlsSecretArn", bolt_tls_secret_arn))

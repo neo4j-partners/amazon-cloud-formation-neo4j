@@ -297,7 +297,13 @@ CWCONFIG
   /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 }
 install_cloudwatch_agent
-dnf install -y python3.11 awscli2
+dnf install -y python3.11 unzip
+dnf remove -y awscli 2>/dev/null || true
+ARCH=$(uname -m)
+curl -s "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp/
+/tmp/aws/install
+rm -rf /tmp/awscliv2.zip /tmp/aws
 pin_neo4j_user
 attach_and_mount_data_volume
 install_neo4j_from_yum

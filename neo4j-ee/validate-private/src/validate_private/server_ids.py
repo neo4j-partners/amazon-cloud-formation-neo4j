@@ -10,7 +10,7 @@ from validate_private.runner import run_shell_on_instance
 log = logging.getLogger(__name__)
 
 _READ_SERVER_ID = (
-    "python3.11 -c \""
+    "python3 -c \""
     "import uuid; "
     "d=open('/var/lib/neo4j/data/server_id','rb').read(); "
     "print(str(uuid.UUID(bytes=d[1:])))"

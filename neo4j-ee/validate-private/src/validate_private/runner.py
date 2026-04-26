@@ -42,9 +42,9 @@ nlb = ssm_client.get_parameter(Name=f"/neo4j-ee/{stack}/nlb-dns")["Parameter"]["
 
 bolt_tls_cert_pem = data.get("bolt_tls_cert_pem") or ""
 if bolt_tls_cert_pem:
-    driver = GraphDatabase.driver(f"bolt+ssc://{nlb}:7687", auth=("neo4j", password))
+    driver = GraphDatabase.driver(f"neo4j+ssc://{nlb}:7687", auth=("neo4j", password))
 else:
-    driver = GraphDatabase.driver(f"bolt://{nlb}:7687", auth=("neo4j", password))
+    driver = GraphDatabase.driver(f"neo4j://{nlb}:7687", auth=("neo4j", password))
 try:
     kwargs = {"parameters_": params}
     if database:

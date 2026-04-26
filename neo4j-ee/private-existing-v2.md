@@ -34,7 +34,7 @@ Two additional parameters control endpoint creation:
 - **`CreateVpcEndpoints` (default `true`)** — when `true`, the template creates the four interface endpoints (`ssm`, `ssmmessages`, `logs`, `secretsmanager`) and a dedicated endpoint SG. When `false`, the caller supplies an existing endpoint SG via `ExistingEndpointSgId`; the template adds ingress rules from the Neo4j instances and bastion into that SG instead. Creating duplicate endpoints in a VPC that already has them fails the deployment — this flag prevents that.
 - **`ExistingEndpointSgId`** — required when `CreateVpcEndpoints=false`. The stack wires ingress into this SG and publishes it as `vpc-endpoint-sg-id` in the SSM contract. A CFN `Rules` block enforces it is non-empty at deploy time.
 
-In both paths the `vpc-endpoint-sg-id` SSM parameter points to the correct, functional SG — either the template-created one or the caller-supplied one.
+In both paths the `vpc-endpoint-sg-id` SSM parameter points to the correct, functional SG.
 
 ---
 
@@ -51,11 +51,8 @@ aws sts get-caller-identity --profile default
 # 3. Session Manager Plugin (operator bastion access)
 session-manager-plugin --version
 
-# 4. uv (Python tooling for validate-private)
+# 4. uv (Python tooling)
 uv --version
-
-# 5. AWS CLI (required by create-test-vpc.sh and teardown-test-vpc.sh)
-aws --version
 ```
 
 ---
@@ -66,31 +63,24 @@ aws --version
 
 ```bash
 cd neo4j-ee
-scripts/create-test-vpc.sh --region us-east-1
+scripts/create-test-vpc.py --region us-east-1
 ```
 
 Creates a minimal private-networking VPC (`10.42.0.0/16`) with 3 private subnets (one per AZ), 3 NAT gateways, and all supporting resources. No interface endpoints — the template creates those in Phase 1.
 
-**Writes**: `.deploy/vpc-<ts>.txt` with `VpcId`, `Subnet1Id`, `Subnet2Id`, `Subnet3Id`, `VpcCidr`, and all resource IDs needed for teardown.
+**Writes**: `.deploy/vpc-<ts>.txt` with all resource IDs needed by `deploy.py` and `teardown-test-vpc.sh`.
 
 **Pass criteria**: script exits 0; all three NAT gateways reach `available` state.
 
-**Failure**: AZ enumeration fails if the region has fewer than 3 available AZs. All supported regions (`SUPPORTED_REGIONS` in `deploy.py`) have at least 3. If a NAT gateway gets stuck, check the public subnet's route table association.
+**Failure**: AZ enumeration fails if the region has fewer than 3 available AZs. All supported regions (`SUPPORTED_REGIONS` in `deploy.py`) have at least 3.
 
 ### Phase 1: Deploy (10–20 min)
 
 ```bash
-VPC_FILE=$(ls -t .deploy/vpc-*.txt | head -1)
-read_vpc() { grep "^${1}" "$VPC_FILE" | sed 's/^[^=]*= *//' | tr -d '\r'; }
-
-./deploy.py --mode ExistingVpc --region us-east-1 --number-of-servers 3 \
-  --vpc-id    "$(read_vpc VpcId)"    \
-  --subnet-1  "$(read_vpc Subnet1Id)" \
-  --subnet-2  "$(read_vpc Subnet2Id)" \
-  --subnet-3  "$(read_vpc Subnet3Id)" \
-  --allowed-cidr "$(read_vpc VpcCidr)" \
-  --create-vpc-endpoints true
+./deploy.py --mode ExistingVpc --number-of-servers 3
 ```
+
+`deploy.py` auto-detects the most recently written `vpc-*.txt` in `.deploy/` and reads `VpcId`, `Subnet1Id/2Id/3Id`, `VpcCidr`, and `Region` from it.
 
 **Writes**: `.deploy/<stack-name>.txt` with stack outputs (NLB DNS, bastion ID, password, SSM paths, `CreateVpcEndpoints=true`).
 
@@ -121,7 +111,7 @@ Runs 11 required checks + 1 informational:
 
 **Pass criteria**: `FAIL_COUNT=0`. Exit 0.
 
-**Failure**: Bastion not ready within 2–3 min of stack completion is the most common early failure — retry once. Endpoint reachability failures (checks 9–12) indicate a security group misconfiguration between `VpcEndpointSecurityGroup` and `Neo4jInternalSecurityGroup` or `Neo4jBastionSecurityGroup`.
+**Failure**: Bastion not ready within 2–3 min of stack completion is the most common early failure — retry once. Endpoint reachability failures (checks 9–12) indicate a security group misconfiguration between `VpcEndpointSecurityGroup` and the Neo4j instance or bastion SG.
 
 ### Phase 3: Basic Checks (~30 s)
 
@@ -213,17 +203,15 @@ cd ..
 ./teardown.sh --delete-volumes "${STACK}"
 ```
 
-Deletes: CloudFormation stack, SSM parameters, password secret (force), retained EBS data volumes, `.deploy/<stack>.txt`.
-
 **Pass criteria**: Stack reaches `DELETE_COMPLETE`. Exit 0.
 
 ### Phase 7: Teardown Test VPC (2–3 min)
 
 ```bash
-scripts/teardown-test-vpc.sh "$(basename "$VPC_FILE" .txt)"
+scripts/teardown-test-vpc.sh
 ```
 
-Deletes resources in reverse creation order: interface endpoints → NAT gateways → EIPs → subnets → private route tables → IGW → VPC → `.deploy/vpc-<ts>.txt`. NAT gateway deletion takes 60–90 s.
+Deletes resources in reverse creation order: interface endpoints → NAT gateways → EIPs → subnets → private route tables → IGW → VPC → `.deploy/vpc-<ts>.txt`. Defaults to the most recently modified `vpc-*.txt` in `.deploy/`. NAT gateway deletion takes 60–90 s.
 
 **Pass criteria**: VPC deleted; `vpc-<ts>.txt` removed. Exit 0.
 
@@ -237,10 +225,10 @@ Path B validates that the template correctly skips endpoint creation when `Creat
 
 ```bash
 cd neo4j-ee
-scripts/create-test-vpc.sh --region us-east-1 --with-endpoints
+scripts/create-test-vpc.py --region us-east-1 --with-endpoints
 ```
 
-Creates the same VPC as Path A, plus four interface endpoints (`ssm`, `ssmmessages`, `logs`, `secretsmanager`) in the private subnets with a shared endpoint SG (`ingress 443 from VPC CIDR`).
+Creates the same VPC as Path A, plus four interface endpoints (`ssm`, `ssmmessages`, `logs`, `secretsmanager`) in the private subnets with a shared endpoint SG (ingress 443 from VPC CIDR).
 
 **Writes**: `.deploy/vpc-<ts>.txt` — same fields as Path A plus `WithEndpoints=true` and `EndpointSgId=sg-...`.
 
@@ -249,18 +237,10 @@ Creates the same VPC as Path A, plus four interface endpoints (`ssm`, `ssmmessag
 ### Phase 1: Deploy (5–10 min)
 
 ```bash
-VPC_FILE=$(ls -t .deploy/vpc-*.txt | head -1)
-read_vpc() { grep "^${1}" "$VPC_FILE" | sed 's/^[^=]*= *//' | tr -d '\r'; }
-
-./deploy.py --mode ExistingVpc --region us-east-1 --number-of-servers 1 \
-  --vpc-id    "$(read_vpc VpcId)"    \
-  --subnet-1  "$(read_vpc Subnet1Id)" \
-  --allowed-cidr "$(read_vpc VpcCidr)" \
-  --create-vpc-endpoints false \
-  --existing-endpoint-sg-id "$(read_vpc EndpointSgId)"
+./deploy.py --mode ExistingVpc --number-of-servers 1 --create-vpc-endpoints false
 ```
 
-The template does not create endpoints or `VpcEndpointSecurityGroup`. It adds two `AWS::EC2::SecurityGroupIngress` rules (ingress 443) into `EndpointSgId` — one from `Neo4jInternalSecurityGroup`, one from `Neo4jBastionSecurityGroup`. The SSM contract publishes `EndpointSgId` as `vpc-endpoint-sg-id`.
+`deploy.py` auto-detects the most recently written `vpc-*.txt`, reads all VPC params from it, and — because `EndpointSgId` is present in the file — auto-populates `--existing-endpoint-sg-id`. The template does not create endpoints; instead it adds two `AWS::EC2::SecurityGroupIngress` rules (ingress 443) into the pre-existing endpoint SG. The SSM contract publishes that SG as `vpc-endpoint-sg-id`.
 
 **Writes**: `.deploy/<stack-name>.txt` with `CreateVpcEndpoints=false` and `ExistingEndpointSgId=<sg-id>`.
 
@@ -268,23 +248,17 @@ The template does not create endpoints or `VpcEndpointSecurityGroup`. It adds tw
 
 ### Phase 1.5: Wire Bastion SG into Endpoint SG (<1 min)
 
-The template wired the bastion SG ingress rule at stack creation time, but the test VPC's pre-existing endpoint SG was created with ingress only from `VPC_CIDR`. The bastion SG must be explicitly authorized before preflight runs endpoint reachability checks.
+The template added ingress from the bastion SG into the endpoint SG at stack creation. The bastion SG ID is in the stack outputs file; read everything from there.
 
 ```bash
 STACK=$(ls -t .deploy/test-ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
-REGION=us-east-1
-ENDPOINT_SG_ID=$(read_vpc EndpointSgId)
-
-BASTION_SG=$(aws cloudformation describe-stacks \
-  --stack-name "$STACK" --region "$REGION" \
-  --query "Stacks[0].Outputs[?OutputKey=='Neo4jBastionSecurityGroupId'].OutputValue" \
-  --output text)
+read_stack() { grep "^${1}" ".deploy/${STACK}.txt" | sed 's/^[^=]*= *//' | tr -d '\r'; }
 
 aws ec2 authorize-security-group-ingress \
-  --group-id  "$ENDPOINT_SG_ID" \
-  --protocol  tcp --port 443 \
-  --source-group "$BASTION_SG" \
-  --region    "$REGION"
+  --group-id     "$(read_stack ExistingEndpointSgId)" \
+  --protocol     tcp --port 443 \
+  --source-group "$(read_stack Neo4jBastionSecurityGroupId)" \
+  --region       "$(read_stack Region)"
 ```
 
 This rule is removed automatically when `teardown-test-vpc.sh` deletes the VPC.
@@ -298,11 +272,11 @@ cd validate-private
 ./scripts/preflight.sh "$STACK"
 ```
 
-Same 11 required checks as Path A. The critical difference is in checks 9–12: the bastion reaches the **pre-existing** endpoints through the ingress rule added in Phase 1.5. Check 6 verifies that `vpc-endpoint-sg-id` equals `EndpointSgId` (the pre-existing SG), not a template-created SG.
+Same 11 required checks as Path A. The critical difference is in checks 9–12: the bastion reaches the **pre-existing** endpoints through the ingress rule added in Phase 1.5. Check 6 verifies that `vpc-endpoint-sg-id` equals the pre-existing `EndpointSgId`, not a template-created SG.
 
 **Pass criteria**: `FAIL_COUNT=0`. Exit 0.
 
-**Failure**: Endpoint reachability failures in checks 9–12 almost always mean Phase 1.5 was skipped or the `authorize-security-group-ingress` call used the wrong SG ID. Verify `$BASTION_SG` and `$ENDPOINT_SG_ID` are non-empty and correct.
+**Failure**: Endpoint reachability failures in checks 9–12 almost always mean Phase 1.5 was skipped or used the wrong SG IDs. Verify `ExistingEndpointSgId` and `Neo4jBastionSecurityGroupId` in the stack outputs file are non-empty and correct.
 
 ### Phase 3: Basic Checks (~30 s)
 
@@ -321,14 +295,14 @@ cd ..
 ./teardown.sh --delete-volumes "$STACK"
 ```
 
-Stack deletion removes the two `AWS::EC2::SecurityGroupIngress` rules from `EndpointSgId` — no manual cleanup needed.
+Stack deletion removes the two `AWS::EC2::SecurityGroupIngress` rules from the pre-existing endpoint SG — no manual cleanup needed.
 
 **Pass criteria**: Stack reaches `DELETE_COMPLETE`. Exit 0.
 
 ### Phase 5: Teardown Test VPC (2–3 min)
 
 ```bash
-scripts/teardown-test-vpc.sh "$(basename "$VPC_FILE" .txt)"
+scripts/teardown-test-vpc.sh
 ```
 
 **Pass criteria**: VPC deleted; `vpc-<ts>.txt` removed. Exit 0.
@@ -340,7 +314,6 @@ scripts/teardown-test-vpc.sh "$(basename "$VPC_FILE" .txt)"
 ```bash
 set -euo pipefail
 cd neo4j-ee
-REGION=us-east-1
 
 # Kill background app deploy and print teardown reminder on early exit
 trap '
@@ -349,24 +322,15 @@ trap '
     echo "Background app deploy killed. Tear down in order:"
     echo "  cd neo4j-ee/sample-private-app && ./teardown-sample-private-app.sh ${STACK:-<stack>}"
     echo "  cd neo4j-ee && ./teardown.sh --delete-volumes ${STACK:-<stack>}"
-    echo "  neo4j-ee/scripts/teardown-test-vpc.sh ${VPC_NAME:-<vpc>}"
+    echo "  neo4j-ee/scripts/teardown-test-vpc.sh"
   fi
 ' EXIT
 
 # Phase 0: Create test VPC
-scripts/create-test-vpc.sh --region "$REGION"
-VPC_FILE=$(ls -t .deploy/vpc-*.txt | head -1)
-VPC_NAME=$(basename "$VPC_FILE" .txt)
-read_vpc() { grep "^${1}" "$VPC_FILE" | sed 's/^[^=]*= *//' | tr -d '\r'; }
+scripts/create-test-vpc.py --region us-east-1
 
-# Phase 1: Deploy
-./deploy.py --mode ExistingVpc --region "$REGION" --number-of-servers 3 \
-  --vpc-id    "$(read_vpc VpcId)"    \
-  --subnet-1  "$(read_vpc Subnet1Id)" \
-  --subnet-2  "$(read_vpc Subnet2Id)" \
-  --subnet-3  "$(read_vpc Subnet3Id)" \
-  --allowed-cidr "$(read_vpc VpcCidr)" \
-  --create-vpc-endpoints true
+# Phase 1: Deploy (auto-detects the vpc-*.txt just written)
+./deploy.py --mode ExistingVpc --number-of-servers 3
 
 # Capture stack name immediately — don't rely on ls -t after this point
 STACK=$(ls -t .deploy/test-ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
@@ -399,7 +363,7 @@ cd ..
 ./teardown.sh --delete-volumes "$STACK"
 
 # Phase 7: Teardown test VPC
-scripts/teardown-test-vpc.sh "$VPC_NAME"
+scripts/teardown-test-vpc.sh
 ```
 
 Total wall-clock time: **55–80 min** (dominated by ASG replacement in Phase 5; sample app deploy overlaps with that window).
@@ -411,35 +375,22 @@ Total wall-clock time: **55–80 min** (dominated by ASG replacement in Phase 5;
 ```bash
 set -euo pipefail
 cd neo4j-ee
-REGION=us-east-1
 
 # Phase 0: Create test VPC with pre-existing endpoints
-scripts/create-test-vpc.sh --region "$REGION" --with-endpoints
-VPC_FILE=$(ls -t .deploy/vpc-*.txt | head -1)
-VPC_NAME=$(basename "$VPC_FILE" .txt)
-read_vpc() { grep "^${1}" "$VPC_FILE" | sed 's/^[^=]*= *//' | tr -d '\r'; }
-ENDPOINT_SG_ID=$(read_vpc EndpointSgId)
+scripts/create-test-vpc.py --region us-east-1 --with-endpoints
 
-# Phase 1: Deploy (1-node, skip endpoint creation)
-./deploy.py --mode ExistingVpc --region "$REGION" --number-of-servers 1 \
-  --vpc-id    "$(read_vpc VpcId)"    \
-  --subnet-1  "$(read_vpc Subnet1Id)" \
-  --allowed-cidr "$(read_vpc VpcCidr)" \
-  --create-vpc-endpoints false \
-  --existing-endpoint-sg-id "$ENDPOINT_SG_ID"
+# Phase 1: Deploy (auto-detects vpc-*.txt; reads EndpointSgId automatically)
+./deploy.py --mode ExistingVpc --number-of-servers 1 --create-vpc-endpoints false
 
 STACK=$(ls -t .deploy/test-ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
+read_stack() { grep "^${1}" ".deploy/${STACK}.txt" | sed 's/^[^=]*= *//' | tr -d '\r'; }
 
 # Phase 1.5: Wire bastion SG into the pre-existing endpoint SG
-BASTION_SG=$(aws cloudformation describe-stacks \
-  --stack-name "$STACK" --region "$REGION" \
-  --query "Stacks[0].Outputs[?OutputKey=='Neo4jBastionSecurityGroupId'].OutputValue" \
-  --output text)
 aws ec2 authorize-security-group-ingress \
-  --group-id     "$ENDPOINT_SG_ID" \
+  --group-id     "$(read_stack ExistingEndpointSgId)" \
   --protocol     tcp --port 443 \
-  --source-group "$BASTION_SG" \
-  --region       "$REGION"
+  --source-group "$(read_stack Neo4jBastionSecurityGroupId)" \
+  --region       "$(read_stack Region)"
 
 # Phase 2: Preflight (endpoint reachability confirms the wiring)
 cd validate-private
@@ -448,12 +399,12 @@ cd validate-private
 # Phase 3: Basic checks (cluster roles: 1 writer, 0 followers — PASS for 1-node)
 uv run validate-private --stack "$STACK"
 
-# Phase 4: Teardown EE stack (removes SecurityGroupIngress rules from EndpointSgId)
+# Phase 4: Teardown EE stack (removes SecurityGroupIngress rules from endpoint SG)
 cd ..
 ./teardown.sh --delete-volumes "$STACK"
 
 # Phase 5: Teardown test VPC
-scripts/teardown-test-vpc.sh "$VPC_NAME"
+scripts/teardown-test-vpc.sh
 ```
 
 Total wall-clock time: **15–25 min**.
@@ -464,20 +415,26 @@ Total wall-clock time: **15–25 min**.
 
 When running two or more full test runs simultaneously (e.g., Path A vs Path B, or `t3` vs `r8i`), the default stack and VPC file selectors (`ls -t ... | head -1`) are unreliable if two runs write files concurrently.
 
-**Fix**: always capture `STACK` and `VPC_FILE` immediately after each deploy script exits and pass them explicitly to every subsequent command — exactly as the combined run scripts above do.
+**Fix**: always capture `STACK` immediately after `deploy.py` exits and pass it explicitly to every subsequent command — exactly as the combined run scripts above do. For VPC file selection, pass `--vpc-file <path>` explicitly to `deploy.py` rather than relying on auto-detect when two Phase 0 runs could interleave:
 
-All resources are isolated by stack name and timestamp:
+```bash
+scripts/create-test-vpc.py --region us-east-1
+VPC_FILE=$(ls -t .deploy/vpc-*.txt | head -1)
+
+./deploy.py --mode ExistingVpc --number-of-servers 3 --vpc-file "$VPC_FILE"
+STACK=$(ls -t .deploy/test-ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
+```
+
+All other resources are isolated by stack name and timestamp:
 
 | Resource | Scoping |
 |---|---|
 | CloudFormation stacks | `test-ee-<timestamp>` |
-| VPC | `vpc-<timestamp>.txt` in `.deploy/` |
+| VPC file | `vpc-<timestamp>.txt` in `.deploy/` |
 | SSM parameters | `/neo4j-ee/<stack>/` prefix |
 | Secrets Manager | `neo4j/<stack>/password` |
 | EBS volumes | Tagged with `StackID` |
 | App stack (optional) | `neo4j-sample-private-app-<ee-stack>` |
-
-The VPC CIDR (`10.42.0.0/16`) is identical across runs; this is fine because each VPC is independent. EC2 enforces no cross-VPC uniqueness constraint on CIDRs.
 
 ---
 
@@ -485,19 +442,19 @@ The VPC CIDR (`10.42.0.0/16`) is identical across runs; this is fine because eac
 
 | Failure point | Where to look | Action |
 |---|---|---|
-| Phase 0: NAT gateway stuck | `describe-nat-gateways` | Check public subnet/EIP allocation; re-run create-test-vpc.sh and teardown the partial VPC |
-| Phase 0: <3 AZs in region | Script exits with error | Region is not supported; pick another from `SUPPORTED_REGIONS` |
+| Phase 0: NAT gateway stuck | `describe-nat-gateways` | Check public subnet/EIP; tear down partial VPC manually |
+| Phase 0: <3 AZs in region | Script exits with error | Region not supported; pick another from `SUPPORTED_REGIONS` |
 | Phase 1: stack stuck at CREATE | `/var/log/cloud-init-output.log` (SSM send-command to node) | Check UserData; `teardown.sh` if unrecoverable, then teardown VPC |
-| Phase 1.5 (Path B): wrong SG ID | Empty `$BASTION_SG` or `$ENDPOINT_SG_ID` | Verify the VPC file and CFN outputs; re-run authorize-security-group-ingress manually |
+| Phase 1.5 (Path B): authorize fails | Empty `ExistingEndpointSgId` or `Neo4jBastionSecurityGroupId` in outputs | Check `.deploy/<stack>.txt` fields; re-run authorize manually |
 | Phase 2: bastion not online | Wait 2–3 min; retry preflight | If still failing, inspect bastion UserData via SSM send-command |
-| Phase 2: endpoint reachability (Path A) | `VpcEndpointSecurityGroup` ingress rules | Verify `Neo4jInternalSecurityGroup` and `Neo4jBastionSecurityGroup` are in the endpoint SG ingress |
-| Phase 2: endpoint reachability (Path B) | `EndpointSgId` ingress rules | Confirm Phase 1.5 ran; check `describe-security-groups` for the 443 ingress from `$BASTION_SG` |
+| Phase 2: endpoint reachability (Path A) | `VpcEndpointSecurityGroup` ingress | Verify `Neo4jInternalSecurityGroup` and `Neo4jBastionSecurityGroup` are in endpoint SG ingress |
+| Phase 2: endpoint reachability (Path B) | `EndpointSgId` ingress | Confirm Phase 1.5 ran; check `describe-security-groups` for 443 ingress from bastion SG |
 | Phase 3–5: Cypher failure | `validate-private` stdout + `/var/log/neo4j/debug.log` (SSM) | Leave stack up for inspection; teardown in order when done |
 | Phase 4: ASG timeout | ASG activity events | Extend `--timeout`; check `/var/log/cloud-init-output.log` on new instance |
 
 **Teardown order on failure** (Path A with sample app): always `teardown-sample-private-app.sh` first, then `teardown.sh --delete-volumes`, then `teardown-test-vpc.sh`. Reversing any step can leave orphaned SG ingress rules that stall deletion.
 
-**Teardown order on failure** (all other paths): `teardown.sh --delete-volumes <stack>`, then `teardown-test-vpc.sh <vpc>`. The EE stack deletion removes any `SecurityGroupIngress` rules it owns from the pre-existing endpoint SG (Path B), so teardown-test-vpc.sh can proceed cleanly.
+**Teardown order on failure** (all other paths): `teardown.sh --delete-volumes <stack>`, then `teardown-test-vpc.sh`. The EE stack deletion removes any `SecurityGroupIngress` rules it owns from the pre-existing endpoint SG (Path B) before the VPC is torn down.
 
 Leave stacks running for post-mortem. Once investigation is complete:
 
@@ -505,9 +462,9 @@ Leave stacks running for post-mortem. Once investigation is complete:
 # Path A with sample app
 cd neo4j-ee/sample-private-app && ./teardown-sample-private-app.sh <stack>
 cd neo4j-ee && ./teardown.sh --delete-volumes <stack>
-neo4j-ee/scripts/teardown-test-vpc.sh <vpc-name>
+neo4j-ee/scripts/teardown-test-vpc.sh
 
 # All other paths
 cd neo4j-ee && ./teardown.sh --delete-volumes <stack>
-neo4j-ee/scripts/teardown-test-vpc.sh <vpc-name>
+neo4j-ee/scripts/teardown-test-vpc.sh
 ```

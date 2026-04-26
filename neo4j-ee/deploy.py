@@ -134,6 +134,30 @@ def main():
     os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
 
+    if args.mode == "ExistingVpc" and not args.vpc_id:
+        deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
+        vpc_file_path = _resolve_vpc_file(args.vpc_file, deploy_dir)
+        if not vpc_file_path:
+            sys.exit(
+                "ERROR: --mode ExistingVpc requires --vpc-id and --subnet-1, "
+                "or a vpc-*.txt file from scripts/create-test-vpc.py in .deploy/"
+            )
+        vpc_fields = _parse_vpc_file(vpc_file_path)
+        print(f"VPC config from: {os.path.basename(vpc_file_path)}")
+        args.vpc_id = vpc_fields.get("VpcId", "")
+        if not args.subnet_1:
+            args.subnet_1 = vpc_fields.get("Subnet1Id", "")
+        if not args.subnet_2:
+            args.subnet_2 = vpc_fields.get("Subnet2Id", "")
+        if not args.subnet_3:
+            args.subnet_3 = vpc_fields.get("Subnet3Id", "")
+        if not args.allowed_cidr:
+            args.allowed_cidr = vpc_fields.get("VpcCidr", "")
+        if not args.region_override:
+            args.region_override = vpc_fields.get("Region", "")
+        if not args.existing_endpoint_sg_id and "EndpointSgId" in vpc_fields:
+            args.existing_endpoint_sg_id = vpc_fields["EndpointSgId"]
+
     if args.mode == "ExistingVpc":
         if not args.vpc_id or not args.subnet_1:
             sys.exit("ERROR: --mode ExistingVpc requires --vpc-id and --subnet-1 (--subnet-2 and --subnet-3 required for 3-node).")

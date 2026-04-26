@@ -166,54 +166,31 @@ def run_ee_cluster_resilience_tests(
     if not _write_sentinel(config, reporter, test_run_id):
         return
 
-    # Identify a follower to terminate
+    # Pick node 2 as the instance to terminate. All bolt-advertised addresses
+    # point to the NLB DNS (not per-node private IPs), so we cannot map Neo4j
+    # server roles to specific EC2 instances via Cypher. Node 2 is a valid
+    # choice: a 3-node Raft cluster survives losing any single node, regardless
+    # of whether it is the current leader.
     node_pairs = get_all_ee_asg_instance_ids(
         session, config.stack_name, resource_map, config.number_of_servers
     )
-    instance_ids = [iid for _, iid in node_pairs]
-    ec2 = session.client("ec2")
-    resp = ec2.describe_instances(InstanceIds=instance_ids)
-    ip_to_asg: dict[str, str] = {}
-    ip_to_instance: dict[str, str] = {}
-    for reservation in resp["Reservations"]:
-        for inst in reservation["Instances"]:
-            private_ip = inst.get("PrivateIpAddress")
-            if private_ip:
-                iid = inst["InstanceId"]
-                ip_to_instance[private_ip] = iid
-                for asg_logical_id, node_iid in node_pairs:
-                    if node_iid == iid:
-                        ip_to_asg[private_ip] = asg_logical_id
 
     follower_instance_id: str | None = None
     follower_asg_logical_id: str | None = None
 
-    with reporter.test("Identify follower to terminate") as ctx:
-        try:
-            with config.driver() as driver:
-                records, _, _ = driver.execute_query(
-                    "SHOW SERVERS YIELD address, role",
-                    routing_=RoutingControl.READ,
-                )
-                for row in records:
-                    address = row["address"]
-                    role = row["role"]
-                    ip = address.split(":")[0] if ":" in address else address
-                    if role != "PRIMARY" and ip in ip_to_instance:
-                        follower_instance_id = ip_to_instance[ip]
-                        follower_asg_logical_id = ip_to_asg[ip]
-                        break
-
-            if follower_instance_id:
-                ctx.pass_(
-                    f"Selected follower {follower_instance_id} "
-                    f"({follower_asg_logical_id}) for termination"
-                )
-            else:
-                ctx.fail("Could not identify a follower instance to terminate")
-                return
-        except Exception as exc:
-            ctx.fail(f"Failed to identify follower: {exc}")
+    with reporter.test("Select node 2 for termination") as ctx:
+        for asg_logical_id, instance_id in node_pairs:
+            if asg_logical_id == "Neo4jNode2ASG":
+                follower_instance_id = instance_id
+                follower_asg_logical_id = asg_logical_id
+                break
+        if follower_instance_id:
+            ctx.pass_(
+                f"Selected {follower_instance_id} "
+                f"({follower_asg_logical_id}) for termination"
+            )
+        else:
+            ctx.fail("Could not find Neo4jNode2ASG instance")
             return
 
     with reporter.test("Terminate follower EC2 instance") as ctx:

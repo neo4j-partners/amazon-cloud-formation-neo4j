@@ -431,6 +431,8 @@ Resources:
       MinSize: 1
       MaxSize: 1
       DesiredCapacity: 1
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 600
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet1
       TargetGroupARNs:
@@ -469,6 +471,8 @@ Resources:
       MinSize: 1
       MaxSize: 1
       DesiredCapacity: 1
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 600
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet2
       TargetGroupARNs:
@@ -507,6 +511,8 @@ Resources:
       MinSize: 1
       MaxSize: 1
       DesiredCapacity: 1
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 600
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet3
       TargetGroupARNs:
@@ -882,6 +888,7 @@ Resources:
                   /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
                 }
                 install_cloudwatch_agent
+                dnf install -y python3.11 awscli2
                 pin_neo4j_user
                 attach_and_mount_data_volume
                 install_neo4j_from_yum
@@ -889,6 +896,10 @@ Resources:
                 build_neo4j_conf_file
                 add_cypher_ip_blocklist
                 start_neo4j
+                # Switch python3 default to 3.11 only after all aws-cli calls are complete.
+                # awscli2 RPM installs its modules under python3.9 site-packages; switching
+                # the alternative earlier breaks /usr/bin/aws (shebang: #!/usr/bin/python3).
+                alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 100
                 cfn-signal --success true --stack "$stackName" --resource "$logicalId" --region "$region"
 
   Neo4jVPC:

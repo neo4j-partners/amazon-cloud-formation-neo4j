@@ -29,6 +29,7 @@ Two AMI modes depending on what you are testing.
 ./deploy.py --marketplace --alert-email you@example.com    # enable CloudWatch alarm emails
 ./deploy.py --marketplace --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx                                              # existing VPC, 1-node
 ./deploy.py --marketplace --mode ExistingVpc --number-of-servers 3 --vpc-id vpc-xxxx --subnet-1 subnet-a --subnet-2 subnet-b --subnet-3 subnet-c  # existing VPC, 3-node
+./deploy.py --marketplace --mode ExistingVpc --vpc-file .deploy/vpc-<ts>.txt                                                                       # existing VPC, read IDs from file
 ```
 
 **Local AMI mode** — tests a newly built AMI before it is published. Build and verify the AMI first (requires the `neo4j-marketplace` account):
@@ -49,6 +50,7 @@ Then deploy using that AMI:
 ./deploy.py --alert-email you@example.com      # enable CloudWatch alarm emails
 ./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx                                              # existing VPC, 1-node
 ./deploy.py --mode ExistingVpc --number-of-servers 3 --vpc-id vpc-xxxx --subnet-1 subnet-a --subnet-2 subnet-b --subnet-3 subnet-c  # existing VPC, 3-node
+./deploy.py --mode ExistingVpc --vpc-file .deploy/vpc-<ts>.txt                                                                       # existing VPC, read IDs from file
 ```
 
 In local AMI mode, the script creates a temporary SSM parameter for the AMI ID and copies the AMI cross-region if needed. Cross-region copies take 10-20+ minutes — use `--region us-east-1` to skip the copy.
@@ -248,14 +250,41 @@ Pass the VPC and subnet IDs at deploy time. One subnet is required for a single-
 
 `--allowed-cidr` defaults to `10.0.0.0/16`. Pass it explicitly if your VPC uses a different CIDR.
 
+**`CreateVpcEndpoints` flag** — by default the template creates the four interface endpoints (`ssm`, `ssmmessages`, `logs`, `secretsmanager`). If your VPC already has these endpoints, set `--create-vpc-endpoints false` and pass `--existing-endpoint-sg-id <sg-id>` to avoid duplicate-endpoint deploy failures:
+
+```bash
+./deploy.py --mode ExistingVpc \
+  --vpc-id vpc-xxxx --subnet-1 subnet-xxxx \
+  --create-vpc-endpoints false \
+  --existing-endpoint-sg-id sg-xxxx
+```
+
+### Test VPC Setup
+
+For automated testing, `scripts/create-test-vpc.py` provisions a minimal private-networking VPC (`10.42.0.0/16`) and writes all resource IDs to `.deploy/vpc-<ts>.txt`. `deploy.py` reads that file automatically when `--mode ExistingVpc` and no `--vpc-id` is provided.
+
+```bash
+# Path A — template creates endpoints (default)
+scripts/create-test-vpc.py --region us-east-1
+./deploy.py --mode ExistingVpc --number-of-servers 3
+
+# Path B — VPC already has endpoints (CreateVpcEndpoints=false)
+scripts/create-test-vpc.py --region us-east-1 --with-endpoints
+./deploy.py --mode ExistingVpc --number-of-servers 1 --create-vpc-endpoints false
+```
+
+Pass `--vpc-file <path>` to `deploy.py` to select a specific file when multiple vpc-*.txt files exist.
+
 ### Test
 
 The existing-VPC template provisions an operator bastion. Use the same `validate-private/` tooling as the Private mode:
 
 ```bash
 cd validate-private
-scripts/preflight.sh                     # 11 prerequisite checks
-uv run validate-private                  # 6 cluster validation checks
+scripts/preflight.sh                     # 11 prerequisite checks: stack status, bastion SSM, VPC endpoints
+uv run validate-private                  # 7 cluster validation checks
+uv run validate-private --suite failover   # failover suite (3-node only)
+uv run validate-private --suite resilience # resilience suite (3-node only)
 uv run run-cypher '<cypher>'             # execute a Cypher query
 scripts/smoke-write.sh                   # write operations through the cluster
 uv run admin-shell                       # interactive cypher-shell on the bastion
@@ -270,11 +299,16 @@ Run observability checks from the `neo4j-ee/` directory:
 
 ### Tear Down
 
+Tear down the EE stack first, then the test VPC if one was created:
+
 ```bash
 ./teardown.sh
+scripts/teardown-test-vpc.py             # deletes VPC, NAT gateways, subnets, endpoints, removes vpc-*.txt
 ```
 
-> **Note:** The existing-VPC template does not create NAT Gateways — outbound routing is the responsibility of the VPC you supply.
+`teardown-test-vpc.py` defaults to the most recently modified `vpc-*.txt` in `.deploy/`. Pass a VPC deployment name (`vpc-<ts>`) to target a specific one.
+
+> **Note:** The existing-VPC template does not create NAT Gateways — outbound routing is the responsibility of the VPC you supply. The test VPC created by `create-test-vpc.py` does provision NAT Gateways; tear it down promptly after testing.
 
 ---
 
@@ -306,4 +340,6 @@ Run observability checks from the `neo4j-ee/` directory:
 | `marketplace/build.sh` | Hardening script run on the instance |
 | `validate-private/` | Operator tooling for Private-mode and ExistingVpc-mode stacks |
 | `sample-private-app/` | Sample Lambda app that connects to a private cluster |
+| `scripts/create-test-vpc.py` | Create a minimal test VPC for ExistingVpc template testing; writes `.deploy/vpc-<ts>.txt` |
+| `scripts/teardown-test-vpc.py` | Delete a test VPC created by `create-test-vpc.py`; reads `.deploy/vpc-<ts>.txt` |
 | `.deploy/` | Deployment output files — one per stack (gitignored) |

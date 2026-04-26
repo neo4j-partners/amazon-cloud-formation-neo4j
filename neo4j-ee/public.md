@@ -148,7 +148,7 @@ Deployed `test-ee-1777182300` (3-node, Public mode, us-east-2, ami-00c5f98cd216e
 
 Files changed: `templates/src/security-groups-public.yaml`, `templates/src/networking-public.yaml`, `templates/neo4j-public.template.yaml`.
 
-### Phase 3 — Validate 🔄 IN PROGRESS
+### Phase 3 — Validate 🔄 IN PROGRESS — 18/25 passing, 3 root causes remaining
 
 Requires Phase 1 and Phase 2 complete. Run both test suites against the deployed stack, then tear down.
 
@@ -179,7 +179,17 @@ cd ../neo4j-ee
 | 20 | Routing table | FAIL | `dbms.cluster.routing.getRoutingTable` deprecated + no writer/reader endpoints returned (cluster Cypher issue). Fix: same Cypher update as #19. |
 | 25 | Identify follower | FAIL | Same `role` Cypher syntax error as #19. Fix: same Cypher update. |
 
-All connectivity, volume, NLB scheme, and sentinel data tests passed. The three root causes are: (1) one wrong test assertion, (2) one template ASG config, (3) one Cypher API change in Neo4j 2026.04. Second run in progress against redeployed stack with clean SG fix from source.
+All connectivity, volume, NLB scheme, and sentinel data tests passed. The three root causes are: (1) one wrong test assertion, (2) one template ASG config, (3) one Cypher API change in Neo4j 2026.04.
+
+**Second run (test-ee-1777184749) confirms SG fix is clean** — identical 7 failures, all in code/template, none in infrastructure. The NLB health checks now pass immediately on fresh deploy (no wait loop needed). Stack is live at `test-ee-1777184749-nlb-8b1881593b0d2c69.elb.us-east-2.amazonaws.com`.
+
+### Remaining work before Phase 3 is complete
+
+| # | Fix | Location |
+|---|-----|----------|
+| 1 | Data directory: update assertion to accept `/var/lib/neo4j/data` for EE | `test_neo4j/src/test_neo4j/neo4j_deep_checks.py` |
+| 2 | ASG HealthCheckType: change from `EC2` to `ELB` for NLB-backed ASGs | `templates/src/asg-public.yaml` + assembled template |
+| 3 | `SHOW SERVERS YIELD … role`: `role` removed in Neo4j 2026.04 — discover correct column and update Cypher | `test_neo4j/src/test_neo4j/cluster_checks.py` (tests 19, 25) + routing table query (test 20) |
 
 ---
 

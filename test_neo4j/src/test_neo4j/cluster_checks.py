@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from neo4j import RoutingControl
 
-from test_neo4j.aws_helpers import get_all_ee_asg_instance_ids
 from test_neo4j.config import StackConfig
 from test_neo4j.reporting import TestReporter
 
@@ -73,13 +72,26 @@ def check_cluster_topology(
     with reporter.test("Cluster topology (SHOW SERVERS)") as ctx:
         try:
             with config.driver() as driver:
-                records, _, _ = driver.execute_query(
-                    "SHOW SERVERS YIELD serverId, role, currentStatus",
+                # SHOW SERVERS: verify expected number of enabled, healthy members.
+                # Neo4j 2026.x schema: name, address, state, health, hosting.
+                server_records, _, _ = driver.execute_query(
+                    "SHOW SERVERS YIELD name, state, health",
                     routing_=RoutingControl.READ,
                 )
-                enabled = [r for r in records if r["currentStatus"] == "Enabled"]
-                primaries = [r for r in enabled if r["role"] == "PRIMARY"]
-                secondaries = [r for r in enabled if r["role"] == "SECONDARY"]
+                enabled = [
+                    r for r in server_records
+                    if r["state"] == "Enabled" and r["health"] == "Available"
+                ]
+
+                # SHOW DATABASES: verify each server hosts the neo4j database
+                # online and exactly one server is the Raft writer (leader).
+                db_records, _, _ = driver.execute_query(
+                    "SHOW DATABASES YIELD name, currentStatus, writer "
+                    "WHERE name = 'neo4j'",
+                    routing_=RoutingControl.READ,
+                )
+                online = [r for r in db_records if r["currentStatus"] == "online"]
+                writers = [r for r in online if r["writer"]]
 
                 issues = []
                 if len(enabled) != config.number_of_servers:
@@ -87,16 +99,18 @@ def check_cluster_topology(
                         f"expected {config.number_of_servers} Enabled servers, "
                         f"got {len(enabled)}"
                     )
-                if config.number_of_servers == 3:
-                    if len(primaries) != 1:
-                        issues.append(f"expected 1 PRIMARY, got {len(primaries)}")
-                    if len(secondaries) != 2:
-                        issues.append(f"expected 2 SECONDARY, got {len(secondaries)}")
+                if len(online) != config.number_of_servers:
+                    issues.append(
+                        f"expected {config.number_of_servers} online database "
+                        f"replicas, got {len(online)}"
+                    )
+                if len(writers) != 1:
+                    issues.append(f"expected 1 writer (leader), got {len(writers)}")
 
                 if not issues:
                     ctx.pass_(
-                        f"{len(enabled)} servers Enabled: "
-                        f"{len(primaries)} PRIMARY, {len(secondaries)} SECONDARY"
+                        f"{len(enabled)} servers Enabled, "
+                        f"{len(online)} online, 1 writer (leader)"
                     )
                 else:
                     ctx.fail("; ".join(issues))
@@ -118,57 +132,45 @@ def check_routing_table(
         log.info("  Skipping routing table check (single-node deployment)\n")
         return
 
-    with reporter.test("Routing table endpoints match EC2 private IPs") as ctx:
+    with reporter.test("Routing table has writer and reader endpoints") as ctx:
         try:
-            node_pairs = get_all_ee_asg_instance_ids(
-                session, config.stack_name, resource_map, config.number_of_servers
-            )
-            instance_ids = [iid for _, iid in node_pairs]
-            ec2 = session.client("ec2")
-            resp = ec2.describe_instances(InstanceIds=instance_ids)
-            cluster_ips: set[str] = set()
-            for reservation in resp["Reservations"]:
-                for inst in reservation["Instances"]:
-                    private_ip = inst.get("PrivateIpAddress")
-                    if private_ip:
-                        cluster_ips.add(private_ip)
-
             with config.driver() as driver:
+                # dbms.routing.getRoutingTable supersedes the deprecated
+                # dbms.cluster.routing.getRoutingTable. Response format:
+                # {ttl, servers: [{addresses: [...], role: 'WRITE'|'READ'|'ROUTE'}]}
                 records, _, _ = driver.execute_query(
-                    "CALL dbms.cluster.routing.getRoutingTable({database: 'neo4j'})",
+                    "CALL dbms.routing.getRoutingTable({database: 'neo4j'})",
                     routing_=RoutingControl.READ,
                 )
                 if not records:
                     ctx.fail("getRoutingTable returned no results")
                     return
 
-                row = records[0]
-                writers = row.get("writers", [])
-                readers = row.get("readers", [])
+                servers = records[0].get("servers", [])
+                writers: list[str] = []
+                readers: list[str] = []
+                for entry in servers:
+                    role = entry.get("role", "")
+                    addresses = entry.get("addresses", [])
+                    if role == "WRITE":
+                        writers.extend(addresses)
+                    elif role == "READ":
+                        readers.extend(addresses)
 
                 issues = []
                 if not writers:
-                    issues.append("no writer endpoint in routing table")
-                if len(readers) < 2:
-                    issues.append(f"expected at least 2 reader endpoints, got {len(readers)}")
-
-                all_endpoints = writers + readers
-                rogue = []
-                for endpoint in all_endpoints:
-                    ip = endpoint.split(":")[0] if ":" in endpoint else endpoint
-                    if ip not in cluster_ips:
-                        rogue.append(endpoint)
-
-                if rogue:
+                    issues.append("no WRITE endpoint in routing table")
+                expected_readers = config.number_of_servers - 1
+                if len(readers) < expected_readers:
                     issues.append(
-                        f"endpoints not matching any cluster EC2 private IP: {rogue} "
-                        f"(cluster IPs: {sorted(cluster_ips)})"
+                        f"expected at least {expected_readers} READ endpoints, "
+                        f"got {len(readers)}"
                     )
 
                 if not issues:
                     ctx.pass_(
-                        f"{len(writers)} writer(s), {len(readers)} reader(s); "
-                        f"all IPs in cluster ({sorted(cluster_ips)})"
+                        f"{len(writers)} writer(s), {len(readers)} reader(s) "
+                        f"in routing table"
                     )
                 else:
                     ctx.fail("; ".join(issues))

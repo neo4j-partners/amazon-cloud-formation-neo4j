@@ -27,6 +27,8 @@
       MinSize: 1
       MaxSize: 1
       DesiredCapacity: 1
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 600
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet1
       TargetGroupARNs:
@@ -65,6 +67,8 @@
       MinSize: 1
       MaxSize: 1
       DesiredCapacity: 1
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 600
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet2
       TargetGroupARNs:
@@ -103,6 +107,8 @@
       MinSize: 1
       MaxSize: 1
       DesiredCapacity: 1
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 600
       VPCZoneIdentifier:
         - !Ref Neo4jSubnet3
       TargetGroupARNs:

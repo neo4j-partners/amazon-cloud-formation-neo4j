@@ -120,6 +120,21 @@ def _wait_ssm_online(ssm, instance_id: str, timeout: int = 300) -> bool:
     return False
 
 
+def _wait_volume_mounted(ssm, instance_id: str, timeout: int = 300) -> bool:
+    """Poll via SSM until /var/lib/neo4j/data is a mountpoint on the instance."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        ok, stdout, _ = run_shell_on_instance(
+            ssm, instance_id,
+            "mountpoint -q /var/lib/neo4j/data && echo MOUNTED || echo NOT_MOUNTED",
+            timeout_s=30,
+        )
+        if ok and "MOUNTED" in stdout:
+            return True
+        time.sleep(15)
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Marker file: volume reattach verification
 # ---------------------------------------------------------------------------
@@ -249,15 +264,6 @@ def run_single_loss(
     if not ok:
         return
 
-    start = time.monotonic()
-    found = _check_marker(ssm, new_instance, test_run_id)
-    reporter.record(
-        "Volume reattach (marker)", found,
-        "Marker present — data volume was reattached" if found
-        else "Marker MISSING — volume was reformatted or wrong volume attached",
-        time.monotonic() - start,
-    )
-
     log.info("  Waiting for Neo4j post-recovery (timeout: 300s)…\n")
     start = time.monotonic()
     ok = _wait_neo4j(config, timeout=300)
@@ -268,6 +274,21 @@ def run_single_loss(
     )
     if not ok:
         return
+
+    # Wait for data volume mounted on replacement, then check marker.
+    # _wait_neo4j only waits for *any* cluster member to respond via NLB; the
+    # replacement's UserData may still be running. Poll mountpoint directly.
+    start = time.monotonic()
+    vol_ready = _wait_volume_mounted(ssm, new_instance, timeout=300)
+    found = _check_marker(ssm, new_instance, test_run_id) if vol_ready else False
+    reporter.record(
+        "Volume reattach (marker)",
+        found,
+        "Marker present — data volume was reattached" if found
+        else ("Data volume not mounted within 300s" if not vol_ready
+              else "Marker MISSING — volume was reformatted or wrong volume attached"),
+        time.monotonic() - start,
+    )
 
     start = time.monotonic()
     ok, detail = verify_sentinel(config, test_run_id)
@@ -378,38 +399,32 @@ def run_total_loss(
         reporter.record("All ASGs replaced", False, str(exc), time.monotonic() - start)
         return
 
-    # Wait for SSM online and check markers in parallel across all three replacements.
-    # ssm is thread-safe (boto3 clients share a connection pool via urllib3).
+    # Wait for SSM online in parallel — marker checks are deferred until after
+    # Neo4j is up, when the data volume is guaranteed to be mounted.
     logical_map = {v: k for k, v in asg_map.items()}
 
-    def _ssm_and_check(asg_name: str, new_instance: str) -> tuple[str, str, bool, float, bool, float]:
+    def _wait_ssm(asg_name: str, new_instance: str) -> tuple[str, str, bool, float]:
         logical = logical_map[asg_name]
         t_ssm = time.monotonic()
         ssm_ok = _wait_ssm_online(ssm, new_instance, timeout=300)
-        ssm_elapsed = time.monotonic() - t_ssm
-        t_check = time.monotonic()
-        found = _check_marker(ssm, new_instance, test_run_id) if ssm_ok else False
-        check_elapsed = time.monotonic() - t_check
-        return logical, new_instance, ssm_ok, ssm_elapsed, found, check_elapsed
+        return logical, new_instance, ssm_ok, time.monotonic() - t_ssm
 
     log.info("  Waiting for SSM on all replacements…\n")
+    ssm_ready: dict[str, str] = {}  # logical_id -> new_instance
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as exe:
-        check_futs = [
-            exe.submit(_ssm_and_check, asg_name, new_instance)
+        ssm_futs = [
+            exe.submit(_wait_ssm, asg_name, new_instance)
             for asg_name, new_instance in new_instances.items()
         ]
-        for fut in concurrent.futures.as_completed(check_futs):
-            logical, new_instance, ssm_ok, ssm_elapsed, found, check_elapsed = fut.result()
+        for fut in concurrent.futures.as_completed(ssm_futs):
+            logical, new_instance, ssm_ok, ssm_elapsed = fut.result()
             reporter.record(
                 f"SSM ready ({logical})", ssm_ok,
                 f"{new_instance} Online" if ssm_ok else f"{new_instance} not Online within 300s",
                 ssm_elapsed,
             )
-            reporter.record(
-                f"Volume reattach ({logical})", found,
-                "Marker present" if found else "Marker MISSING — volume may have been reformatted",
-                check_elapsed,
-            )
+            if ssm_ok:
+                ssm_ready[logical] = new_instance
 
     # All 3 nodes must start and elect a leader before Neo4j accepts queries.
     log.info("  Waiting for Neo4j quorum post-recovery (timeout: 600s)…\n")
@@ -427,6 +442,31 @@ def run_total_loss(
     )
     if not ok:
         return
+
+    # Check markers: wait for data volume mounted on each replacement, then check.
+    # _wait_neo4j only waits for any cluster member via NLB; individual nodes
+    # may still be running UserData. Poll mountpoint directly on each.
+    def _check_vol(logical: str, new_instance: str) -> tuple[str, bool, float]:
+        t = time.monotonic()
+        vol_ready = _wait_volume_mounted(ssm, new_instance, timeout=300)
+        found = _check_marker(ssm, new_instance, test_run_id) if vol_ready else False
+        return logical, found, vol_ready, time.monotonic() - t
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as exe:
+        vol_futs = [
+            exe.submit(_check_vol, logical, inst)
+            for logical, inst in ssm_ready.items()
+        ]
+        for fut in concurrent.futures.as_completed(vol_futs):
+            logical, found, vol_ready, elapsed = fut.result()
+            reporter.record(
+                f"Volume reattach ({logical})",
+                found,
+                "Marker present" if found
+                else ("Data volume not mounted within 300s" if not vol_ready
+                      else "Marker MISSING — volume may have been reformatted"),
+                elapsed,
+            )
 
     start = time.monotonic()
     ok, detail = verify_sentinel(config, test_run_id)

@@ -114,8 +114,10 @@ def check_memory_config(config: StackConfig, reporter: TestReporter) -> None:
 
 
 def check_data_directory(config: StackConfig, reporter: TestReporter) -> None:
-    """Verify server.directories.data is /data (persistent EBS volume mount)."""
-    expected = "/data"
+    """Verify server.directories.data is on the persistent EBS volume mount."""
+    # CE mounts the EBS volume at /data and sets server.directories.data there.
+    # EE uses the default Neo4j data directory (/var/lib/neo4j/data).
+    expected = "/data" if config.edition == "ce" else "/var/lib/neo4j/data"
     with reporter.test("Data directory") as ctx:
         try:
             with config.driver() as driver:

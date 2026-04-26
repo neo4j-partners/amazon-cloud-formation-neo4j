@@ -13,8 +13,8 @@ log = logging.getLogger(__name__)
 
 
 def check_server_status(config: StackConfig, reporter: TestReporter) -> None:
-    """Verify Neo4j reports community edition via dbms.components()."""
-    expected = "community"
+    """Verify Neo4j reports the expected edition via dbms.components()."""
+    expected = "enterprise" if config.edition == "ee" else "community"
     with reporter.test("Neo4j server status") as ctx:
         try:
             with config.driver() as driver:
@@ -139,6 +139,7 @@ def run_deep_neo4j_checks(config: StackConfig, reporter: TestReporter) -> None:
     """Run all deeper Neo4j configuration validation tests."""
     check_server_status(config, reporter)
     check_listen_address(config, reporter)
-    check_advertised_address(config, reporter)
+    if config.edition == "ce":
+        check_advertised_address(config, reporter)
     check_memory_config(config, reporter)
     check_data_directory(config, reporter)

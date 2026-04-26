@@ -1,3 +1,8 @@
+  Neo4jBastionSecurityGroupId:
+    Description: >-
+      Security group ID of the operator bastion. The test orchestrator uses
+      this to wire the bastion into a pre-existing endpoint SG for Path B testing.
+    Value: !GetAtt Neo4jBastionSecurityGroup.GroupId
   Neo4jInternalDNS:
     Description: Internal NLB DNS name (not internet-reachable; use SSM port-forwarding to connect)
     Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName

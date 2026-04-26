@@ -19,8 +19,8 @@
           - PrivateSubnet1Id
           - PrivateSubnet2Id
           - PrivateSubnet3Id
-          - CreateSSMEndpoint
-          - CreateSecretsManagerEndpoint
+          - CreateVpcEndpoints
+          - ExistingEndpointSgId
           - AllowedCIDR
       - Label:
           default: "TLS"
@@ -52,10 +52,10 @@
         default: Private Subnet 2 ID
       PrivateSubnet3Id:
         default: Private Subnet 3 ID
-      CreateSSMEndpoint:
-        default: Create SSM VPC Endpoints
-      CreateSecretsManagerEndpoint:
-        default: Create Secrets Manager VPC Endpoint
+      CreateVpcEndpoints:
+        default: Create VPC Interface Endpoints
+      ExistingEndpointSgId:
+        default: Existing Endpoint Security Group ID
       AllowedCIDR:
         default: Allowed CIDR
       AlertEmail:

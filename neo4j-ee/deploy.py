@@ -58,7 +58,36 @@ def parse_args():
     p.add_argument("--subnet-1", metavar="SUBNET_ID")
     p.add_argument("--subnet-2", metavar="SUBNET_ID", default="")
     p.add_argument("--subnet-3", metavar="SUBNET_ID", default="")
+    p.add_argument("--create-vpc-endpoints", default="true", choices=["true", "false"])
+    p.add_argument("--existing-endpoint-sg-id", metavar="SG_ID", default="")
+    p.add_argument(
+        "--vpc-file", metavar="PATH",
+        help="Path to vpc-*.txt from scripts/create-test-vpc.py. "
+             "Auto-detected from .deploy/vpc-*.txt when --mode ExistingVpc and --vpc-id is not provided. "
+             "Populates --vpc-id, --subnet-*, --allowed-cidr, --region, and --existing-endpoint-sg-id "
+             "from the file; any of those flags override the file values when provided explicitly.",
+    )
     return p.parse_args()
+
+
+def _resolve_vpc_file(explicit: str | None, deploy_dir: str) -> str | None:
+    if explicit:
+        return explicit
+    vpc_files = sorted(
+        Path(deploy_dir).glob("vpc-*.txt"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    return str(vpc_files[0]) if vpc_files else None
+
+
+def _parse_vpc_file(path: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in Path(path).read_text().splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            fields[k.strip()] = v.strip()
+    return fields
 
 
 def generate_password():
@@ -110,6 +139,8 @@ def main():
             sys.exit("ERROR: --mode ExistingVpc requires --vpc-id and --subnet-1 (--subnet-2 and --subnet-3 required for 3-node).")
         if args.number_of_servers == 3 and not (args.subnet_2 and args.subnet_3):
             sys.exit("ERROR: --mode ExistingVpc with 3 servers requires --subnet-2 and --subnet-3.")
+        if args.create_vpc_endpoints == "false" and not args.existing_endpoint_sg_id:
+            sys.exit("ERROR: --existing-endpoint-sg-id is required when --create-vpc-endpoints false")
 
     instance_type = INSTANCE_TYPES[args.instance_family]
 
@@ -296,7 +327,10 @@ def main():
             {"ParameterKey": "PrivateSubnet1Id", "ParameterValue": args.subnet_1},
             {"ParameterKey": "PrivateSubnet2Id", "ParameterValue": args.subnet_2},
             {"ParameterKey": "PrivateSubnet3Id", "ParameterValue": args.subnet_3},
+            {"ParameterKey": "CreateVpcEndpoints", "ParameterValue": args.create_vpc_endpoints},
         ]
+        if args.existing_endpoint_sg_id:
+            cfn_params.append({"ParameterKey": "ExistingEndpointSgId", "ParameterValue": args.existing_endpoint_sg_id})
 
     cfn = boto3.client("cloudformation", region_name=region)
     print(f"Creating stack {stack_name}...")
@@ -425,6 +459,10 @@ def main():
     ]
     if args.alert_email:
         extra.append(("AlertEmail", args.alert_email))
+    if args.mode == "ExistingVpc":
+        extra.append(("CreateVpcEndpoints", args.create_vpc_endpoints))
+        if args.existing_endpoint_sg_id:
+            extra.append(("ExistingEndpointSgId", args.existing_endpoint_sg_id))
     if ssm_param_path:
         extra.extend([("SSMParamPath", ssm_param_path), ("AmiId", ami_id)])
     if cleanup_state["copied_ami_id"] and cleanup_state["cleanup_ami"]:

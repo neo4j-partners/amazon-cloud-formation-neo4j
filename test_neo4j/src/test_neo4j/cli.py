@@ -16,48 +16,60 @@ from test_neo4j.movies_dataset import (
 from test_neo4j.neo4j_checks import run_simple_tests
 from test_neo4j.neo4j_deep_checks import run_deep_neo4j_checks
 from test_neo4j.reporting import TestReporter
-from test_neo4j.resilience import run_resilience_tests
+from test_neo4j.resilience import run_ee_cluster_resilience_tests, run_resilience_tests
 from test_neo4j.wait import wait_for_neo4j
 
 log = logging.getLogger(__name__)
 
 # Repo root: test_neo4j/src/test_neo4j/cli.py -> up 3 levels -> test_neo4j/ -> up 1 -> repo root
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_DEPLOY_DIR = _REPO_ROOT / "neo4j-ce" / ".deploy"
+
+
+def _deploy_dir(edition: str) -> Path:
+    return _REPO_ROOT / f"neo4j-{edition}" / ".deploy"
 
 
 def _resolve_outputs_path(
     explicit: Path | None,
     stack: str | None,
+    edition: str,
 ) -> Path:
     """Return the path to the deployment outputs file.
 
     Resolution order:
     1. Explicit --outputs-file path
-    2. --stack <name> -> neo4j-ce/.deploy/<name>.txt
-    3. Most recently modified .txt in neo4j-ce/.deploy/
+    2. --stack <name> -> neo4j-{edition}/.deploy/<name>.txt
+    3. Most recently modified .txt in neo4j-{edition}/.deploy/
     """
     if explicit:
         return explicit
 
-    if stack:
-        return _DEPLOY_DIR / f"{stack}.txt"
+    deploy_dir = _deploy_dir(edition)
 
-    if _DEPLOY_DIR.is_dir():
+    if stack:
+        return deploy_dir / f"{stack}.txt"
+
+    if deploy_dir.is_dir():
         txt_files = sorted(
-            _DEPLOY_DIR.glob("*.txt"),
+            deploy_dir.glob("*.txt"),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
         if txt_files:
             return txt_files[0]
 
-    return _DEPLOY_DIR / "no-deployment-found.txt"
+    return deploy_dir / "no-deployment-found.txt"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Test a deployed Neo4j CE CloudFormation stack",
+        description="Test a deployed Neo4j CloudFormation stack",
+    )
+    parser.add_argument(
+        "--edition",
+        choices=["ce", "ee"],
+        default="ce",
+        help="Which edition to test: ce (Community) or ee (Enterprise). Default: ce",
     )
     parser.add_argument(
         "--simple",
@@ -99,7 +111,7 @@ def main() -> None:
 
     logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 
-    outputs_path = _resolve_outputs_path(args.outputs_file, args.stack)
+    outputs_path = _resolve_outputs_path(args.outputs_file, args.stack, args.edition)
 
     try:
         config = load_config(outputs_path, args.password)
@@ -112,11 +124,13 @@ def main() -> None:
         mode += "+infra-security"
     reporter = TestReporter()
 
-    log.info("=== Neo4j CE Stack Tester ===")
+    edition_label = "EE" if args.edition == "ee" else "CE"
+    log.info("=== Neo4j %s Stack Tester ===", edition_label)
     log.info("")
-    log.info("  Stack:  %s", config.stack_name)
-    log.info("  Host:   %s", config.host)
-    log.info("  Mode:   %s", mode)
+    log.info("  Stack:   %s", config.stack_name)
+    log.info("  Host:    %s", config.host)
+    log.info("  Edition: %s (%d node)", edition_label, config.number_of_servers)
+    log.info("  Mode:    %s", mode)
     log.info("")
 
     session = None
@@ -142,6 +156,19 @@ def main() -> None:
         sys.exit(1)
     log.info("")
 
+    if args.edition == "ee":
+        _run_ee(args, config, reporter, session, resource_map)
+    else:
+        _run_ce(args, config, reporter, session, resource_map)
+
+    exit_code = reporter.summary(
+        stack_name=config.stack_name,
+        endpoint=config.host,
+    )
+    sys.exit(exit_code)
+
+
+def _run_ce(args, config, reporter, session, resource_map) -> None:
     run_simple_tests(config, reporter)
     run_deep_neo4j_checks(config, reporter)
 
@@ -164,8 +191,32 @@ def main() -> None:
 
         run_network_security_checks(session, config, reporter, resource_map)
 
-    exit_code = reporter.summary(
-        stack_name=config.stack_name,
-        endpoint=config.host,
-    )
-    sys.exit(exit_code)
+
+def _run_ee(args, config, reporter, session, resource_map) -> None:
+    from test_neo4j.cluster_checks import run_cluster_checks  # noqa: PLC0415
+    from test_neo4j.infra_checks import run_ee_infra_checks  # noqa: PLC0415
+    from test_neo4j.volume_checks import run_ee_volume_checks  # noqa: PLC0415
+
+    run_simple_tests(config, reporter)
+    run_deep_neo4j_checks(config, reporter)
+
+    if create_movies_dataset(config, reporter):
+        verify_movies_dataset(config, reporter)
+        cleanup_movies_dataset(config)
+
+    if not args.simple:
+        run_ee_infra_checks(
+            session, config, reporter, resource_map,
+            run_security=args.infra_security,
+        )
+        run_cluster_checks(config, reporter, session, resource_map)
+        run_ee_volume_checks(config, reporter, session, resource_map)
+        run_ee_cluster_resilience_tests(
+            config, reporter, session,
+            replacement_timeout=args.timeout,
+            resource_map=resource_map,
+        )
+    elif args.infra_security:
+        from test_neo4j.infra_checks import run_network_security_checks  # noqa: PLC0415
+
+        run_network_security_checks(session, config, reporter, resource_map)

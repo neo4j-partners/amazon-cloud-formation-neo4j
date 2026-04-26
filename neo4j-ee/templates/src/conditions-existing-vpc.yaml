@@ -8,5 +8,5 @@
       - ''
   BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
   HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
-  CreateSSMEndpoint: !Equals [!Ref CreateSSMEndpoint, 'true']
-  CreateSecretsManagerEndpoint: !Equals [!Ref CreateSecretsManagerEndpoint, 'true']
+  CreateVpcEndpoints: !Equals [!Ref CreateVpcEndpoints, 'true']
+  UseExistingVpcEndpoints: !Equals [!Ref CreateVpcEndpoints, 'false']

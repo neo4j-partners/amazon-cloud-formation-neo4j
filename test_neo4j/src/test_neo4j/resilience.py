@@ -6,8 +6,11 @@ import logging
 import uuid
 from typing import TYPE_CHECKING
 
+from neo4j import RoutingControl
+
 from test_neo4j.aws_helpers import (
     get_asg_instance_id,
+    get_all_ee_asg_instance_ids,
     get_stack_resources,
     terminate_instance,
     wait_for_replacement_instance,
@@ -135,6 +138,119 @@ def _cleanup_sentinel(config: StackConfig, test_run_id: str) -> None:
         log.info("  Cleaned up sentinel node.\n")
     except Exception:
         log.warning("  Could not clean up sentinel node (non-fatal).\n")
+
+
+def run_ee_cluster_resilience_tests(
+    config: StackConfig,
+    reporter: TestReporter,
+    session: boto3.Session,
+    replacement_timeout: int = 600,
+    resource_map: dict[str, str] | None = None,
+) -> None:
+    """EE resilience: terminate a follower, verify cluster re-forms, verify data persisted.
+
+    For single-node EE, falls back to the CE-style EBS persistence test.
+    """
+    from test_neo4j.cluster_checks import check_cluster_topology  # noqa: PLC0415
+
+    if resource_map is None:
+        resource_map = get_stack_resources(session, config.stack_name)
+
+    if config.number_of_servers == 1:
+        # Single-node EE: same EBS persistence test as CE
+        run_resilience_tests(config, reporter, session, replacement_timeout, resource_map)
+        return
+
+    test_run_id = uuid.uuid4().hex
+
+    if not _write_sentinel(config, reporter, test_run_id):
+        return
+
+    # Identify a follower to terminate
+    node_pairs = get_all_ee_asg_instance_ids(
+        session, config.stack_name, resource_map, config.number_of_servers
+    )
+    instance_ids = [iid for _, iid in node_pairs]
+    ec2 = session.client("ec2")
+    resp = ec2.describe_instances(InstanceIds=instance_ids)
+    ip_to_asg: dict[str, str] = {}
+    ip_to_instance: dict[str, str] = {}
+    for reservation in resp["Reservations"]:
+        for inst in reservation["Instances"]:
+            private_ip = inst.get("PrivateIpAddress")
+            if private_ip:
+                iid = inst["InstanceId"]
+                ip_to_instance[private_ip] = iid
+                for asg_logical_id, node_iid in node_pairs:
+                    if node_iid == iid:
+                        ip_to_asg[private_ip] = asg_logical_id
+
+    follower_instance_id: str | None = None
+    follower_asg_logical_id: str | None = None
+
+    with reporter.test("Identify follower to terminate") as ctx:
+        try:
+            with config.driver() as driver:
+                records, _, _ = driver.execute_query(
+                    "SHOW SERVERS YIELD address, role",
+                    routing_=RoutingControl.READ,
+                )
+                for row in records:
+                    address = row["address"]
+                    role = row["role"]
+                    ip = address.split(":")[0] if ":" in address else address
+                    if role != "PRIMARY" and ip in ip_to_instance:
+                        follower_instance_id = ip_to_instance[ip]
+                        follower_asg_logical_id = ip_to_asg[ip]
+                        break
+
+            if follower_instance_id:
+                ctx.pass_(
+                    f"Selected follower {follower_instance_id} "
+                    f"({follower_asg_logical_id}) for termination"
+                )
+            else:
+                ctx.fail("Could not identify a follower instance to terminate")
+                return
+        except Exception as exc:
+            ctx.fail(f"Failed to identify follower: {exc}")
+            return
+
+    with reporter.test("Terminate follower EC2 instance") as ctx:
+        try:
+            terminate_instance(session, follower_instance_id)
+            ctx.pass_(f"Terminated {follower_instance_id}")
+        except Exception as exc:
+            ctx.fail(f"Failed to terminate instance: {exc}")
+            return
+
+    with reporter.test("Wait for follower ASG replacement") as ctx:
+        try:
+            new_instance_id = wait_for_replacement_instance(
+                session,
+                config.stack_name,
+                resource_map,
+                exclude_instance=follower_instance_id,
+                timeout=replacement_timeout,
+                asg_logical_id=follower_asg_logical_id,
+            )
+            ctx.pass_(
+                f"Replacement {new_instance_id} is InService "
+                f"(replaced {follower_instance_id})"
+            )
+        except Exception as exc:
+            ctx.fail(str(exc))
+            return
+
+    log.info("Waiting for Neo4j cluster to stabilize...")
+    if not wait_for_neo4j(config, timeout=300, interval=10):
+        with reporter.test("Post-recovery Neo4j readiness") as ctx:
+            ctx.fail("Neo4j did not become reachable after follower replacement within 300s")
+        return
+
+    check_cluster_topology(config, reporter)
+    _verify_sentinel(config, reporter, test_run_id)
+    _cleanup_sentinel(config, test_run_id)
 
 
 def run_resilience_tests(

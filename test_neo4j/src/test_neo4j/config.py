@@ -13,9 +13,23 @@ from urllib.parse import urlparse
 from neo4j import Driver, GraphDatabase
 
 
-_REQUIRED_FIELDS = (
+_REQUIRED_FIELDS_CE = (
     "Neo4jBrowserURL",
     "Neo4jURI",
+    "Username",
+    "StackName",
+    "Region",
+)
+
+_REQUIRED_FIELDS_EE_PUBLIC = (
+    "Neo4jBrowserURL",
+    "Neo4jURI",
+    "Username",
+    "StackName",
+    "Region",
+)
+
+_REQUIRED_FIELDS_COMMON = (
     "Username",
     "StackName",
     "Region",
@@ -34,6 +48,8 @@ class StackConfig:
     region: str
     install_apoc: bool
     host: str         # bare hostname extracted from browser_url
+    edition: str      # "ce" or "ee"
+    number_of_servers: int  # 1 or 3 for EE
 
     @contextlib.contextmanager
     def driver(self) -> Iterator[Driver]:
@@ -70,10 +86,25 @@ def load_config(
 
     fields = _parse_outputs(outputs_path)
 
-    missing = [f for f in _REQUIRED_FIELDS if f not in fields]
+    edition = fields.get("Edition", "ce").lower()
+    number_of_servers = int(fields.get("NumberOfServers", "1"))
+
+    missing = [f for f in _REQUIRED_FIELDS_COMMON if f not in fields]
     if missing:
         raise ValueError(
             f"Required field(s) missing from {outputs_path.name}: {', '.join(missing)}"
+        )
+
+    if "Neo4jBrowserURL" not in fields or "Neo4jURI" not in fields:
+        if edition == "ee":
+            raise ValueError(
+                "This test runner only supports public EE stacks (internet-facing NLB). "
+                "The deploy output is missing Neo4jBrowserURL and Neo4jURI — "
+                "private EE stacks require SSM tunneling and are not supported here."
+            )
+        raise ValueError(
+            f"Required field(s) missing from {outputs_path.name}: "
+            + ", ".join(f for f in ("Neo4jBrowserURL", "Neo4jURI") if f not in fields)
         )
 
     browser_url = fields["Neo4jBrowserURL"]
@@ -104,4 +135,6 @@ def load_config(
         region=fields["Region"],
         install_apoc=install_apoc,
         host=host,
+        edition=edition,
+        number_of_servers=number_of_servers,
     )

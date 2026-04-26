@@ -24,8 +24,8 @@ Metadata:
           - PrivateSubnet1Id
           - PrivateSubnet2Id
           - PrivateSubnet3Id
-          - CreateSSMEndpoint
-          - CreateSecretsManagerEndpoint
+          - CreateVpcEndpoints
+          - ExistingEndpointSgId
           - AllowedCIDR
       - Label:
           default: "TLS"
@@ -57,10 +57,10 @@ Metadata:
         default: Private Subnet 2 ID
       PrivateSubnet3Id:
         default: Private Subnet 3 ID
-      CreateSSMEndpoint:
-        default: Create SSM VPC Endpoints
-      CreateSecretsManagerEndpoint:
-        default: Create Secrets Manager VPC Endpoint
+      CreateVpcEndpoints:
+        default: Create VPC Interface Endpoints
+      ExistingEndpointSgId:
+        default: Existing Endpoint Security Group ID
       AllowedCIDR:
         default: Allowed CIDR
       AlertEmail:
@@ -163,25 +163,25 @@ Parameters:
     Type: String
     Default: ''
     Description: Third private subnet ID; required when NumberOfServers is 3.
-  CreateSSMEndpoint:
+  CreateVpcEndpoints:
     Type: String
     AllowedValues:
       - 'true'
       - 'false'
     Default: 'true'
     Description: >-
-      Create VPC interface endpoints for Systems Manager (ssm, ssmmessages)
-      and CloudWatch Logs. Set false if your VPC already has these endpoints
-      — creating duplicates fails the deployment.
-  CreateSecretsManagerEndpoint:
+      Create VPC interface endpoints for SSM, SSM Messages, CloudWatch Logs,
+      and Secrets Manager. Set to false if your VPC already has these endpoints
+      — creating duplicates fails the deployment. When false,
+      ExistingEndpointSgId must be provided.
+  ExistingEndpointSgId:
     Type: String
-    AllowedValues:
-      - 'true'
-      - 'false'
-    Default: 'true'
+    Default: ''
     Description: >-
-      Create a VPC interface endpoint for Secrets Manager. Set false if your
-      VPC already has one — creating a duplicate fails the deployment.
+      Security group ID already attached to your VPC's interface endpoints.
+      Required when CreateVpcEndpoints is false. The stack adds ingress rules
+      (port 443) from the Neo4j instances and operator bastion into this SG,
+      and publishes it as vpc-endpoint-sg-id in the SSM contract.
   AllowedCIDR:
     Description: >-
       Enter the CIDR of your existing VPC, e.g. 10.0.0.0/16 or
@@ -189,6 +189,14 @@ Parameters:
     Type: String
     AllowedPattern: ^(?!0\.0\.0\.0\/0)(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR range. 0.0.0.0/0 is not accepted.
+
+Rules:
+  ExistingEndpointSgIdRequired:
+    RuleCondition: !Equals [!Ref CreateVpcEndpoints, 'false']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ExistingEndpointSgId, '']]
+        AssertDescription: >-
+          ExistingEndpointSgId must be provided when CreateVpcEndpoints is false.
 
 Conditions:
   CreateCluster: !Not
@@ -201,8 +209,8 @@ Conditions:
       - ''
   BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
   HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
-  CreateSSMEndpoint: !Equals [!Ref CreateSSMEndpoint, 'true']
-  CreateSecretsManagerEndpoint: !Equals [!Ref CreateSecretsManagerEndpoint, 'true']
+  CreateVpcEndpoints: !Equals [!Ref CreateVpcEndpoints, 'true']
+  UseExistingVpcEndpoints: !Equals [!Ref CreateVpcEndpoints, 'false']
 
 Resources:
   Neo4jInstanceProfile:
@@ -413,6 +421,7 @@ Resources:
 
   VpcEndpointSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Condition: CreateVpcEndpoints
     Properties:
       GroupDescription: Allow HTTPS from Neo4j instances and operator bastion to VPC interface endpoints
       VpcId: !Ref VpcId
@@ -420,11 +429,31 @@ Resources:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          SourceSecurityGroupId: !Ref Neo4jExternalSecurityGroup
+          SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           SourceSecurityGroupId: !Ref Neo4jBastionSecurityGroup
+
+  ExistingEndpointSgBastionIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: UseExistingVpcEndpoints
+    Properties:
+      GroupId: !Ref ExistingEndpointSgId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !GetAtt Neo4jBastionSecurityGroup.GroupId
+
+  ExistingEndpointSgNeo4jIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: UseExistingVpcEndpoints
+    Properties:
+      GroupId: !Ref ExistingEndpointSgId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
 
   # ---------------------------------------------------------------------------
   # Per-node persistent data volumes
@@ -1060,7 +1089,7 @@ Resources:
 
   SsmVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: CreateSSMEndpoint
+    Condition: CreateVpcEndpoints
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
@@ -1077,7 +1106,7 @@ Resources:
 
   SsmMessagesVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: CreateSSMEndpoint
+    Condition: CreateVpcEndpoints
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
@@ -1094,7 +1123,7 @@ Resources:
 
   LogsVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: CreateSSMEndpoint
+    Condition: CreateVpcEndpoints
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
@@ -1111,7 +1140,7 @@ Resources:
 
   SecretsManagerVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: CreateSecretsManagerEndpoint
+    Condition: CreateVpcEndpoints
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
@@ -1125,16 +1154,6 @@ Resources:
       SecurityGroupIds:
         - !Ref VpcEndpointSecurityGroup
       PrivateDnsEnabled: true
-
-  # S3 gateway endpoint routes are managed by the buyer's route tables.
-  # RouteTableIds is omitted intentionally — injecting routes into
-  # buyer-controlled route tables from this template is not possible.
-  S3GatewayEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcEndpointType: Gateway
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
-      VpcId: !Ref VpcId
 
   Neo4jNetworkLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -1320,7 +1339,7 @@ Resources:
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/vpc-endpoint-sg-id'
       Type: String
-      Value: !GetAtt VpcEndpointSecurityGroup.GroupId
+      Value: !If [CreateVpcEndpoints, !GetAtt VpcEndpointSecurityGroup.GroupId, !Ref ExistingEndpointSgId]
       Description: Security group ID on all interface VPC endpoints. In-VPC apps add this as an ingress rule source so their SG can reach SSM, Secrets Manager, and CloudWatch Logs via PrivateLink.
 
   Neo4jFlowLogsGroup:
@@ -1410,6 +1429,11 @@ Resources:
       TreatMissingData: notBreaching
 
 Outputs:
+  Neo4jBastionSecurityGroupId:
+    Description: >-
+      Security group ID of the operator bastion. The test orchestrator uses
+      this to wire the bastion into a pre-existing endpoint SG for Path B testing.
+    Value: !GetAtt Neo4jBastionSecurityGroup.GroupId
   Neo4jInternalDNS:
     Description: Internal NLB DNS name (not internet-reachable; use SSM port-forwarding to connect)
     Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName

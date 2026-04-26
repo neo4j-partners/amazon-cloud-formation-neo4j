@@ -13,25 +13,25 @@
     Type: String
     Default: ''
     Description: Third private subnet ID; required when NumberOfServers is 3.
-  CreateSSMEndpoint:
+  CreateVpcEndpoints:
     Type: String
     AllowedValues:
       - 'true'
       - 'false'
     Default: 'true'
     Description: >-
-      Create VPC interface endpoints for Systems Manager (ssm, ssmmessages)
-      and CloudWatch Logs. Set false if your VPC already has these endpoints
-      — creating duplicates fails the deployment.
-  CreateSecretsManagerEndpoint:
+      Create VPC interface endpoints for SSM, SSM Messages, CloudWatch Logs,
+      and Secrets Manager. Set to false if your VPC already has these endpoints
+      — creating duplicates fails the deployment. When false,
+      ExistingEndpointSgId must be provided.
+  ExistingEndpointSgId:
     Type: String
-    AllowedValues:
-      - 'true'
-      - 'false'
-    Default: 'true'
+    Default: ''
     Description: >-
-      Create a VPC interface endpoint for Secrets Manager. Set false if your
-      VPC already has one — creating a duplicate fails the deployment.
+      Security group ID already attached to your VPC's interface endpoints.
+      Required when CreateVpcEndpoints is false. The stack adds ingress rules
+      (port 443) from the Neo4j instances and operator bastion into this SG,
+      and publishes it as vpc-endpoint-sg-id in the SSM contract.
   AllowedCIDR:
     Description: >-
       Enter the CIDR of your existing VPC, e.g. 10.0.0.0/16 or

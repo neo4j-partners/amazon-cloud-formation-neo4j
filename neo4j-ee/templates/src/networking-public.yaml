@@ -144,7 +144,7 @@
           - 'nlb'
       Scheme: internet-facing
       SecurityGroups:
-        - !Ref Neo4jExternalSecurityGroup
+        - !Ref Neo4jNLBSecurityGroup
       Subnets: !If
         - CreateCluster
         - - !Ref Neo4jSubnet1

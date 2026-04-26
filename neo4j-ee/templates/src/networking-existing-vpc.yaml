@@ -52,7 +52,7 @@
 
   SsmVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: CreateSSMEndpoint
+    Condition: CreateVpcEndpoints
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
@@ -69,7 +69,7 @@
 
   SsmMessagesVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: CreateSSMEndpoint
+    Condition: CreateVpcEndpoints
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
@@ -86,7 +86,7 @@
 
   LogsVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: CreateSSMEndpoint
+    Condition: CreateVpcEndpoints
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
@@ -103,7 +103,7 @@
 
   SecretsManagerVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: CreateSecretsManagerEndpoint
+    Condition: CreateVpcEndpoints
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
@@ -117,16 +117,6 @@
       SecurityGroupIds:
         - !Ref VpcEndpointSecurityGroup
       PrivateDnsEnabled: true
-
-  # S3 gateway endpoint routes are managed by the buyer's route tables.
-  # RouteTableIds is omitted intentionally — injecting routes into
-  # buyer-controlled route tables from this template is not possible.
-  S3GatewayEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcEndpointType: Gateway
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
-      VpcId: !Ref VpcId
 
   Neo4jNetworkLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer

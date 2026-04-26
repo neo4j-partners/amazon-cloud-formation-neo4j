@@ -175,6 +175,96 @@ def run_infra_checks(
 
 
 # ---------------------------------------------------------------------------
+# EE-specific checks
+# ---------------------------------------------------------------------------
+
+def check_nlb_scheme(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """EE public mode: verify the NLB is internet-facing."""
+    with reporter.test("NLB scheme (internet-facing)") as ctx:
+        nlb_arn = resource_map.get("Neo4jNetworkLoadBalancer")
+        if not nlb_arn:
+            ctx.fail("Neo4jNetworkLoadBalancer not found in stack resources")
+            return
+        try:
+            elb = session.client("elbv2")
+            resp = elb.describe_load_balancers(LoadBalancerArns=[nlb_arn])
+            lbs = resp.get("LoadBalancers", [])
+            if not lbs:
+                ctx.fail(f"NLB {nlb_arn} not found")
+                return
+            scheme = lbs[0]["Scheme"]
+            if scheme == "internet-facing":
+                ctx.pass_(f"NLB {nlb_arn} is internet-facing")
+            else:
+                ctx.fail(f"NLB scheme is {scheme!r} (expected 'internet-facing')")
+        except Exception as exc:
+            ctx.fail(f"Failed to describe NLB {nlb_arn}: {exc}")
+
+
+def check_ee_asg_configs(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """EE: verify each node ASG has min=max=desired=1 and HealthCheckType=ELB."""
+    asg_client = session.client("autoscaling")
+    for n in range(1, config.number_of_servers + 1):
+        asg_logical_id = f"Neo4jNode{n}ASG"
+        asg_name = resource_map.get(asg_logical_id)
+        with reporter.test(f"ASG configuration (node {n})") as ctx:
+            if not asg_name:
+                ctx.fail(f"{asg_logical_id} not found in stack resources")
+                continue
+            try:
+                groups = asg_client.describe_auto_scaling_groups(
+                    AutoScalingGroupNames=[asg_name]
+                )["AutoScalingGroups"]
+                if not groups:
+                    ctx.fail(f"ASG {asg_name} not found")
+                    continue
+                asg = groups[0]
+                issues = []
+                if asg["MinSize"] != 1:
+                    issues.append(f"MinSize={asg['MinSize']}")
+                if asg["MaxSize"] != 1:
+                    issues.append(f"MaxSize={asg['MaxSize']}")
+                if asg["DesiredCapacity"] != 1:
+                    issues.append(f"DesiredCapacity={asg['DesiredCapacity']}")
+                if asg["HealthCheckType"] != "ELB":
+                    issues.append(f"HealthCheckType={asg['HealthCheckType']}")
+                if not issues:
+                    ctx.pass_(f"{asg_name}: min=1, max=1, desired=1, health_check=ELB")
+                else:
+                    ctx.fail(f"{asg_name} unexpected config: {', '.join(issues)}")
+            except Exception as exc:
+                ctx.fail(f"Failed to describe ASG {asg_name}: {exc}")
+
+
+def run_ee_infra_checks(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+    *,
+    run_security: bool = False,
+) -> None:
+    """Run EE infrastructure validation tests."""
+    check_stack_status(session, config, reporter)
+    check_nlb_scheme(session, config, reporter, resource_map)
+    check_ee_asg_configs(session, config, reporter, resource_map)
+    check_security_group_ports(session, config, reporter, resource_map)
+
+    if run_security:
+        run_network_security_checks(session, config, reporter, resource_map)
+
+
+# ---------------------------------------------------------------------------
 # Network and instance security checks
 # ---------------------------------------------------------------------------
 

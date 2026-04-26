@@ -56,7 +56,7 @@ def load_config(
         )
 
     deployment_mode = fields.get("DeploymentMode", "Public")
-    if deployment_mode != "Private":
+    if deployment_mode not in ("Private", "ExistingVpc"):
         raise ValueError(
             f"validate-private only supports Private-mode stacks. "
             f"This stack has DeploymentMode={deployment_mode}."

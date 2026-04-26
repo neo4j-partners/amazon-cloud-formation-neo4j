@@ -89,7 +89,7 @@ fi
 NEO4J_STACK=$(read_field "${OUTPUTS_FILE}" "StackName")
 REGION=$(read_field "${OUTPUTS_FILE}" "Region")
 DEPLOYMENT_MODE=$(read_field "${OUTPUTS_FILE}" "DeploymentMode")
-BOLT_TLS_ARN=$(read_field "${OUTPUTS_FILE}" "BoltTlsSecretArn")
+BOLT_TLS_ARN=$(read_field "${OUTPUTS_FILE}" "BoltTlsSecretArn" || true)
 
 if [ -z "${NEO4J_STACK}" ] || [ -z "${REGION}" ]; then
   echo "ERROR: Could not read StackName or Region from ${OUTPUTS_FILE}." >&2

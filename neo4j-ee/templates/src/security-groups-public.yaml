@@ -1,7 +1,7 @@
-  Neo4jExternalSecurityGroup:
+  Neo4jNLBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Enable Neo4j External Ports
+      GroupDescription: Allow external traffic to Neo4j NLB on ports 7474 and 7687
       VpcId: !Ref Neo4jVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -12,6 +12,21 @@
           FromPort: 7687
           ToPort: 7687
           CidrIp: !Ref AllowedCIDR
+
+  Neo4jExternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Neo4j traffic from NLB to instances on ports 7474 and 7687
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 7474
+          ToPort: 7474
+          SourceSecurityGroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          SourceSecurityGroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
 
   Neo4jInternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup

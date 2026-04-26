@@ -97,6 +97,7 @@
 
   VpcEndpointSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Condition: CreateVpcEndpoints
     Properties:
       GroupDescription: Allow HTTPS from Neo4j instances and operator bastion to VPC interface endpoints
       VpcId: !Ref VpcId
@@ -104,8 +105,28 @@
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          SourceSecurityGroupId: !Ref Neo4jExternalSecurityGroup
+          SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           SourceSecurityGroupId: !Ref Neo4jBastionSecurityGroup
+
+  ExistingEndpointSgBastionIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: UseExistingVpcEndpoints
+    Properties:
+      GroupId: !Ref ExistingEndpointSgId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !GetAtt Neo4jBastionSecurityGroup.GroupId
+
+  ExistingEndpointSgNeo4jIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: UseExistingVpcEndpoints
+    Properties:
+      GroupId: !Ref ExistingEndpointSgId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId

@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from test_neo4j.aws_helpers import get_asg_instance_id
+from test_neo4j.aws_helpers import get_all_ee_asg_instance_ids, get_asg_instance_id
 from test_neo4j.config import StackConfig
 from test_neo4j.reporting import TestReporter
 
@@ -96,3 +96,30 @@ def run_volume_checks(
         test_name="EBS data volume",
         volume_id=data_vol_id,
     )
+
+
+def run_ee_volume_checks(
+    config: StackConfig,
+    reporter: TestReporter,
+    session: boto3.Session,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify EBS data volumes for each EE node are attached."""
+    node_pairs = get_all_ee_asg_instance_ids(
+        session, config.stack_name, resource_map, config.number_of_servers
+    )
+    for n, (asg_logical_id, instance_id) in enumerate(node_pairs, start=1):
+        log.info("  Node %d — instance: %s\n", n, instance_id)
+        vol_logical_id = f"Neo4jNode{n}DataVolume"
+        data_vol_id = resource_map.get(vol_logical_id)
+        if not data_vol_id:
+            with reporter.test(f"EBS data volume (node {n})") as ctx:
+                ctx.fail(f"{vol_logical_id} not found in CloudFormation stack resources")
+            continue
+        _check_volume(
+            reporter,
+            session,
+            instance_id,
+            test_name=f"EBS data volume (node {n})",
+            volume_id=data_vol_id,
+        )

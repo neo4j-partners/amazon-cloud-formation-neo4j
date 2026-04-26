@@ -1,0 +1,90 @@
+  # ---------------------------------------------------------------------------
+  # Per-node persistent data volumes
+  #
+  # One gp3 EBS volume per cluster node, retained across instance replacement
+  # (DeletionPolicy: Retain, UpdateReplacePolicy: Retain). Each volume is
+  # pinned to a single AZ; the matching ASG is pinned to the same AZ. When
+  # an instance is replaced, the new instance discovers its volume by tag
+  # (StackID + Role=neo4j-cluster-data + own AZ), reattaches it, and starts
+  # Neo4j against the existing store — so Raft catch-up replaces what would
+  # otherwise be a full store copy.
+  #
+  # Losing a node: the volume survives and is reattached on replacement.
+  # Losing the whole cluster (stack delete, region-wide ASG failure): the
+  # volumes survive stack deletion and can be reattached to a fresh stack,
+  # preserving the data across full-cluster loss.
+  # ---------------------------------------------------------------------------
+
+  Neo4jNode1DataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [0, Fn::GetAZs: !Ref 'AWS::Region']
+      Size: !Ref DataDiskSize
+      VolumeType: gp3
+      Iops: 3000
+      Throughput: 125
+      Encrypted: true
+      KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-data-1'
+        - Key: Role
+          Value: neo4j-cluster-data
+        - Key: NodeIndex
+          Value: "1"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jNode2DataVolume:
+    Type: AWS::EC2::Volume
+    Condition: CreateCluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [1, Fn::GetAZs: !Ref 'AWS::Region']
+      Size: !Ref DataDiskSize
+      VolumeType: gp3
+      Iops: 3000
+      Throughput: 125
+      Encrypted: true
+      KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-data-2'
+        - Key: Role
+          Value: neo4j-cluster-data
+        - Key: NodeIndex
+          Value: "2"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jNode3DataVolume:
+    Type: AWS::EC2::Volume
+    Condition: CreateCluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [2, Fn::GetAZs: !Ref 'AWS::Region']
+      Size: !Ref DataDiskSize
+      VolumeType: gp3
+      Iops: 3000
+      Throughput: 125
+      Encrypted: true
+      KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-data-3'
+        - Key: Role
+          Value: neo4j-cluster-data
+        - Key: NodeIndex
+          Value: "3"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"

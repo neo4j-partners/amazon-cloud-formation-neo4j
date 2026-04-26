@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: build-templates
+        name: Verify CloudFormation templates are up to date
+        entry: python neo4j-ee/templates/build.py --verify
+        language: system
+        pass_filenames: false
+        files: ^neo4j-ee/templates/(src/|build\.py)

@@ -1,0 +1,589 @@
+  Neo4jVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
+  # Public subnets — carry NAT Gateways in Private mode, carry instances in Public mode
+  # ---------------------------------------------------------------------------
+
+  Neo4jSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: !If [IsPrivate, false, true]
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: !If [IsPrivate, false, true]
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jSubnet3:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: !If [IsPrivate, false, true]
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  # ---------------------------------------------------------------------------
+  # Private subnets — instances and NLB in Private mode
+  # ---------------------------------------------------------------------------
+
+  Neo4jPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Condition: IsPrivate
+    Properties:
+      CidrBlock: 10.0.10.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: IsPrivateCluster
+    Properties:
+      CidrBlock: 10.0.11.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jPrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Condition: IsPrivateCluster
+    Properties:
+      CidrBlock: 10.0.12.0/24
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  # ---------------------------------------------------------------------------
+  # NAT Gateways — one per AZ for 3-node Private, one for 1-node Private
+  # ---------------------------------------------------------------------------
+
+  Neo4jNatEIP1:
+    Type: AWS::EC2::EIP
+    Condition: IsPrivate
+    Properties:
+      Domain: vpc
+
+  Neo4jNatEIP2:
+    Type: AWS::EC2::EIP
+    Condition: IsPrivateCluster
+    Properties:
+      Domain: vpc
+
+  Neo4jNatEIP3:
+    Type: AWS::EC2::EIP
+    Condition: IsPrivateCluster
+    Properties:
+      Domain: vpc
+
+  Neo4jNatGateway1:
+    Type: AWS::EC2::NatGateway
+    Condition: IsPrivate
+    DependsOn: Neo4jInternetGatewayAttachment
+    Properties:
+      AllocationId: !GetAtt Neo4jNatEIP1.AllocationId
+      SubnetId: !Ref Neo4jSubnet1
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jNatGateway2:
+    Type: AWS::EC2::NatGateway
+    Condition: IsPrivateCluster
+    DependsOn: Neo4jInternetGatewayAttachment
+    Properties:
+      AllocationId: !GetAtt Neo4jNatEIP2.AllocationId
+      SubnetId: !Ref Neo4jSubnet2
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  Neo4jNatGateway3:
+    Type: AWS::EC2::NatGateway
+    Condition: IsPrivateCluster
+    DependsOn: Neo4jInternetGatewayAttachment
+    Properties:
+      AllocationId: !GetAtt Neo4jNatEIP3.AllocationId
+      SubnetId: !Ref Neo4jSubnet3
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+
+  # ---------------------------------------------------------------------------
+  # Private route tables — one per AZ, each with a default route to its NAT GW.
+  # AZ 2 and 3 fall back to NAT GW 1 in 1-node Private deployments.
+  # ---------------------------------------------------------------------------
+
+  Neo4jPrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Condition: IsPrivate
+    Properties:
+      VpcId: !Ref Neo4jVPC
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Condition: IsPrivate
+    Properties:
+      VpcId: !Ref Neo4jVPC
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jPrivateRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Condition: IsPrivate
+    Properties:
+      VpcId: !Ref Neo4jVPC
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jPrivateRoute1:
+    Type: AWS::EC2::Route
+    Condition: IsPrivate
+    Properties:
+      RouteTableId: !Ref Neo4jPrivateRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref Neo4jNatGateway1
+
+  Neo4jPrivateRoute2:
+    Type: AWS::EC2::Route
+    Condition: IsPrivate
+    Properties:
+      RouteTableId: !Ref Neo4jPrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !If [IsPrivateCluster, !Ref Neo4jNatGateway2, !Ref Neo4jNatGateway1]
+
+  Neo4jPrivateRoute3:
+    Type: AWS::EC2::Route
+    Condition: IsPrivate
+    Properties:
+      RouteTableId: !Ref Neo4jPrivateRouteTable3
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !If [IsPrivateCluster, !Ref Neo4jNatGateway3, !Ref Neo4jNatGateway1]
+
+  Neo4jPrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: IsPrivate
+    DependsOn: Neo4jPrivateRoute1
+    Properties:
+      RouteTableId: !Ref Neo4jPrivateRouteTable1
+      SubnetId: !Ref Neo4jPrivateSubnet1
+
+  Neo4jPrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: IsPrivateCluster
+    DependsOn: Neo4jPrivateRoute2
+    Properties:
+      RouteTableId: !Ref Neo4jPrivateRouteTable2
+      SubnetId: !Ref Neo4jPrivateSubnet2
+
+  Neo4jPrivateSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: IsPrivateCluster
+    DependsOn: Neo4jPrivateRoute3
+    Properties:
+      RouteTableId: !Ref Neo4jPrivateRouteTable3
+      SubnetId: !Ref Neo4jPrivateSubnet3
+
+  # ---------------------------------------------------------------------------
+  # Public route table and Internet Gateway
+  # ---------------------------------------------------------------------------
+
+  Neo4jRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRoute:
+    Type: AWS::EC2::Route
+    DependsOn: Neo4jInternetGatewayAttachment
+    Properties:
+      GatewayId: !Ref Neo4jInternetGateway
+      RouteTableId: !Ref Neo4jRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  Neo4jSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet1
+
+  Neo4jSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet2
+
+  Neo4jSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet3
+
+  Neo4jInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref Neo4jInternetGateway
+      VpcId: !Ref Neo4jVPC
+
+  # ---------------------------------------------------------------------------
+  # Network Load Balancer — internal in Private mode, internet-facing in Public mode
+  # ---------------------------------------------------------------------------
+
+  Neo4jNetworkLoadBalancer:
+    DependsOn: Neo4jInternetGatewayAttachment
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'nlb'
+      Scheme: !If [IsPrivate, internal, internet-facing]
+      SecurityGroups:
+        - !Ref Neo4jExternalSecurityGroup
+      Subnets: !If
+        - IsPrivate
+        - !If [CreateCluster, [!Ref Neo4jPrivateSubnet1, !Ref Neo4jPrivateSubnet2, !Ref Neo4jPrivateSubnet3], [!Ref Neo4jPrivateSubnet1]]
+        - !If [CreateCluster, [!Ref Neo4jSubnet1, !Ref Neo4jSubnet2, !Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
+      LoadBalancerAttributes:
+        - Key: load_balancing.cross_zone.enabled
+          Value: "true"
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      Type: network
+
+  Neo4jHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7474
+      Protocol: TCP
+
+  Neo4jBoltListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jBoltTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7687
+      Protocol: TCP
+
+  Neo4jHTTPTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'http'
+          - 'tg'
+      Port: 7474
+      Protocol: TCP
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 10
+      Matcher:
+        HttpCode: '200'
+      # preserve_client_ip.enabled=false prevents NLB NAT-loopback (hairpin)
+      # failures when operator tunnels reach the NLB from a cluster member.
+      # See README "Private mode networking" and worklog/FIX_SSM_V7.md §9.
+      TargetGroupAttributes:
+        - Key: preserve_client_ip.enabled
+          Value: "false"
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jBoltTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'bolt'
+          - 'tg'
+      Port: 7687
+      Protocol: TCP
+      HealthCheckIntervalSeconds: 10
+      TargetGroupAttributes:
+        - Key: preserve_client_ip.enabled
+          Value: "false"
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+
+  Neo4jOperatorBastion:
+    Type: AWS::EC2::Instance
+    Condition: IsPrivate
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT10M
+    Properties:
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}'
+      InstanceType: t4g.nano
+      SubnetId: !Ref Neo4jPrivateSubnet1
+      SecurityGroupIds:
+        - !Ref Neo4jBastionSecurityGroup
+      IamInstanceProfile: !Ref Neo4jBastionInstanceProfile
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            Encrypted: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+          dnf install -y python3.11 python3.11-pip
+          dnf update -y aws-cfn-bootstrap
+          python3.11 -m pip install 'neo4j>=6,<7' boto3
+
+          # Neo4j yum repo + cypher-shell for interactive admin via:
+          #   aws ssm start-session --target <bastion> → cypher-shell -a neo4j://<nlb>:7687
+          rpm --import https://debian.neo4j.com/neotechnology.gpg.key
+          printf '[neo4j]\nname=Neo4j RPM Repository\nbaseurl=https://yum.neo4j.com/stable/latest\nenabled=1\ngpgcheck=1\n' >/etc/yum.repos.d/neo4j.repo
+          dnf install -y cypher-shell
+
+          systemctl is-active amazon-ssm-agent
+
+          /opt/aws/bin/cfn-signal --success true \
+            --stack ${AWS::StackName} \
+            --resource Neo4jOperatorBastion \
+            --region ${AWS::Region}
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-bastion'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  SsmVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: IsPrivate
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
+      VpcId: !Ref Neo4jVPC
+      SubnetIds: !If
+        - IsPrivateCluster
+        - - !Ref Neo4jPrivateSubnet1
+          - !Ref Neo4jPrivateSubnet2
+          - !Ref Neo4jPrivateSubnet3
+        - - !Ref Neo4jPrivateSubnet1
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
+  SsmMessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: IsPrivate
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
+      VpcId: !Ref Neo4jVPC
+      SubnetIds: !If
+        - IsPrivateCluster
+        - - !Ref Neo4jPrivateSubnet1
+          - !Ref Neo4jPrivateSubnet2
+          - !Ref Neo4jPrivateSubnet3
+        - - !Ref Neo4jPrivateSubnet1
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
+  LogsVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: IsPrivate
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
+      VpcId: !Ref Neo4jVPC
+      SubnetIds: !If
+        - IsPrivateCluster
+        - - !Ref Neo4jPrivateSubnet1
+          - !Ref Neo4jPrivateSubnet2
+          - !Ref Neo4jPrivateSubnet3
+        - - !Ref Neo4jPrivateSubnet1
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
+  SecretsManagerVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: IsPrivate
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
+      VpcId: !Ref Neo4jVPC
+      SubnetIds: !If
+        - IsPrivateCluster
+        - - !Ref Neo4jPrivateSubnet1
+          - !Ref Neo4jPrivateSubnet2
+          - !Ref Neo4jPrivateSubnet3
+        - - !Ref Neo4jPrivateSubnet1
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: IsPrivate
+    Properties:
+      VpcEndpointType: Gateway
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref Neo4jVPC
+      RouteTableIds: !If
+        - IsPrivateCluster
+        - - !Ref Neo4jPrivateRouteTable1
+          - !Ref Neo4jPrivateRouteTable2
+          - !Ref Neo4jPrivateRouteTable3
+        - - !Ref Neo4jPrivateRouteTable1

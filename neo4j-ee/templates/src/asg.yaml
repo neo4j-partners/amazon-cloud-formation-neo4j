@@ -1,0 +1,160 @@
+
+  # ---------------------------------------------------------------------------
+  # Auto Scaling Groups — one per cluster node, each pinned to a single AZ.
+  #
+  # The three ASGs share a single LaunchTemplate; each launched instance
+  # discovers its own ASG logical-id from the aws:cloudformation:logical-id
+  # tag (auto-applied by CFN) so cfn-signal can route to the correct ASG's
+  # CreationPolicy. Topology is 1:1 between ASG ↔ AZ ↔ data volume, so a
+  # replacement instance always lands in the same AZ as its persistent
+  # volume and reattaches deterministically.
+  #
+  # In 1-node mode, only Node1ASG is created.
+  # ---------------------------------------------------------------------------
+
+  Neo4jNode1ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - Neo4jNode1DataVolume
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      VPCZoneIdentifier: !If
+        - IsPrivate
+        - [!Ref Neo4jPrivateSubnet1]
+        - [!Ref Neo4jSubnet1]
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node-1'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: neo4j-cluster-node
+          PropagateAtLaunch: true
+        - Key: NodeIndex
+          Value: "1"
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jNode2ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateCluster
+    DependsOn:
+      - Neo4jNode2DataVolume
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      VPCZoneIdentifier: !If
+        - IsPrivate
+        - [!Ref Neo4jPrivateSubnet2]
+        - [!Ref Neo4jSubnet2]
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node-2'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: neo4j-cluster-node
+          PropagateAtLaunch: true
+        - Key: NodeIndex
+          Value: "2"
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jNode3ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateCluster
+    DependsOn:
+      - Neo4jNode3DataVolume
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      VPCZoneIdentifier: !If
+        - IsPrivate
+        - [!Ref Neo4jPrivateSubnet3]
+        - [!Ref Neo4jSubnet3]
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node-3'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: neo4j-cluster-node
+          PropagateAtLaunch: true
+        - Key: NodeIndex
+          Value: "3"
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref ImageId
+        InstanceType:
+          Ref: InstanceType
+        SecurityGroupIds:
+          - Ref: Neo4jExternalSecurityGroup
+          - Ref: Neo4jInternalSecurityGroup
+        EbsOptimized: true
+        IamInstanceProfile:
+          Arn: !GetAtt Neo4jInstanceProfile.Arn
+        BlockDeviceMappings:
+          # Root volume: OS + Neo4j binaries + plugins + logs + metrics.
+          # Neo4j data lives on a separate per-node EBS volume attached at boot.
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 20
+              VolumeType: gp3
+              Encrypted: true
+              DeleteOnTermination: true
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+        # __USERDATA__
+

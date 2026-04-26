@@ -1,0 +1,17 @@
+  BoltCertificateSecretArn:
+    Type: String
+    Default: ''
+    Description: >-
+      ARN of a Secrets Manager secret whose SecretString is JSON with
+      "certificate" (PEM) and "private_key" (PEM) fields. When set, Neo4j
+      enables TLS on Bolt port 7687 (server.bolt.tls_level=REQUIRED). Leave
+      blank to run Bolt without TLS (suitable for dev/test inside a private VPC).
+      ACM Private CA-issued certs are accepted here — no separate parameter needed.
+  BoltAdvertisedDNS:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional. DNS name placed in server.bolt.advertised_address and used as
+      the cert SAN. Provide a stable alias (e.g. a Route53 CNAME → NLB) when
+      deploying in production so certs do not pin the NLB DNS. When blank, the
+      NLB DNS is used (test-rig default; two-phase deploy required).

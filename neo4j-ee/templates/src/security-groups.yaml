@@ -1,0 +1,133 @@
+  Neo4jExternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Neo4j External Ports
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 7474
+          ToPort: 7474
+          CidrIp: !Ref AllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          CidrIp: !Ref AllowedCIDR
+
+  Neo4jInternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Neo4j Internal Ports
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jInternalSGIngress5000:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 5000
+      ToPort: 5000
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress6000:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 6000
+      ToPort: 6000
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress7000:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7000
+      ToPort: 7000
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress7688:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7688
+      ToPort: 7688
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress2003:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2003
+      ToPort: 2003
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress2004:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2004
+      ToPort: 2004
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress3637:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 3637
+      ToPort: 3637
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  # ---------------------------------------------------------------------------
+  # Operator bastion (Private mode only)
+  # A non-Neo4j-target t4g.nano used as the SSM Session Manager entry point
+  # for operator port-forwarding to the internal NLB. It is deliberately NOT
+  # registered in any NLB target group — that topology makes NAT-loopback
+  # (hairpin) failures impossible for flows originating from the bastion, so
+  # operator tunnels to :7474/:7687 via the NLB always route to a different
+  # instance than the flow source. See README "Private mode networking" and
+  # neo4j-ee/worklog/FIX_SSM_V7.md §9 for the full analysis.
+  # ---------------------------------------------------------------------------
+
+  Neo4jBastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: IsPrivate
+    Properties:
+      GroupDescription: Operator bastion - no ingress; outbound via VPC endpoints and NLB
+      VpcId: !Ref Neo4jVPC
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-bastion-sg'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
+  # VPC endpoints for Systems Manager (Private mode only)
+  # Routes SSM control-plane traffic through AWS PrivateLink rather than NAT.
+  # Required: ssm (registration/polling), ssmmessages (Session Manager),
+  #           ec2messages (backward compat with pre-2024 regions).
+  # S3 gateway endpoint is free and prevents SSM Agent update traffic from
+  # consuming NAT Gateway data-processing charges.
+  # ---------------------------------------------------------------------------
+
+  VpcEndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: IsPrivate
+    Properties:
+      GroupDescription: Allow HTTPS from Neo4j instances and operator bastion to VPC interface endpoints
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref Neo4jExternalSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourceSecurityGroupId: !Ref Neo4jBastionSecurityGroup

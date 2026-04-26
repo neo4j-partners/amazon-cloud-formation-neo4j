@@ -1,0 +1,93 @@
+  Neo4jPasswordSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub 'neo4j/${AWS::StackName}/password'
+      Description: !Sub 'Neo4j admin password for stack ${AWS::StackName}'
+      SecretString: !Ref Password
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jConfigVpcIdParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/vpc-id'
+      Type: String
+      Value: !Ref Neo4jVPC
+      Description: VPC ID for the Neo4j EE stack.
+
+  Neo4jConfigNlbDnsParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/nlb-dns'
+      Type: String
+      Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+      Description: Internal NLB DNS name (connect via neo4j://<dns>:7687 from in-VPC).
+
+  Neo4jConfigRegionParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/region'
+      Type: String
+      Value: !Ref 'AWS::Region'
+      Description: AWS region for the Neo4j EE stack.
+
+  Neo4jConfigStackNameParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/stack-name'
+      Type: String
+      Value: !Ref 'AWS::StackName'
+      Description: CloudFormation stack name.
+
+  Neo4jConfigPrivateSubnet1Parameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-subnet-1-id'
+      Type: String
+      Value: !Ref Neo4jPrivateSubnet1
+      Description: First private subnet ID (Lambda / reference app placement).
+
+  Neo4jConfigPrivateSubnet2Parameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivateCluster
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-subnet-2-id'
+      Type: String
+      Value: !Ref Neo4jPrivateSubnet2
+      Description: Second private subnet ID (Lambda / reference app placement).
+
+  Neo4jConfigPasswordSecretArnParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/password-secret-arn'
+      Type: String
+      Value: !Ref Neo4jPasswordSecret
+      Description: Secrets Manager ARN for the Neo4j admin password (used by in-VPC Lambda clients).
+
+  Neo4jConfigExternalSgIdParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/external-sg-id'
+      Type: String
+      Value: !GetAtt Neo4jExternalSecurityGroup.GroupId
+      Description: Neo4j external security group ID (Lambda egress rule target for port 7687).
+
+  Neo4jConfigVpcEndpointSgParameter:
+    Type: AWS::SSM::Parameter
+    Condition: IsPrivate
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/vpc-endpoint-sg-id'
+      Type: String
+      Value: !GetAtt VpcEndpointSecurityGroup.GroupId
+      Description: Security group ID on all interface VPC endpoints. In-VPC apps add this as an ingress rule source so their SG can reach SSM, Secrets Manager, and CloudWatch Logs via PrivateLink.

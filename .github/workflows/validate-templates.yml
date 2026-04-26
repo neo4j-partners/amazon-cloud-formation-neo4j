@@ -1,0 +1,26 @@
+name: Validate CloudFormation Templates
+
+on:
+  pull_request:
+    paths:
+      - 'neo4j-ee/templates/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Verify template output is up to date
+        run: python neo4j-ee/templates/build.py --verify
+
+      - name: Lint neo4j-private.template.yaml
+        run: cfn-lint neo4j-ee/templates/neo4j-private.template.yaml

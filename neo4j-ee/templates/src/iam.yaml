@@ -1,0 +1,110 @@
+  Neo4jInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: Neo4jRole
+  Neo4jRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: Neo4jPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Describe-only actions: AWS does not support resource-level
+              # conditions on EC2/ASG Describe calls, so Resource: "*" is
+              # required. autoscaling:DescribeAutoScalingGroups is used by
+              # the tag-filtered peer discovery in UserData.
+              - Effect: Allow
+                Action:
+                  - autoscaling:DescribeAutoScalingGroups
+                  - cloudformation:DescribeStack*
+                  - cloudformation:SignalResource
+                  - ec2:DescribeInstances
+                  - ec2:DescribeVolumes
+                  - ec2:DescribeTags
+                Resource: "*"
+              # Two-statement form: volume-side enforces StackID+Role,
+              # instance-side enforces StackID. Both conditions must be
+              # satisfied for an attach to succeed.
+              - Effect: Allow
+                Action: ec2:AttachVolume
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceTag/StackID': !Ref 'AWS::StackId'
+                    'aws:ResourceTag/Role': neo4j-cluster-data
+              - Effect: Allow
+                Action: ec2:AttachVolume
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceTag/StackID': !Ref 'AWS::StackId'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/neo4j/${AWS::StackName}/application:*'
+              - !If
+                - BoltTLSEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref BoltCertificateSecretArn
+                - !Ref AWS::NoValue
+
+  Neo4jBastionRole:
+    Type: AWS::IAM::Role
+    Condition: IsPrivate
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: Neo4jBastionSecretAndConfigRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: !Ref Neo4jPasswordSecret
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/neo4j-ee/${AWS::StackName}/*'
+              - !If
+                - BoltTLSEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref BoltCertificateSecretArn
+                - !Ref AWS::NoValue
+
+  Neo4jBastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Condition: IsPrivate
+    Properties:
+      Roles:
+        - !Ref Neo4jBastionRole

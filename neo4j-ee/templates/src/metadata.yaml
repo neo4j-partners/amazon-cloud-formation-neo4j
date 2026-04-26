@@ -1,0 +1,45 @@
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "AWS Marketplace Parameters"
+        Parameters:
+          - ImageId
+      - Label:
+          default: "Neo4j Configuration"
+        Parameters:
+          - Password
+          - NumberOfServers
+          - InstanceType
+          - DataDiskSize
+          - DataVolumeKmsKeyId
+      - Label:
+          default: "Security & Monitoring"
+        Parameters:
+          - DeploymentMode
+          - AllowedCIDR
+          - AlertEmail
+          - BoltCertificateSecretArn
+          - BoltAdvertisedDNS
+    ParameterLabels:
+      ImageId:
+        default: Image ID
+      Password:
+        default: Password
+      NumberOfServers:
+        default: Number of Servers
+      InstanceType:
+        default: Instance Type
+      DataDiskSize:
+        default: Data Disk Size (GB)
+      DataVolumeKmsKeyId:
+        default: Data Volume KMS Key ID
+      AlertEmail:
+        default: Alert Email Address
+      DeploymentMode:
+        default: Deployment Mode
+      AllowedCIDR:
+        default: Allowed CIDR
+      BoltCertificateSecretArn:
+        default: Bolt TLS Certificate Secret ARN
+      BoltAdvertisedDNS:
+        default: Bolt Advertised DNS Name

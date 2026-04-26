@@ -1,0 +1,85 @@
+  Neo4jFlowLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/vpc/flowlogs/${AWS::StackName}'
+      RetentionInDays: 90
+
+  Neo4jFlowLogsIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: Neo4jFlowLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${Neo4jFlowLogsGroup.Arn}:*'
+              - Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: '*'
+
+  Neo4jVPCFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref Neo4jVPC
+      TrafficType: ALL
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref Neo4jFlowLogsGroup
+      DeliverLogsPermissionArn: !GetAtt Neo4jFlowLogsIAMRole.Arn
+
+  Neo4jAppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/neo4j/${AWS::StackName}/application'
+      RetentionInDays: 90
+
+  Neo4jAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'neo4j-alerts-${AWS::StackName}'
+      Subscription:
+        Fn::If:
+          - HasAlertEmail
+          - - Protocol: email
+              Endpoint: !Ref AlertEmail
+          - !Ref AWS::NoValue
+
+  Neo4jFailedAuthMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref Neo4jAppLogGroup
+      FilterPattern: '"failed to log in"'
+      MetricTransformations:
+        - MetricNamespace: !Sub 'Neo4j/${AWS::StackName}'
+          MetricName: FailedAuthAttempts
+          MetricValue: '1'
+          DefaultValue: 0
+
+  Neo4jFailedAuthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'Neo4j-FailedAuth-${AWS::StackName}'
+      AlarmDescription: 'Neo4j authentication failures exceeded 10 in a 5-minute window'
+      MetricName: FailedAuthAttempts
+      Namespace: !Sub 'Neo4j/${AWS::StackName}'
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref Neo4jAlertTopic
+      TreatMissingData: notBreaching

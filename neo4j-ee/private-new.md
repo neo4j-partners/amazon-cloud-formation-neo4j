@@ -137,7 +137,7 @@ What this creates:
 
 ---
 
-## Phase 4: Failover Suite (~10–15 min)
+## Phase 4: Failover Suite (~10–15 min) ✅ DONE — 4/4 cases passed
 
 ```bash
 uv run validate-private --stack <stack-name> --suite failover
@@ -156,7 +156,7 @@ Four sequential cases using `systemctl stop`/`start` via SSM (no instance termin
 
 ---
 
-## Phase 5: Resilience Suite (~20–25 min)
+## Phase 5: Resilience Suite (~20–25 min) ✅ DONE — 2/2 cases passed
 
 ```bash
 uv run validate-private --stack <stack-name> --suite resilience

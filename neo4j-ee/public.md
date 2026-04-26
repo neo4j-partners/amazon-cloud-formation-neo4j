@@ -148,7 +148,7 @@ Deployed `test-ee-1777182300` (3-node, Public mode, us-east-2, ami-00c5f98cd216e
 
 Files changed: `templates/src/security-groups-public.yaml`, `templates/src/networking-public.yaml`, `templates/neo4j-public.template.yaml`.
 
-### Phase 3 — Validate 🔄 IN PROGRESS — 18/25 passing, 3 root causes remaining
+### Phase 3 — Validate ✅ COMPLETE — 29/29 functional + 9/9 observability
 
 Requires Phase 1 and Phase 2 complete. Run both test suites against the deployed stack, then tear down.
 
@@ -183,13 +183,18 @@ All connectivity, volume, NLB scheme, and sentinel data tests passed. The three 
 
 **Second run (test-ee-1777184749) confirms SG fix is clean** — identical 7 failures, all in code/template, none in infrastructure. The NLB health checks now pass immediately on fresh deploy (no wait loop needed). Stack is live at `test-ee-1777184749-nlb-8b1881593b0d2c69.elb.us-east-2.amazonaws.com`.
 
-### Remaining work before Phase 3 is complete
+### All fixes applied — final run `test-ee-1777190211`: 29/29 functional + 9/9 observability ✅ SHIP-READY
+
+All three root causes fixed, plus two additional bugs exposed during the fix iterations:
 
 | # | Fix | Location |
 |---|-----|----------|
-| 1 | Data directory: update assertion to accept `/var/lib/neo4j/data` for EE | `test_neo4j/src/test_neo4j/neo4j_deep_checks.py` |
-| 2 | ASG HealthCheckType: change from `EC2` to `ELB` for NLB-backed ASGs | `templates/src/asg-public.yaml` + assembled template |
-| 3 | `SHOW SERVERS YIELD … role`: `role` removed in Neo4j 2026.04 — discover correct column and update Cypher | `test_neo4j/src/test_neo4j/cluster_checks.py` (tests 19, 25) + routing table query (test 20) |
+| 1 | Data directory: edition-aware assertion (`/var/lib/neo4j/data` for EE) | `test_neo4j/src/test_neo4j/neo4j_deep_checks.py` |
+| 2 | ASG HealthCheckType: changed from `EC2` to `ELB`; added `HealthCheckGracePeriod: 600` | `templates/src/asg-public.yaml` + assembled template |
+| 3 | Neo4j 2026.04 Cypher: `SHOW SERVERS YIELD name, state, health` + `SHOW DATABASES YIELD name, currentStatus, writer WHERE name = 'neo4j'` for leader detection; `dbms.routing.getRoutingTable` replaces deprecated `dbms.cluster.routing.getRoutingTable`; new response format `{servers: [{addresses, role}]}` | `test_neo4j/src/test_neo4j/cluster_checks.py` |
+| 4 | UserData: `alternatives --install python3 → python3.11` ran before `cfn-signal`; cfn-signal shebang `#!/usr/bin/python3 -s` needs cfnbootstrap under python3.9. Fix: move alternatives to after cfn-signal | `templates/src/userdata-public.sh`, `userdata-private.sh`, `userdata-existing-vpc.sh` |
+| 5 | Cluster topology timing: after follower replacement, HTTP up ≠ Raft quorum re-formed. Fix: poll `SHOW SERVERS` for up to 120s before running topology assertion | `test_neo4j/src/test_neo4j/resilience.py` |
+| 6 | Follower identification: all bolt-advertised addresses point to NLB DNS (not private IPs), so IP-based role mapping fails. Fix: always terminate Node 2 (cluster survives any single node loss regardless of role) | `test_neo4j/src/test_neo4j/resilience.py` |
 
 ---
 

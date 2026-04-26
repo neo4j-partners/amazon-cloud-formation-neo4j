@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from typing import TYPE_CHECKING
 
@@ -224,6 +225,27 @@ def run_ee_cluster_resilience_tests(
         with reporter.test("Post-recovery Neo4j readiness") as ctx:
             ctx.fail("Neo4j did not become reachable after follower replacement within 300s")
         return
+
+    # HTTP up doesn't mean the replacement has rejoined the Raft quorum yet.
+    # Poll until all expected members are Enabled/Available (up to 120s).
+    log.info("  Waiting for cluster to reach %d Enabled members...\n", config.number_of_servers)
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        try:
+            with config.driver() as driver:
+                records, _, _ = driver.execute_query(
+                    "SHOW SERVERS YIELD state, health",
+                    routing_=RoutingControl.READ,
+                )
+                enabled = [
+                    r for r in records
+                    if r["state"] == "Enabled" and r["health"] == "Available"
+                ]
+                if len(enabled) >= config.number_of_servers:
+                    break
+        except Exception:
+            pass
+        time.sleep(10)
 
     check_cluster_topology(config, reporter)
     _verify_sentinel(config, reporter, test_run_id)

@@ -6,7 +6,7 @@ This document covers the network topology the CloudFormation template creates, t
 
 ## Deployment Modes
 
-The `DeploymentMode` parameter controls where instances land and whether the NLB is internal or internet-facing.
+Three separate templates cover the supported topologies: private (new VPC), public (new VPC), and private with an existing VPC.
 
 | Setting | Private (default) | Public |
 |---|---|---|
@@ -57,7 +57,6 @@ The `DeploymentMode` parameter controls where instances land and whether the NLB
 
 | Setting | Default | Notes |
 |---|---|---|
-| `DeploymentMode` | `Private` | `Private`: private subnets, internal NLB, NAT Gateways. `Public`: public IPs, internet-facing NLB. |
 | `AllowedCIDR` | required | CIDR allowed to reach ports 7474 and 7687. Private mode: `10.0.0.0/16`. Public mode: the client CIDR. `0.0.0.0/0` is rejected. |
 | IMDSv2 | enforced | Instance metadata requires session tokens; IMDSv1 requests are rejected. |
 | JDWP (port 5005) | disabled | Remote debug port is closed and the JVM debug flag is stripped from `neo4j.conf` at boot. |

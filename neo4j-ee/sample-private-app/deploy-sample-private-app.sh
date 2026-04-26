@@ -96,8 +96,8 @@ if [ -z "${NEO4J_STACK}" ] || [ -z "${REGION}" ]; then
   exit 1
 fi
 
-if [ "${DEPLOYMENT_MODE}" != "Private" ]; then
-  echo "ERROR: Sample private app requires DeploymentMode=Private (got '${DEPLOYMENT_MODE}')." >&2
+if [ "${DEPLOYMENT_MODE}" != "Private" ] && [ "${DEPLOYMENT_MODE}" != "ExistingVpc" ]; then
+  echo "ERROR: Sample private app requires DeploymentMode=Private or ExistingVpc (got '${DEPLOYMENT_MODE}')." >&2
   exit 1
 fi
 

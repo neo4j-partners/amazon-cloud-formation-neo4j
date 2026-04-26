@@ -65,6 +65,10 @@ Nitro instances expose EBS as NVMe devices with non-deterministic names. The Use
 
 `create-ami.sh` → writes `marketplace/ami-id.txt` → `deploy.py` reads it, deploys stack (random region, copies AMI if needed), writes `.deploy/<stack-name>.txt` → `test_ce/` and `test-stack.sh` read from `.deploy/` (newest by default, or `--stack <name>`) → `teardown.sh` cleans up (stack, SSM param, copied AMI, output file).
 
+### EE Template Assembly
+
+`neo4j-ee/templates/build.py` assembles the three output templates (`neo4j-private.template.yaml`, `neo4j-public.template.yaml`, `neo4j-private-existing-vpc.template.yaml`) from shared partials in `neo4j-ee/templates/src/`. Edit source partials in `src/`, then run `build.py` to regenerate the templates before deploying.
+
 ## Test Suite (test_ce/)
 
 Python project using `uv` for dependency management. Requires Python 3.11+.

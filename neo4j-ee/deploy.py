@@ -31,6 +31,11 @@ SUPPORTED_REGIONS = [
     "ap-southeast-1", "ap-southeast-2",
 ]
 INSTANCE_TYPES = {"t3": "t3.medium", "r8i": "r8i.xlarge"}
+TEMPLATE_MAP = {
+    "Private":     "templates/neo4j-private.template.yaml",
+    "Public":      "templates/neo4j-public.template.yaml",
+    "ExistingVpc": "templates/neo4j-private-existing-vpc.template.yaml",
+}
 
 
 def parse_args():
@@ -47,8 +52,12 @@ def parse_args():
     p.add_argument("--marketplace", action="store_true")
     p.add_argument("--tls", action="store_true")
     p.add_argument("--alert-email", metavar="EMAIL")
-    p.add_argument("--mode", default="Private", choices=["Public", "Private"])
+    p.add_argument("--mode", default="Private", choices=["Public", "Private", "ExistingVpc"])
     p.add_argument("--allowed-cidr", metavar="CIDR")
+    p.add_argument("--vpc-id", metavar="VPC_ID")
+    p.add_argument("--subnet-1", metavar="SUBNET_ID")
+    p.add_argument("--subnet-2", metavar="SUBNET_ID", default="")
+    p.add_argument("--subnet-3", metavar="SUBNET_ID", default="")
     return p.parse_args()
 
 
@@ -96,11 +105,17 @@ def main():
     os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
 
+    if args.mode == "ExistingVpc":
+        if not args.vpc_id or not args.subnet_1:
+            sys.exit("ERROR: --mode ExistingVpc requires --vpc-id and --subnet-1 (--subnet-2 and --subnet-3 required for 3-node).")
+        if args.number_of_servers == 3 and not (args.subnet_2 and args.subnet_3):
+            sys.exit("ERROR: --mode ExistingVpc with 3 servers requires --subnet-2 and --subnet-3.")
+
     instance_type = INSTANCE_TYPES[args.instance_family]
 
     if args.allowed_cidr:
         allowed_cidr = args.allowed_cidr
-    elif args.mode == "Private":
+    elif args.mode in ("Private", "ExistingVpc"):
         allowed_cidr = "10.0.0.0/16"
     else:
         ip = detect_public_ip()
@@ -260,20 +275,28 @@ def main():
             CreateBucketConfiguration={"LocationConstraint": region},
         )
     cleanup_state["cfn_bucket"] = bucket_name
-    s3.upload_file(os.path.join(SCRIPT_DIR, "neo4j.template.yaml"), bucket_name, "neo4j.template.yaml")
-    template_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/neo4j.template.yaml"
+    template_file = TEMPLATE_MAP[args.mode]
+    template_key = os.path.basename(template_file)
+    s3.upload_file(os.path.join(SCRIPT_DIR, template_file), bucket_name, template_key)
+    template_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{template_key}"
 
     cfn_params = [
         {"ParameterKey": "Password", "ParameterValue": password},
         {"ParameterKey": "NumberOfServers", "ParameterValue": str(args.number_of_servers)},
         {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
-        {"ParameterKey": "DeploymentMode", "ParameterValue": args.mode},
         {"ParameterKey": "AllowedCIDR", "ParameterValue": allowed_cidr},
     ]
     if ssm_param_path:
         cfn_params.append({"ParameterKey": "ImageId", "ParameterValue": ssm_param_path})
     if args.alert_email:
         cfn_params.append({"ParameterKey": "AlertEmail", "ParameterValue": args.alert_email})
+    if args.mode == "ExistingVpc":
+        cfn_params += [
+            {"ParameterKey": "VpcId",            "ParameterValue": args.vpc_id},
+            {"ParameterKey": "PrivateSubnet1Id", "ParameterValue": args.subnet_1},
+            {"ParameterKey": "PrivateSubnet2Id", "ParameterValue": args.subnet_2},
+            {"ParameterKey": "PrivateSubnet3Id", "ParameterValue": args.subnet_3},
+        ]
 
     cfn = boto3.client("cloudformation", region_name=region)
     print(f"Creating stack {stack_name}...")

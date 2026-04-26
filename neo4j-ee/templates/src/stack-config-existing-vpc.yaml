@@ -15,7 +15,7 @@
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/vpc-id'
       Type: String
-      Value: !Ref Neo4jVPC
+      Value: !Ref VpcId
       Description: VPC ID for the Neo4j EE stack.
 
   Neo4jConfigNlbDnsParameter:
@@ -47,7 +47,7 @@
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/private-subnet-1-id'
       Type: String
-      Value: !Ref Neo4jPrivateSubnet1
+      Value: !Ref PrivateSubnet1Id
       Description: First private subnet ID (Lambda / reference app placement).
 
   Neo4jConfigPrivateSubnet2Parameter:
@@ -56,7 +56,7 @@
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/private-subnet-2-id'
       Type: String
-      Value: !Ref Neo4jPrivateSubnet2
+      Value: !Ref PrivateSubnet2Id
       Description: Second private subnet ID (Lambda / reference app placement).
 
   Neo4jConfigPasswordSecretArnParameter:

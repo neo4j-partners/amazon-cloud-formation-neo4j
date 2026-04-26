@@ -1,7 +1,7 @@
 # GENERATED FILE — do not edit directly.
 # Edit source partials in templates/src/ and run templates/build.py to regenerate.
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Neo4j Enterprise Edition
+Description: Neo4j Enterprise Edition — Private
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -20,7 +20,6 @@ Metadata:
       - Label:
           default: "Security & Monitoring"
         Parameters:
-          - DeploymentMode
           - AllowedCIDR
           - AlertEmail
           - BoltCertificateSecretArn
@@ -40,8 +39,6 @@ Metadata:
         default: Data Volume KMS Key ID
       AlertEmail:
         default: Alert Email Address
-      DeploymentMode:
-        default: Deployment Mode
       AllowedCIDR:
         default: Allowed CIDR
       BoltCertificateSecretArn:
@@ -108,25 +105,6 @@ Parameters:
     Description: Email address for CloudWatch alarm notifications. Leave blank to skip email subscription.
     Type: String
     Default: ''
-  DeploymentMode:
-    Type: String
-    Default: Private
-    AllowedValues:
-      - Private
-      - Public
-    Description: >-
-      Private deploys Neo4j with no public IPs; access via SSM Session Manager,
-      VPN, or in-VPC clients. Public deploys with an internet-facing NLB and
-      requires AllowedCIDR. Private is recommended for production.
-  AllowedCIDR:
-    Type: String
-    AllowedPattern: '^(?!0\.0\.0\.0/0$)(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
-    ConstraintDescription: Must be a valid CIDR block (e.g. 10.0.0.0/16 or your IP as x.x.x.x/32). The value 0.0.0.0/0 is not permitted.
-    Description: >-
-      CIDR allowed to reach Neo4j ports 7474 and 7687. In Private mode, enter
-      10.0.0.0/16 (the VPC CIDR). In Public mode, enter the CIDR of the clients
-      that should reach the internet-facing NLB (e.g. 203.0.113.0/24 for a
-      known office egress). 0.0.0.0/0 is not accepted.
 
   BoltCertificateSecretArn:
     Type: String
@@ -146,6 +124,15 @@ Parameters:
       deploying in production so certs do not pin the NLB DNS. When blank, the
       NLB DNS is used (test-rig default; two-phase deploy required).
 
+  AllowedCIDR:
+    Description: >-
+      CIDR allowed to reach Neo4j ports 7474 and 7687; defaults to the VPC
+      CIDR this template creates.
+    Type: String
+    Default: 10.0.0.0/16
+    AllowedPattern: ^(?!0\.0\.0\.0\/0)(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR range. 0.0.0.0/0 is not accepted.
+
 Conditions:
   CreateCluster: !Not
     - !Equals
@@ -155,14 +142,6 @@ Conditions:
     - !Equals
       - !Ref AlertEmail
       - ''
-  IsPrivate: !Equals [!Ref DeploymentMode, Private]
-  IsPublic:
-    Fn::Not:
-      - Condition: IsPrivate
-  IsPrivateCluster:
-    Fn::And:
-      - Condition: IsPrivate
-      - Condition: CreateCluster
   BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
   HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
 
@@ -236,7 +215,6 @@ Resources:
 
   Neo4jBastionRole:
     Type: AWS::IAM::Role
-    Condition: IsPrivate
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -273,7 +251,6 @@ Resources:
 
   Neo4jBastionInstanceProfile:
     Type: AWS::IAM::InstanceProfile
-    Condition: IsPrivate
     Properties:
       Roles:
         - !Ref Neo4jBastionRole
@@ -375,7 +352,6 @@ Resources:
 
   Neo4jBastionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
-    Condition: IsPrivate
     Properties:
       GroupDescription: Operator bastion - no ingress; outbound via VPC endpoints and NLB
       VpcId: !Ref Neo4jVPC
@@ -398,7 +374,6 @@ Resources:
 
   VpcEndpointSecurityGroup:
     Type: AWS::EC2::SecurityGroup
-    Condition: IsPrivate
     Properties:
       GroupDescription: Allow HTTPS from Neo4j instances and operator bastion to VPC interface endpoints
       VpcId: !Ref Neo4jVPC
@@ -532,10 +507,8 @@ Resources:
       MinSize: 1
       MaxSize: 1
       DesiredCapacity: 1
-      VPCZoneIdentifier: !If
-        - IsPrivate
-        - [!Ref Neo4jPrivateSubnet1]
-        - [!Ref Neo4jSubnet1]
+      VPCZoneIdentifier:
+        - !Ref Neo4jPrivateSubnet1
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
@@ -572,10 +545,8 @@ Resources:
       MinSize: 1
       MaxSize: 1
       DesiredCapacity: 1
-      VPCZoneIdentifier: !If
-        - IsPrivate
-        - [!Ref Neo4jPrivateSubnet2]
-        - [!Ref Neo4jSubnet2]
+      VPCZoneIdentifier:
+        - !Ref Neo4jPrivateSubnet2
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
@@ -612,10 +583,8 @@ Resources:
       MinSize: 1
       MaxSize: 1
       DesiredCapacity: 1
-      VPCZoneIdentifier: !If
-        - IsPrivate
-        - [!Ref Neo4jPrivateSubnet3]
-        - [!Ref Neo4jSubnet3]
+      VPCZoneIdentifier:
+        - !Ref Neo4jPrivateSubnet3
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
@@ -1014,14 +983,14 @@ Resources:
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
 
   # ---------------------------------------------------------------------------
-  # Public subnets — carry NAT Gateways in Private mode, carry instances in Public mode
+  # Public subnets — carry NAT Gateways only; instances live in private subnets
   # ---------------------------------------------------------------------------
 
   Neo4jSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       CidrBlock: 10.0.1.0/24
-      MapPublicIpOnLaunch: !If [IsPrivate, false, true]
+      MapPublicIpOnLaunch: false
       AvailabilityZone:
         Fn::Select:
           - 0
@@ -1040,7 +1009,7 @@ Resources:
     Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.2.0/24
-      MapPublicIpOnLaunch: !If [IsPrivate, false, true]
+      MapPublicIpOnLaunch: false
       AvailabilityZone:
         Fn::Select:
           - 1
@@ -1059,7 +1028,7 @@ Resources:
     Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.3.0/24
-      MapPublicIpOnLaunch: !If [IsPrivate, false, true]
+      MapPublicIpOnLaunch: false
       AvailabilityZone:
         Fn::Select:
           - 2
@@ -1074,12 +1043,11 @@ Resources:
       VpcId: !Ref Neo4jVPC
 
   # ---------------------------------------------------------------------------
-  # Private subnets — instances and NLB in Private mode
+  # Private subnets — instances and NLB
   # ---------------------------------------------------------------------------
 
   Neo4jPrivateSubnet1:
     Type: AWS::EC2::Subnet
-    Condition: IsPrivate
     Properties:
       CidrBlock: 10.0.10.0/24
       MapPublicIpOnLaunch: false
@@ -1098,7 +1066,7 @@ Resources:
 
   Neo4jPrivateSubnet2:
     Type: AWS::EC2::Subnet
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.11.0/24
       MapPublicIpOnLaunch: false
@@ -1117,7 +1085,7 @@ Resources:
 
   Neo4jPrivateSubnet3:
     Type: AWS::EC2::Subnet
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     Properties:
       CidrBlock: 10.0.12.0/24
       MapPublicIpOnLaunch: false
@@ -1135,30 +1103,28 @@ Resources:
       VpcId: !Ref Neo4jVPC
 
   # ---------------------------------------------------------------------------
-  # NAT Gateways — one per AZ for 3-node Private, one for 1-node Private
+  # NAT Gateways — one per AZ in 3-node, one in 1-node
   # ---------------------------------------------------------------------------
 
   Neo4jNatEIP1:
     Type: AWS::EC2::EIP
-    Condition: IsPrivate
     Properties:
       Domain: vpc
 
   Neo4jNatEIP2:
     Type: AWS::EC2::EIP
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     Properties:
       Domain: vpc
 
   Neo4jNatEIP3:
     Type: AWS::EC2::EIP
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     Properties:
       Domain: vpc
 
   Neo4jNatGateway1:
     Type: AWS::EC2::NatGateway
-    Condition: IsPrivate
     DependsOn: Neo4jInternetGatewayAttachment
     Properties:
       AllocationId: !GetAtt Neo4jNatEIP1.AllocationId
@@ -1171,7 +1137,7 @@ Resources:
 
   Neo4jNatGateway2:
     Type: AWS::EC2::NatGateway
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     DependsOn: Neo4jInternetGatewayAttachment
     Properties:
       AllocationId: !GetAtt Neo4jNatEIP2.AllocationId
@@ -1184,7 +1150,7 @@ Resources:
 
   Neo4jNatGateway3:
     Type: AWS::EC2::NatGateway
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     DependsOn: Neo4jInternetGatewayAttachment
     Properties:
       AllocationId: !GetAtt Neo4jNatEIP3.AllocationId
@@ -1196,13 +1162,12 @@ Resources:
           Value: !Ref 'AWS::StackName'
 
   # ---------------------------------------------------------------------------
-  # Private route tables — one per AZ, each with a default route to its NAT GW.
-  # AZ 2 and 3 fall back to NAT GW 1 in 1-node Private deployments.
+  # Private route tables — one per AZ, unconditional.
+  # Tables 2/3 are empty with no subnet associations in 1-node mode.
   # ---------------------------------------------------------------------------
 
   Neo4jPrivateRouteTable1:
     Type: AWS::EC2::RouteTable
-    Condition: IsPrivate
     Properties:
       VpcId: !Ref Neo4jVPC
       Tags:
@@ -1215,7 +1180,6 @@ Resources:
 
   Neo4jPrivateRouteTable2:
     Type: AWS::EC2::RouteTable
-    Condition: IsPrivate
     Properties:
       VpcId: !Ref Neo4jVPC
       Tags:
@@ -1228,7 +1192,6 @@ Resources:
 
   Neo4jPrivateRouteTable3:
     Type: AWS::EC2::RouteTable
-    Condition: IsPrivate
     Properties:
       VpcId: !Ref Neo4jVPC
       Tags:
@@ -1241,7 +1204,6 @@ Resources:
 
   Neo4jPrivateRoute1:
     Type: AWS::EC2::Route
-    Condition: IsPrivate
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable1
       DestinationCidrBlock: 0.0.0.0/0
@@ -1249,23 +1211,22 @@ Resources:
 
   Neo4jPrivateRoute2:
     Type: AWS::EC2::Route
-    Condition: IsPrivate
+    Condition: CreateCluster
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable2
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !If [IsPrivateCluster, !Ref Neo4jNatGateway2, !Ref Neo4jNatGateway1]
+      NatGatewayId: !Ref Neo4jNatGateway2
 
   Neo4jPrivateRoute3:
     Type: AWS::EC2::Route
-    Condition: IsPrivate
+    Condition: CreateCluster
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable3
       DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !If [IsPrivateCluster, !Ref Neo4jNatGateway3, !Ref Neo4jNatGateway1]
+      NatGatewayId: !Ref Neo4jNatGateway3
 
   Neo4jPrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: IsPrivate
     DependsOn: Neo4jPrivateRoute1
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable1
@@ -1273,7 +1234,7 @@ Resources:
 
   Neo4jPrivateSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     DependsOn: Neo4jPrivateRoute2
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable2
@@ -1281,7 +1242,7 @@ Resources:
 
   Neo4jPrivateSubnet3RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     DependsOn: Neo4jPrivateRoute3
     Properties:
       RouteTableId: !Ref Neo4jPrivateRouteTable3
@@ -1349,7 +1310,7 @@ Resources:
       VpcId: !Ref Neo4jVPC
 
   # ---------------------------------------------------------------------------
-  # Network Load Balancer — internal in Private mode, internet-facing in Public mode
+  # Network Load Balancer — always internal in the private template
   # ---------------------------------------------------------------------------
 
   Neo4jNetworkLoadBalancer:
@@ -1361,13 +1322,15 @@ Resources:
         - '-'
         - - !Ref 'AWS::StackName'
           - 'nlb'
-      Scheme: !If [IsPrivate, internal, internet-facing]
+      Scheme: internal
       SecurityGroups:
         - !Ref Neo4jExternalSecurityGroup
       Subnets: !If
-        - IsPrivate
-        - !If [CreateCluster, [!Ref Neo4jPrivateSubnet1, !Ref Neo4jPrivateSubnet2, !Ref Neo4jPrivateSubnet3], [!Ref Neo4jPrivateSubnet1]]
-        - !If [CreateCluster, [!Ref Neo4jSubnet1, !Ref Neo4jSubnet2, !Ref Neo4jSubnet3], [!Ref Neo4jSubnet1]]
+        - CreateCluster
+        - - !Ref Neo4jPrivateSubnet1
+          - !Ref Neo4jPrivateSubnet2
+          - !Ref Neo4jPrivateSubnet3
+        - - !Ref Neo4jPrivateSubnet1
       LoadBalancerAttributes:
         - Key: load_balancing.cross_zone.enabled
           Value: "true"
@@ -1453,10 +1416,8 @@ Resources:
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
-
   Neo4jOperatorBastion:
     Type: AWS::EC2::Instance
-    Condition: IsPrivate
     CreationPolicy:
       ResourceSignal:
         Count: 1
@@ -1509,13 +1470,12 @@ Resources:
 
   SsmVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: IsPrivate
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
       VpcId: !Ref Neo4jVPC
       SubnetIds: !If
-        - IsPrivateCluster
+        - CreateCluster
         - - !Ref Neo4jPrivateSubnet1
           - !Ref Neo4jPrivateSubnet2
           - !Ref Neo4jPrivateSubnet3
@@ -1526,13 +1486,12 @@ Resources:
 
   SsmMessagesVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: IsPrivate
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
       VpcId: !Ref Neo4jVPC
       SubnetIds: !If
-        - IsPrivateCluster
+        - CreateCluster
         - - !Ref Neo4jPrivateSubnet1
           - !Ref Neo4jPrivateSubnet2
           - !Ref Neo4jPrivateSubnet3
@@ -1543,13 +1502,12 @@ Resources:
 
   LogsVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: IsPrivate
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
       VpcId: !Ref Neo4jVPC
       SubnetIds: !If
-        - IsPrivateCluster
+        - CreateCluster
         - - !Ref Neo4jPrivateSubnet1
           - !Ref Neo4jPrivateSubnet2
           - !Ref Neo4jPrivateSubnet3
@@ -1560,13 +1518,12 @@ Resources:
 
   SecretsManagerVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: IsPrivate
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
       VpcId: !Ref Neo4jVPC
       SubnetIds: !If
-        - IsPrivateCluster
+        - CreateCluster
         - - !Ref Neo4jPrivateSubnet1
           - !Ref Neo4jPrivateSubnet2
           - !Ref Neo4jPrivateSubnet3
@@ -1577,13 +1534,12 @@ Resources:
 
   S3GatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
-    Condition: IsPrivate
     Properties:
       VpcEndpointType: Gateway
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcId: !Ref Neo4jVPC
       RouteTableIds: !If
-        - IsPrivateCluster
+        - CreateCluster
         - - !Ref Neo4jPrivateRouteTable1
           - !Ref Neo4jPrivateRouteTable2
           - !Ref Neo4jPrivateRouteTable3
@@ -1591,7 +1547,6 @@ Resources:
 
   Neo4jPasswordSecret:
     Type: AWS::SecretsManager::Secret
-    Condition: IsPrivate
     Properties:
       Name: !Sub 'neo4j/${AWS::StackName}/password'
       Description: !Sub 'Neo4j admin password for stack ${AWS::StackName}'
@@ -1604,7 +1559,6 @@ Resources:
 
   Neo4jConfigVpcIdParameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivate
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/vpc-id'
       Type: String
@@ -1613,7 +1567,6 @@ Resources:
 
   Neo4jConfigNlbDnsParameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivate
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/nlb-dns'
       Type: String
@@ -1622,7 +1575,6 @@ Resources:
 
   Neo4jConfigRegionParameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivate
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/region'
       Type: String
@@ -1631,7 +1583,6 @@ Resources:
 
   Neo4jConfigStackNameParameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivate
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/stack-name'
       Type: String
@@ -1640,7 +1591,6 @@ Resources:
 
   Neo4jConfigPrivateSubnet1Parameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivate
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/private-subnet-1-id'
       Type: String
@@ -1649,7 +1599,7 @@ Resources:
 
   Neo4jConfigPrivateSubnet2Parameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/private-subnet-2-id'
       Type: String
@@ -1658,7 +1608,6 @@ Resources:
 
   Neo4jConfigPasswordSecretArnParameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivate
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/password-secret-arn'
       Type: String
@@ -1667,7 +1616,6 @@ Resources:
 
   Neo4jConfigExternalSgIdParameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivate
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/external-sg-id'
       Type: String
@@ -1676,7 +1624,6 @@ Resources:
 
   Neo4jConfigVpcEndpointSgParameter:
     Type: AWS::SSM::Parameter
-    Condition: IsPrivate
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/vpc-endpoint-sg-id'
       Type: String
@@ -1770,48 +1717,24 @@ Resources:
       TreatMissingData: notBreaching
 
 Outputs:
-  # Public mode: direct browser and Bolt URLs
-  Neo4jBrowserURL:
-    Condition: IsPublic
-    Description: URL for Neo4j Browser
-    Value: !Join
-      - ''
-      - - 'http://'
-        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
-        - ':'
-        - '7474'
-  Neo4jURI:
-    Condition: IsPublic
-    Description: Neo4j URI
-    Value: !Join
-      - ''
-      - - 'neo4j://'
-        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
-        - ':'
-        - '7687'
-
-  # Private mode: internal NLB DNS and SSM access commands
   Neo4jInternalDNS:
-    Condition: IsPrivate
     Description: Internal NLB DNS name (not internet-reachable; use SSM port-forwarding to connect)
     Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
   Neo4jOperatorBastionId:
-    Condition: IsPrivate
     Description: >-
       Operator bastion instance ID. Use this as the SSM --target for port-forwarding
       to the internal NLB. The bastion is deliberately not a Neo4j NLB target, so
       tunneled flows cannot hairpin back to their source.
     Value: !Ref Neo4jOperatorBastion
   Neo4jNode1ASGName:
-    Condition: IsPrivate
     Description: Auto Scaling Group name for Neo4j cluster node 1.
     Value: !Ref Neo4jNode1ASG
   Neo4jNode2ASGName:
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     Description: Auto Scaling Group name for Neo4j cluster node 2.
     Value: !Ref Neo4jNode2ASG
   Neo4jNode3ASGName:
-    Condition: IsPrivateCluster
+    Condition: CreateCluster
     Description: Auto Scaling Group name for Neo4j cluster node 3.
     Value: !Ref Neo4jNode3ASG
   Neo4jDataVolumeIds:
@@ -1823,26 +1746,21 @@ Outputs:
       - !Sub '${Neo4jNode1DataVolume},${Neo4jNode2DataVolume},${Neo4jNode3DataVolume}'
       - !Ref Neo4jNode1DataVolume
   Neo4jSSMBoltCommand:
-    Condition: IsPrivate
     Description: "SSM port-forward for Bolt via operator bastion: run then connect to neo4j://localhost:7687"
     Value: !Sub "aws ssm start-session --target ${Neo4jOperatorBastion} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7687,localPortNumber=7687' --region ${AWS::Region}"
   Neo4jSSMHTTPCommand:
-    Condition: IsPrivate
     Description: "SSM port-forward for Browser via operator bastion: run then open http://localhost:7474"
     Value: !Sub "aws ssm start-session --target ${Neo4jOperatorBastion} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7474,localPortNumber=7474' --region ${AWS::Region}"
   Neo4jPasswordSecretArn:
-    Condition: IsPrivate
     Description: >-
       Secrets Manager ARN holding the Neo4j admin password. The plaintext
       password is deliberately not exposed as a CFN Output — reading it
       requires separate secretsmanager:GetSecretValue IAM on this ARN.
     Value: !Ref Neo4jPasswordSecret
   Neo4jPasswordRetrieveCommand:
-    Condition: IsPrivate
     Description: "Copy-paste CLI to retrieve the Neo4j password from Secrets Manager."
     Value: !Sub "aws secretsmanager get-secret-value --secret-id ${Neo4jPasswordSecret} --query SecretString --output text --region ${AWS::Region}"
   Neo4jConfigParameterPrefix:
-    Condition: IsPrivate
     Description: >-
       SSM Parameter Store path prefix for non-secret stack configuration.
       Entries: vpc-id, nlb-dns, region, stack-name, private-subnet-1-id,
@@ -1850,8 +1768,6 @@ Outputs:
       In-VPC apps read from here instead of the operator's local
       .deploy/<stack>.txt file.
     Value: !Sub '/neo4j-ee/${AWS::StackName}/'
-
-  # Common outputs
   Username:
     Description: 'The username is neo4j.'
     Value: 'neo4j'

@@ -1,3 +1,1239 @@
 # GENERATED FILE — do not edit directly.
 # Edit source partials in templates/src/ and run templates/build.py to regenerate.
-# Template: Public — stub, not yet implemented
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Neo4j Enterprise Edition — Public
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "AWS Marketplace Parameters"
+        Parameters:
+          - ImageId
+      - Label:
+          default: "Neo4j Configuration"
+        Parameters:
+          - Password
+          - NumberOfServers
+          - InstanceType
+          - DataDiskSize
+          - DataVolumeKmsKeyId
+      - Label:
+          default: "Security & Monitoring"
+        Parameters:
+          - AllowedCIDR
+          - AlertEmail
+          - BoltCertificateSecretArn
+          - BoltAdvertisedDNS
+    ParameterLabels:
+      ImageId:
+        default: Image ID
+      Password:
+        default: Password
+      NumberOfServers:
+        default: Number of Servers
+      InstanceType:
+        default: Instance Type
+      DataDiskSize:
+        default: Data Disk Size (GB)
+      DataVolumeKmsKeyId:
+        default: Data Volume KMS Key ID
+      AlertEmail:
+        default: Alert Email Address
+      AllowedCIDR:
+        default: Allowed CIDR
+      BoltCertificateSecretArn:
+        default: Bolt TLS Certificate Secret ARN
+      BoltAdvertisedDNS:
+        default: Bolt Advertised DNS Name
+
+Parameters:
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/marketplace/prod-vwigx4rbvvb5s/2026.03.1
+  Password:
+    Description: >
+      Password for the neo4j admin user. Must be at least 8 characters
+      and contain both letters and numbers.
+    Type: String
+    MinLength: 8
+    AllowedPattern: ^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$
+    ConstraintDescription: Must be at least 8 characters and contain both letters and numbers.
+    NoEcho: true
+  NumberOfServers:
+    Description: Number of EC2 instances to deploy
+    Type: Number
+    Default: 3
+    AllowedValues:
+    - 1
+    - 3
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: r8i.xlarge
+    AllowedValues:
+    - t3.medium
+    - r8i.large
+    - r8i.xlarge
+    - r8i.2xlarge
+    - r8i.4xlarge
+    - r8i.8xlarge
+    - r8i.12xlarge
+    - r8i.16xlarge
+    - r8i.24xlarge
+    - r8i.32xlarge
+    - r8i.48xlarge
+    - r8i.96xlarge
+  DataDiskSize:
+    Description: >-
+      Size in GB of the persistent Neo4j data volume attached to each cluster
+      node. This volume is retained across instance replacement: a new
+      instance reattaches the existing volume and Raft catches up rather than
+      performing a full store copy. The root volume (OS + Neo4j binaries) is
+      fixed at 20 GB and not user-tunable.
+    Type: Number
+    Default: 100
+    MinValue: 100
+    MaxValue: 65536
+  DataVolumeKmsKeyId:
+    Description: >-
+      Optional. KMS key ID or ARN for data volume encryption. Leave blank to
+      use the account's default EBS encryption key (aws/ebs unless overridden
+      at the account level).
+    Type: String
+    Default: ''
+  AlertEmail:
+    Description: Email address for CloudWatch alarm notifications. Leave blank to skip email subscription.
+    Type: String
+    Default: ''
+
+  BoltCertificateSecretArn:
+    Type: String
+    Default: ''
+    Description: >-
+      ARN of a Secrets Manager secret whose SecretString is JSON with
+      "certificate" (PEM) and "private_key" (PEM) fields. When set, Neo4j
+      enables TLS on Bolt port 7687 (server.bolt.tls_level=REQUIRED). Leave
+      blank to run Bolt without TLS (suitable for dev/test inside a private VPC).
+      ACM Private CA-issued certs are accepted here — no separate parameter needed.
+  BoltAdvertisedDNS:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional. DNS name placed in server.bolt.advertised_address and used as
+      the cert SAN. Provide a stable alias (e.g. a Route53 CNAME → NLB) when
+      deploying in production so certs do not pin the NLB DNS. When blank, the
+      NLB DNS is used (test-rig default; two-phase deploy required).
+
+  AllowedCIDR:
+    Description: >-
+      Enter the CIDR allowed to reach Neo4j ports 7474 and 7687 (e.g. your
+      office IP as x.x.x.x/32). 0.0.0.0/0 is not accepted.
+    Type: String
+    AllowedPattern: ^(?!0\.0\.0\.0\/0)(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR range. 0.0.0.0/0 is not accepted.
+
+Conditions:
+  CreateCluster: !Not
+    - !Equals
+      - !Ref NumberOfServers
+      - '1'
+  HasAlertEmail: !Not
+    - !Equals
+      - !Ref AlertEmail
+      - ''
+  BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
+  HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
+
+Resources:
+  Neo4jInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: Neo4jRole
+  Neo4jRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: Neo4jPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Describe-only actions: AWS does not support resource-level
+              # conditions on EC2/ASG Describe calls, so Resource: "*" is
+              # required. autoscaling:DescribeAutoScalingGroups is used by
+              # the tag-filtered peer discovery in UserData.
+              - Effect: Allow
+                Action:
+                  - autoscaling:DescribeAutoScalingGroups
+                  - cloudformation:DescribeStack*
+                  - cloudformation:SignalResource
+                  - ec2:DescribeInstances
+                  - ec2:DescribeVolumes
+                  - ec2:DescribeTags
+                Resource: "*"
+              # Two-statement form: volume-side enforces StackID+Role,
+              # instance-side enforces StackID. Both conditions must be
+              # satisfied for an attach to succeed.
+              - Effect: Allow
+                Action: ec2:AttachVolume
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceTag/StackID': !Ref 'AWS::StackId'
+                    'aws:ResourceTag/Role': neo4j-cluster-data
+              - Effect: Allow
+                Action: ec2:AttachVolume
+                Resource: !Sub 'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceTag/StackID': !Ref 'AWS::StackId'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/neo4j/${AWS::StackName}/application:*'
+              - !If
+                - BoltTLSEnabled
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref BoltCertificateSecretArn
+                - !Ref AWS::NoValue
+
+  Neo4jExternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Neo4j External Ports
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 7474
+          ToPort: 7474
+          CidrIp: !Ref AllowedCIDR
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          CidrIp: !Ref AllowedCIDR
+
+  Neo4jInternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable Neo4j Internal Ports
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jInternalSGIngress5000:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 5000
+      ToPort: 5000
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress6000:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 6000
+      ToPort: 6000
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress7000:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7000
+      ToPort: 7000
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress7688:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7688
+      ToPort: 7688
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress2003:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2003
+      ToPort: 2003
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress2004:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 2004
+      ToPort: 2004
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  Neo4jInternalSGIngress3637:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 3637
+      ToPort: 3637
+      SourceSecurityGroupId: !GetAtt Neo4jInternalSecurityGroup.GroupId
+
+  # ---------------------------------------------------------------------------
+  # Per-node persistent data volumes
+  #
+  # One gp3 EBS volume per cluster node, retained across instance replacement
+  # (DeletionPolicy: Retain, UpdateReplacePolicy: Retain). Each volume is
+  # pinned to a single AZ; the matching ASG is pinned to the same AZ. When
+  # an instance is replaced, the new instance discovers its volume by tag
+  # (StackID + Role=neo4j-cluster-data + own AZ), reattaches it, and starts
+  # Neo4j against the existing store — so Raft catch-up replaces what would
+  # otherwise be a full store copy.
+  #
+  # Losing a node: the volume survives and is reattached on replacement.
+  # Losing the whole cluster (stack delete, region-wide ASG failure): the
+  # volumes survive stack deletion and can be reattached to a fresh stack,
+  # preserving the data across full-cluster loss.
+  # ---------------------------------------------------------------------------
+
+  Neo4jNode1DataVolume:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [0, Fn::GetAZs: !Ref 'AWS::Region']
+      Size: !Ref DataDiskSize
+      VolumeType: gp3
+      Iops: 3000
+      Throughput: 125
+      Encrypted: true
+      KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-data-1'
+        - Key: Role
+          Value: neo4j-cluster-data
+        - Key: NodeIndex
+          Value: "1"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jNode2DataVolume:
+    Type: AWS::EC2::Volume
+    Condition: CreateCluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [1, Fn::GetAZs: !Ref 'AWS::Region']
+      Size: !Ref DataDiskSize
+      VolumeType: gp3
+      Iops: 3000
+      Throughput: 125
+      Encrypted: true
+      KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-data-2'
+        - Key: Role
+          Value: neo4j-cluster-data
+        - Key: NodeIndex
+          Value: "2"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jNode3DataVolume:
+    Type: AWS::EC2::Volume
+    Condition: CreateCluster
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AvailabilityZone: !Select [2, Fn::GetAZs: !Ref 'AWS::Region']
+      Size: !Ref DataDiskSize
+      VolumeType: gp3
+      Iops: 3000
+      Throughput: 125
+      Encrypted: true
+      KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-data-3'
+        - Key: Role
+          Value: neo4j-cluster-data
+        - Key: NodeIndex
+          Value: "3"
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+
+  # ---------------------------------------------------------------------------
+  # Auto Scaling Groups — one per cluster node, each pinned to a single AZ.
+  #
+  # The three ASGs share a single LaunchTemplate; each launched instance
+  # discovers its own ASG logical-id from the aws:cloudformation:logical-id
+  # tag (auto-applied by CFN) so cfn-signal can route to the correct ASG's
+  # CreationPolicy. Topology is 1:1 between ASG ↔ AZ ↔ data volume, so a
+  # replacement instance always lands in the same AZ as its persistent
+  # volume and reattaches deterministically.
+  #
+  # In 1-node mode, only Node1ASG is created.
+  # ---------------------------------------------------------------------------
+
+  Neo4jNode1ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn:
+      - Neo4jNode1DataVolume
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      VPCZoneIdentifier:
+        - !Ref Neo4jSubnet1
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node-1'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: neo4j-cluster-node
+          PropagateAtLaunch: true
+        - Key: NodeIndex
+          Value: "1"
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jNode2ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateCluster
+    DependsOn:
+      - Neo4jNode2DataVolume
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      VPCZoneIdentifier:
+        - !Ref Neo4jSubnet2
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node-2'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: neo4j-cluster-node
+          PropagateAtLaunch: true
+        - Key: NodeIndex
+          Value: "2"
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jNode3ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Condition: CreateCluster
+    DependsOn:
+      - Neo4jNode3DataVolume
+    CreationPolicy:
+      ResourceSignal:
+        Count: 1
+        Timeout: PT15M
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref Neo4jLaunchTemplate
+        Version: !GetAtt Neo4jLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      MaxSize: 1
+      DesiredCapacity: 1
+      VPCZoneIdentifier:
+        - !Ref Neo4jSubnet3
+      TargetGroupARNs:
+        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBoltTargetGroup
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-node-3'
+          PropagateAtLaunch: true
+        - Key: Role
+          Value: neo4j-cluster-node
+          PropagateAtLaunch: true
+        - Key: NodeIndex
+          Value: "3"
+          PropagateAtLaunch: true
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+          PropagateAtLaunch: true
+
+  Neo4jLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref ImageId
+        InstanceType:
+          Ref: InstanceType
+        SecurityGroupIds:
+          - Ref: Neo4jExternalSecurityGroup
+          - Ref: Neo4jInternalSecurityGroup
+        EbsOptimized: true
+        IamInstanceProfile:
+          Arn: !GetAtt Neo4jInstanceProfile.Arn
+        BlockDeviceMappings:
+          # Root volume: OS + Neo4j binaries + plugins + logs + metrics.
+          # Neo4j data lives on a separate per-node EBS volume attached at boot.
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 20
+              VolumeType: gp3
+              Encrypted: true
+              DeleteOnTermination: true
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+        UserData:
+          Fn::Base64:
+            !Join
+            - ''
+            - - "#!/bin/bash\n"
+              - "set -euo pipefail\n"
+              - "echo Running startup script...\n"
+              - "password=\""
+              - Ref: Password
+              - "\"\n"
+              - "nodeCount="
+              - Ref: NumberOfServers
+              - "\n"
+              - "loadBalancerDNSName="
+              - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
+              - "\n"
+              - "stackName="
+              - Ref: AWS::StackName
+              - "\n"
+              - "region="
+              - Ref: AWS::Region
+              - "\n"
+              - "boltCertArn="
+              - Ref: BoltCertificateSecretArn
+              - "\n"
+              - "boltAdvertisedDNS="
+              - Ref: BoltAdvertisedDNS
+              - "\n"
+              - |
+                export IS_FIRST_BOOT=false
+
+                _token=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+                _instance_id=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169.254/latest/meta-data/instance-id)
+                logicalId=$(aws ec2 describe-tags --region "$region" --filters "Name=resource-id,Values=${_instance_id}" "Name=key,Values=aws:cloudformation:logical-id" --query "Tags[0].Value" --output text 2>/dev/null || true)
+                trap 'if [[ -n "${logicalId:-}" ]]; then cfn-signal --success false --stack "$stackName" --resource "$logicalId" --region "$region"; fi' ERR
+
+                set_neo4j_conf() {
+                  local conf=/etc/neo4j/neo4j.conf
+                  sed -i "s|^#\?$1=.*|$1=$2|" "$conf"
+                  if ! grep -q "^$1=" "$conf"; then
+                    echo "$1=$2" >> "$conf"
+                  fi
+                }
+
+                pin_neo4j_user() {
+                  getent group neo4j >/dev/null || groupadd -g 500 neo4j
+                  getent passwd neo4j >/dev/null || useradd -u 500 -g 500 -r -s /sbin/nologin -d /var/lib/neo4j neo4j
+                }
+
+                attach_and_mount_data_volume() {
+                  echo "Attaching and mounting data volume..."
+                  local _token
+                  _token=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+                  local _instance_id
+                  _instance_id=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169.254/latest/meta-data/instance-id)
+                  local _az
+                  _az=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169.254/latest/meta-data/placement/availability-zone)
+                  if [[ -z "${_instance_id}" || -z "${_az}" ]]; then
+                    echo "ERROR: Could not read instance metadata from IMDSv2. Exiting."
+                    exit 1
+                  fi
+                  local _stack_id
+                  _stack_id=$(aws ec2 describe-tags --region "$region" \
+                    --filters "Name=resource-id,Values=${_instance_id}" \
+                              "Name=key,Values=aws:cloudformation:stack-id" \
+                    --query "Tags[0].Value" --output text)
+                  if [[ -z "${_stack_id}" || "${_stack_id}" == "None" ]]; then
+                    echo "ERROR: Could not read aws:cloudformation:stack-id tag. Exiting."
+                    exit 1
+                  fi
+                  local _vols _vol_count _data_vol_id
+                  _vols=$(aws ec2 describe-volumes --region "$region" \
+                    --filters "Name=tag:StackID,Values=${_stack_id}" \
+                              "Name=tag:Role,Values=neo4j-cluster-data" \
+                              "Name=availability-zone,Values=${_az}" \
+                    --query "Volumes[*].VolumeId" --output text)
+                  _vol_count=$(echo "${_vols}" | wc -w | xargs)
+                  if [[ "${_vol_count}" -ne 1 ]]; then
+                    echo "ERROR: Expected 1 data volume in AZ ${_az}, found ${_vol_count}. Exiting."
+                    exit 1
+                  fi
+                  _data_vol_id="${_vols}"
+                  echo "Data volume: ${_data_vol_id} in ${_az}"
+                  echo "  Waiting for volume ${_data_vol_id} to reach 'available' state (up to 10 min)..."
+                  local _vol_top_state _wait_s=0
+                  while true; do
+                    _vol_top_state=$(aws ec2 describe-volumes --region "$region" \
+                      --volume-ids "${_data_vol_id}" \
+                      --query "Volumes[0].State" --output text 2>/dev/null || echo "unknown")
+                    [[ "${_vol_top_state}" == "available" ]] && break
+                    if (( _wait_s >= 600 )); then
+                      echo "ERROR: Volume ${_data_vol_id} did not become available after 10 min (state=${_vol_top_state}). Exiting."
+                      exit 1
+                    fi
+                    echo "  Volume state: ${_vol_top_state}, waiting 10s... (${_wait_s}s elapsed)"
+                    sleep 10
+                    _wait_s=$(( _wait_s + 10 ))
+                  done
+                  local _attach_ok=false
+                  for _attach_try in $(seq 1 3); do
+                    if aws ec2 attach-volume --region "$region" \
+                        --volume-id "${_data_vol_id}" \
+                        --instance-id "${_instance_id}" \
+                        --device /dev/sdf >/dev/null 2>&1; then
+                      _attach_ok=true
+                      break
+                    fi
+                    echo "  attach-volume attempt ${_attach_try}/3 failed, retrying in 5s..."
+                    sleep 5
+                  done
+                  if [[ "${_attach_ok}" != "true" ]]; then
+                    echo "ERROR: Could not attach volume ${_data_vol_id} to ${_instance_id}. Exiting."
+                    exit 1
+                  fi
+                  echo "Waiting for volume ${_data_vol_id} to reach 'attached' state (up to 2 min)..."
+                  local _vol_state=""
+                  for _i in $(seq 1 24); do
+                    _vol_state=$(aws ec2 describe-volumes --region "$region" \
+                      --volume-ids "${_data_vol_id}" \
+                      --query "Volumes[0].Attachments[0].State" --output text 2>/dev/null || true)
+                    [[ "${_vol_state}" == "attached" ]] && break
+                    echo "  volume state: ${_vol_state} (${_i}/24)..."
+                    sleep 5
+                  done
+                  if [[ "${_vol_state}" != "attached" ]]; then
+                    echo "ERROR: Volume ${_data_vol_id} did not reach 'attached' within 2 minutes. Exiting."
+                    exit 1
+                  fi
+                  local _vol_serial="${_data_vol_id//-/}"
+                  local _data_dev=""
+                  for _nvme_try in $(seq 1 6); do
+                    for _dev in /dev/nvme*n1; do
+                      [[ -b "$_dev" ]] || continue
+                      if /sbin/ebsnvme-id -u "$_dev" 2>/dev/null | grep -q "${_data_vol_id}"; then
+                        _data_dev="$_dev"
+                        break 2
+                      fi
+                    done
+                    if [[ -L /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${_vol_serial} ]]; then
+                      _data_dev=$(readlink -f /dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_${_vol_serial})
+                      break
+                    fi
+                    sleep 2
+                  done
+                  if [[ -z "${_data_dev}" || ! -b "${_data_dev}" ]]; then
+                    echo "ERROR: Could not resolve NVMe device for volume ${_data_vol_id} after retries. Exiting."
+                    exit 1
+                  fi
+                  echo "NVMe device: ${_data_dev}"
+                  if ! blkid "${_data_dev}" > /dev/null 2>&1; then
+                    echo "First boot: formatting ${_data_dev} with xfs..."
+                    mkfs.xfs "${_data_dev}"
+                    IS_FIRST_BOOT=true
+                  fi
+                  local _uuid
+                  _uuid=$(blkid -s UUID -o value "${_data_dev}")
+                  if [[ -z "${_uuid}" ]]; then
+                    echo "ERROR: Could not read UUID from ${_data_dev}. Exiting."
+                    exit 1
+                  fi
+                  mkdir -p /var/lib/neo4j/data
+                  echo "UUID=${_uuid}  /var/lib/neo4j/data  xfs  defaults,nofail,noatime,x-systemd.device-timeout=30  0 2" >> /etc/fstab
+                  mount /var/lib/neo4j/data
+                  echo "Data volume mounted at /var/lib/neo4j/data"
+                  if [[ "${IS_FIRST_BOOT}" == "true" ]]; then
+                    chown neo4j:neo4j /var/lib/neo4j/data
+                  fi
+                }
+
+                install_neo4j_from_yum() {
+                  echo "Installing Graph Database..."
+                  rpm --import https://debian.neo4j.com/neotechnology.gpg.key
+                  echo "[neo4j]
+                name=Neo4j RPM Repository
+                baseurl=https://yum.neo4j.com/stable/latest
+                enabled=1
+                gpgcheck=1
+                " > /etc/yum.repos.d/neo4j.repo
+                  export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+                  yum -y install neo4j-enterprise
+                  systemctl enable neo4j
+                }
+                extension_config() {
+                  echo Configuring extensions and security in neo4j.conf...
+                  set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
+                  set_neo4j_conf dbms.security.procedures.unrestricted "gds.*,apoc.*,bloom.*"
+                  set_neo4j_conf dbms.security.http_auth_allowlist "/,/browser.*,/bloom.*"
+                  set_neo4j_conf dbms.security.procedures.allowlist "apoc.*,gds.*,bloom.*"
+                  sed -i '/jdwp/d' /etc/neo4j/neo4j.conf
+                }
+                build_neo4j_conf_file() {
+                  local -r privateIP="$(hostname -i | awk '{print $NF}')"
+                  echo "Configuring network in neo4j.conf..."
+                  set_neo4j_conf server.default_listen_address 0.0.0.0
+                  set_neo4j_conf server.default_advertised_address "${loadBalancerDNSName}"
+                  set_neo4j_conf server.bolt.listen_address 0.0.0.0:7687
+                  set_neo4j_conf server.bolt.advertised_address "${boltAdvertisedDNS:-${loadBalancerDNSName}}:7687"
+                  set_neo4j_conf server.http.listen_address 0.0.0.0:7474
+                  set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
+                  neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
+                  set_neo4j_conf server.metrics.enabled true
+                  set_neo4j_conf server.metrics.jmx.enabled true
+                  set_neo4j_conf server.metrics.prefix neo4j
+                  set_neo4j_conf server.metrics.filter "*"
+                  set_neo4j_conf server.metrics.csv.interval 5s
+                  set_neo4j_conf dbms.routing.default_router SERVER
+                  if [[ ${nodeCount} == 1 ]]; then
+                    echo "Running on a single node."
+                  else
+                    echo "Running on multiple nodes.  Configuring membership in neo4j.conf..."
+                    set_neo4j_conf server.cluster.listen_address 0.0.0.0:6000
+                    set_neo4j_conf server.cluster.advertised_address "${privateIP}:6000"
+                    set_neo4j_conf server.cluster.raft.listen_address 0.0.0.0:7000
+                    set_neo4j_conf server.cluster.raft.advertised_address "${privateIP}:7000"
+                    set_neo4j_conf server.routing.listen_address 0.0.0.0:7688
+                    set_neo4j_conf server.routing.advertised_address "${privateIP}:7688"
+                    set_neo4j_conf initial.dbms.default_primaries_count 3
+                    set_neo4j_conf initial.dbms.default_secondaries_count "$(expr ${nodeCount} - 3)"
+                    set_neo4j_conf dbms.cluster.minimum_initial_system_primaries_count "${nodeCount}"
+                    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+                    instanceId=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+                    if [[ -z "${instanceId}" ]]; then
+                      echo "ERROR: Could not read instance ID from IMDSv2. Exiting."
+                      exit 1
+                    fi
+                    stackId=$(aws ec2 describe-tags --region "$region" --filters "Name=resource-id,Values=${instanceId}" "Name=key,Values=aws:cloudformation:stack-id" --query "Tags[0].Value" --output text)
+                    if [[ -z "${stackId}" || "${stackId}" == "None" ]]; then
+                      echo "ERROR: Could not read aws:cloudformation:stack-id tag from instance ${instanceId}. Exiting."
+                      exit 1
+                    fi
+                    coreMembers=""
+                    for attempt in $(seq 1 30); do
+                      asgNames=$(aws autoscaling describe-auto-scaling-groups --region "$region" --query "AutoScalingGroups[?Tags[?Key=='StackID' && Value=='${stackId}'] && Tags[?Key=='Role' && Value=='neo4j-cluster-node']].AutoScalingGroupName" --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' | grep -v '^None$' | xargs || true)
+                      if [[ -n "${asgNames}" ]]; then
+                        instanceIds=$(aws autoscaling describe-auto-scaling-groups --region "$region" --auto-scaling-group-names ${asgNames} --query "AutoScalingGroups[].Instances[].InstanceId" --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' | grep -v '^None$' | xargs || true)
+                        if [[ -n "${instanceIds}" ]]; then
+                          coreMembers=$(aws ec2 describe-instances --region "$region" --instance-ids ${instanceIds} --query "Reservations[].Instances[].PrivateIpAddress" --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' | grep -v '^None$' | awk '{print $1":6000"}' | paste -sd, || true)
+                        fi
+                      fi
+                      foundCount=0
+                      [[ -n "${coreMembers}" ]] && foundCount=$(echo "${coreMembers}" | awk -F, '{print NF}')
+                      [[ ${foundCount} -ge ${nodeCount} ]] && break
+                      echo "Peer discovery attempt ${attempt}/30: found ${foundCount}/${nodeCount} members, retrying in 10s..."
+                      sleep 10
+                    done
+                    if [[ -z "${coreMembers}" ]]; then
+                      echo "ERROR: Peer discovery failed after 5 minutes. Exiting."
+                      exit 1
+                    fi
+                    echo "CoreMembers = ${coreMembers}"
+                    set_neo4j_conf dbms.cluster.discovery.resolver_type LIST
+                    set_neo4j_conf dbms.cluster.endpoints "${coreMembers}"
+                  fi
+                  if [ -n "${boltCertArn}" ]; then
+                    command -v jq >/dev/null || dnf install -y jq
+                    mkdir -p /var/lib/neo4j/certificates/bolt
+                    local _secret_json
+                    _secret_json=$(aws secretsmanager get-secret-value --region "${region}" \
+                      --secret-id "${boltCertArn}" --query SecretString --output text)
+                    if ! echo "${_secret_json}" | jq -e 'has("certificate") and has("private_key")' >/dev/null; then
+                      echo "ERROR: Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM). Exiting." >&2
+                      exit 1
+                    fi
+                    umask 077
+                    echo "${_secret_json}" | jq -r '.private_key' > /var/lib/neo4j/certificates/bolt/private.key
+                    echo "${_secret_json}" | jq -r '.certificate' > /var/lib/neo4j/certificates/bolt/public.crt
+                    umask 022
+                    unset _secret_json
+                    chown -R neo4j:neo4j /var/lib/neo4j/certificates
+                    chmod 600 /var/lib/neo4j/certificates/bolt/private.key
+                    chmod 644 /var/lib/neo4j/certificates/bolt/public.crt
+                    set_neo4j_conf dbms.ssl.policy.bolt.enabled true
+                    set_neo4j_conf dbms.ssl.policy.bolt.base_directory /var/lib/neo4j/certificates/bolt
+                    set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key
+                    set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt
+                    set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE
+                    set_neo4j_conf server.bolt.tls_level REQUIRED
+                  fi
+                }
+                add_cypher_ip_blocklist() {
+                  set_neo4j_conf internal.dbms.cypher_ip_blocklist "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8"
+                }
+                start_neo4j() {
+                  echo "Starting Neo4j..."
+                  service neo4j start
+                  # IS_FIRST_BOOT gates this: on replacement boots the auth DB already
+                  # exists on the retained volume, so skipping preserves any post-deploy
+                  # password changes the customer made.
+                  if [[ "${IS_FIRST_BOOT}" == "true" ]]; then
+                    neo4j-admin dbms set-initial-password "${password}"
+                  fi
+                }
+                install_cloudwatch_agent() {
+                  echo "Installing CloudWatch agent..."
+                  yum install -y amazon-cloudwatch-agent
+                  cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << CWCONFIG
+                {
+                  "logs": {
+                    "logs_collected": {
+                      "files": {
+                        "collect_list": [
+                          {
+                            "file_path": "/var/log/neo4j/security.log",
+                            "log_group_name": "/neo4j/${stackName}/application",
+                            "log_stream_name": "{instance_id}/security",
+                            "retention_in_days": 90
+                          },
+                          {
+                            "file_path": "/var/log/neo4j/debug.log",
+                            "log_group_name": "/neo4j/${stackName}/application",
+                            "log_stream_name": "{instance_id}/debug",
+                            "retention_in_days": 90
+                          },
+                          {
+                            "file_path": "/var/log/cloud-init-output.log",
+                            "log_group_name": "/neo4j/${stackName}/application",
+                            "log_stream_name": "{instance_id}/cloud-init-output",
+                            "retention_in_days": 90
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+                CWCONFIG
+                  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+                }
+                install_cloudwatch_agent
+                pin_neo4j_user
+                attach_and_mount_data_volume
+                install_neo4j_from_yum
+                extension_config
+                build_neo4j_conf_file
+                add_cypher_ip_blocklist
+                start_neo4j
+                cfn-signal --success true --stack "$stackName" --resource "$logicalId" --region "$region"
+
+  Neo4jVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      CidrBlock: 10.0.0.0/16
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  # ---------------------------------------------------------------------------
+  # Public subnets — instances and internet-facing NLB
+  # ---------------------------------------------------------------------------
+
+  Neo4jSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 0
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 1
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jSubnet3:
+    Type: AWS::EC2::Subnet
+    Condition: CreateCluster
+    Properties:
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone:
+        Fn::Select:
+          - 2
+          - Fn::GetAZs: !Ref 'AWS::Region'
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref Neo4jInternetGateway
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jRoute:
+    Type: AWS::EC2::Route
+    DependsOn: Neo4jInternetGatewayAttachment
+    Properties:
+      GatewayId: !Ref Neo4jInternetGateway
+      RouteTableId: !Ref Neo4jRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+
+  Neo4jSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet1
+
+  Neo4jSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet2
+
+  Neo4jSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateCluster
+    Properties:
+      RouteTableId: !Ref Neo4jRouteTable
+      SubnetId: !Ref Neo4jSubnet3
+
+  # ---------------------------------------------------------------------------
+  # Network Load Balancer — internet-facing in the public template
+  # ---------------------------------------------------------------------------
+
+  Neo4jNetworkLoadBalancer:
+    DependsOn: Neo4jInternetGatewayAttachment
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      IpAddressType: ipv4
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'nlb'
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref Neo4jExternalSecurityGroup
+      Subnets: !If
+        - CreateCluster
+        - - !Ref Neo4jSubnet1
+          - !Ref Neo4jSubnet2
+          - !Ref Neo4jSubnet3
+        - - !Ref Neo4jSubnet1
+      LoadBalancerAttributes:
+        - Key: load_balancing.cross_zone.enabled
+          Value: "true"
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      Type: network
+
+  Neo4jHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7474
+      Protocol: TCP
+
+  Neo4jBoltListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref Neo4jBoltTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
+      Port: 7687
+      Protocol: TCP
+
+  Neo4jHTTPTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'http'
+          - 'tg'
+      Port: 7474
+      Protocol: TCP
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 10
+      Matcher:
+        HttpCode: '200'
+      TargetGroupAttributes:
+        - Key: preserve_client_ip.enabled
+          Value: "false"
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jBoltTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Join
+        - '-'
+        - - !Ref 'AWS::StackName'
+          - 'bolt'
+          - 'tg'
+      Port: 7687
+      Protocol: TCP
+      HealthCheckIntervalSeconds: 10
+      TargetGroupAttributes:
+        - Key: preserve_client_ip.enabled
+          Value: "false"
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+      VpcId: !Ref Neo4jVPC
+
+  Neo4jFlowLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/vpc/flowlogs/${AWS::StackName}'
+      RetentionInDays: 90
+
+  Neo4jFlowLogsIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: vpc-flow-logs.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: Neo4jFlowLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${Neo4jFlowLogsGroup.Arn}:*'
+              - Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource: '*'
+
+  Neo4jVPCFlowLog:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      ResourceType: VPC
+      ResourceId: !Ref Neo4jVPC
+      TrafficType: ALL
+      LogDestinationType: cloud-watch-logs
+      LogGroupName: !Ref Neo4jFlowLogsGroup
+      DeliverLogsPermissionArn: !GetAtt Neo4jFlowLogsIAMRole.Arn
+
+  Neo4jAppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/neo4j/${AWS::StackName}/application'
+      RetentionInDays: 90
+
+  Neo4jAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub 'neo4j-alerts-${AWS::StackName}'
+      Subscription:
+        Fn::If:
+          - HasAlertEmail
+          - - Protocol: email
+              Endpoint: !Ref AlertEmail
+          - !Ref AWS::NoValue
+
+  Neo4jFailedAuthMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref Neo4jAppLogGroup
+      FilterPattern: '"failed to log in"'
+      MetricTransformations:
+        - MetricNamespace: !Sub 'Neo4j/${AWS::StackName}'
+          MetricName: FailedAuthAttempts
+          MetricValue: '1'
+          DefaultValue: 0
+
+  Neo4jFailedAuthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'Neo4j-FailedAuth-${AWS::StackName}'
+      AlarmDescription: 'Neo4j authentication failures exceeded 10 in a 5-minute window'
+      MetricName: FailedAuthAttempts
+      Namespace: !Sub 'Neo4j/${AWS::StackName}'
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref Neo4jAlertTopic
+      TreatMissingData: notBreaching
+
+Outputs:
+  Neo4jBrowserURL:
+    Description: URL for Neo4j Browser
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
+        - ':'
+        - '7474'
+  Neo4jURI:
+    Description: Neo4j URI
+    Value: !Join
+      - ''
+      - - 'neo4j://'
+        - !GetAtt Neo4jNetworkLoadBalancer.DNSName
+        - ':'
+        - '7687'
+  Neo4jDataVolumeIds:
+    Description: >-
+      Comma-separated list of persistent data volume IDs. Retained across
+      stack deletion — see teardown.sh --delete-volumes to remove.
+    Value: !If
+      - CreateCluster
+      - !Sub '${Neo4jNode1DataVolume},${Neo4jNode2DataVolume},${Neo4jNode3DataVolume}'
+      - !Ref Neo4jNode1DataVolume
+  Username:
+    Description: 'The username is neo4j.'
+    Value: 'neo4j'
+  Neo4jAppLogGroupName:
+    Description: CloudWatch Logs log group for Neo4j application logs
+    Value: !Ref Neo4jAppLogGroup
+  Neo4jAlertTopicArn:
+    Description: SNS topic ARN for Neo4j security alerts
+    Value: !Ref Neo4jAlertTopic
+  VpcFlowLogGroupName:
+    Description: CloudWatch Logs log group for VPC flow logs
+    Value: !Ref Neo4jFlowLogsGroup
+  FailedAuthAlarmName:
+    Description: CloudWatch alarm name for Neo4j failed authentication events
+    Value: !Ref Neo4jFailedAuthAlarm

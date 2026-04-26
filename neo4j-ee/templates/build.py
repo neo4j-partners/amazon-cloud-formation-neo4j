@@ -71,7 +71,7 @@ def _userdata_block(topology: str, base_indent: int = 8) -> str:
     p8 = " " * (base_indent + 8)  # block literal content
 
     items = _PREAMBLE_COMMON[:]
-    if topology in ("private", "existing-vpc"):
+    if topology in ("private", "existing-vpc", "public"):
         items.extend(_PREAMBLE_TLS)
 
     result = [
@@ -105,23 +105,26 @@ def _assemble_private() -> str:
     userdata = _userdata_block("private")
     placeholder = "        # __USERDATA__\n"
     if placeholder not in asg_content:
-        sys.exit("ERROR: # __USERDATA__ placeholder not found in src/asg.yaml")
+        print("ERROR: # __USERDATA__ placeholder not found in src/asg.yaml", file=sys.stderr)
+        sys.exit(1)
     asg_content = asg_content.replace(placeholder, userdata)
 
     return "".join([
         GENERATED_HEADER,
         "AWSTemplateFormatVersion: '2010-09-09'\n",
-        "Description: Neo4j Enterprise Edition\n",
+        "Description: Neo4j Enterprise Edition — Private\n",
         "Metadata:\n",
-        _read("metadata.yaml"),
+        _read("metadata-private.yaml"),
         "\n",
         "Parameters:\n",
         _read("parameters-common.yaml"),
         "\n",
         _read("parameters-tls.yaml"),
         "\n",
+        _read("parameters-private.yaml"),
+        "\n",
         "Conditions:\n",
-        _read("conditions.yaml"),
+        _read("conditions-private.yaml"),
         "\n",
         "Resources:\n",
         _read("iam.yaml"),
@@ -139,7 +142,97 @@ def _assemble_private() -> str:
         _read("observability.yaml"),
         "\n",
         "Outputs:\n",
-        _read("outputs.yaml"),
+        _read("outputs-private.yaml"),
+    ])
+
+
+def _assemble_public() -> str:
+    asg_content = _read("asg-public.yaml")
+    userdata = _userdata_block("public")
+    placeholder = "        # __USERDATA__\n"
+    if placeholder not in asg_content:
+        print("ERROR: # __USERDATA__ placeholder not found in src/asg-public.yaml", file=sys.stderr)
+        sys.exit(1)
+    asg_content = asg_content.replace(placeholder, userdata)
+
+    return "".join([
+        GENERATED_HEADER,
+        "AWSTemplateFormatVersion: '2010-09-09'\n",
+        "Description: Neo4j Enterprise Edition — Public\n",
+        "Metadata:\n",
+        _read("metadata-public.yaml"),
+        "\n",
+        "Parameters:\n",
+        _read("parameters-common.yaml"),
+        "\n",
+        _read("parameters-tls.yaml"),
+        "\n",
+        _read("parameters-public.yaml"),
+        "\n",
+        "Conditions:\n",
+        _read("conditions-public.yaml"),
+        "\n",
+        "Resources:\n",
+        _read("iam-public.yaml"),
+        "\n",
+        _read("security-groups-public.yaml"),
+        "\n",
+        _read("ebs-volumes.yaml"),
+        "\n",
+        asg_content,
+        "\n",
+        _read("networking-public.yaml"),
+        "\n",
+        _read("observability.yaml"),
+        "\n",
+        "Outputs:\n",
+        _read("outputs-public.yaml"),
+    ])
+
+
+def _assemble_existing_vpc() -> str:
+    asg_content = _read("asg-existing-vpc.yaml")
+    userdata = _userdata_block("existing-vpc")
+    placeholder = "        # __USERDATA__\n"
+    if placeholder not in asg_content:
+        print("ERROR: # __USERDATA__ placeholder not found in src/asg-existing-vpc.yaml", file=sys.stderr)
+        sys.exit(1)
+    asg_content = asg_content.replace(placeholder, userdata)
+
+    return "".join([
+        GENERATED_HEADER,
+        "AWSTemplateFormatVersion: '2010-09-09'\n",
+        "Description: Neo4j Enterprise Edition — Private, Existing VPC\n",
+        "Metadata:\n",
+        _read("metadata-existing-vpc.yaml"),
+        "\n",
+        "Parameters:\n",
+        _read("parameters-common.yaml"),
+        "\n",
+        _read("parameters-tls.yaml"),
+        "\n",
+        _read("parameters-existing-vpc.yaml"),
+        "\n",
+        "Conditions:\n",
+        _read("conditions-existing-vpc.yaml"),
+        "\n",
+        "Resources:\n",
+        _read("iam.yaml"),
+        "\n",
+        _read("security-groups-existing-vpc.yaml"),
+        "\n",
+        _read("ebs-volumes.yaml"),
+        "\n",
+        asg_content,
+        "\n",
+        _read("networking-existing-vpc.yaml"),
+        "\n",
+        _read("stack-config-existing-vpc.yaml"),
+        "\n",
+        _read("observability-existing-vpc.yaml"),
+        "\n",
+        "Outputs:\n",
+        _read("outputs-existing-vpc.yaml"),
     ])
 
 
@@ -167,46 +260,50 @@ def _diff_userdata_scripts() -> None:
             print(f"UserData: {a} and {b} are identical")
 
 
-def _build() -> None:
-    private_out = OUT / "neo4j-private.template.yaml"
-    private_out.write_text(_assemble_private())
-    print(f"wrote {private_out.relative_to(OUT.parent)}")
+_TEMPLATES = [
+    ("neo4j-private.template.yaml", _assemble_private),
+    ("neo4j-public.template.yaml", _assemble_public),
+    ("neo4j-private-existing-vpc.template.yaml", _assemble_existing_vpc),
+]
 
-    for filename, label in [
-        ("neo4j-public.template.yaml", "Public"),
-        ("neo4j-private-existing-vpc.template.yaml", "Private, Existing VPC"),
-    ]:
+
+def _build() -> None:
+    for filename, assembler in _TEMPLATES:
         out_path = OUT / filename
-        out_path.write_text(GENERATED_HEADER + f"# Template: {label} — stub, not yet implemented\n")
-        print(f"wrote {out_path.relative_to(OUT.parent)} (stub)")
+        out_path.write_text(assembler())
+        print(f"wrote {out_path.relative_to(OUT.parent)}")
 
     print()
     _diff_userdata_scripts()
 
 
 def _verify() -> None:
-    committed_path = OUT / "neo4j-private.template.yaml"
-    if not committed_path.exists():
-        print("ERROR: neo4j-private.template.yaml not found; run build.py first", file=sys.stderr)
+    failed = False
+    for filename, assembler in _TEMPLATES:
+        committed_path = OUT / filename
+        if not committed_path.exists():
+            print(f"ERROR: {filename} not found; run build.py first", file=sys.stderr)
+            sys.exit(1)
+        generated = assembler()
+        committed = committed_path.read_text()
+        if generated == committed:
+            print(f"{filename} is up to date")
+            continue
+        diff = list(difflib.unified_diff(
+            committed.splitlines(),
+            generated.splitlines(),
+            fromfile="committed",
+            tofile="generated",
+            lineterm="",
+        ))
+        print(f"ERROR: {filename} is out of date. Run build.py to regenerate.", file=sys.stderr)
+        for line in diff[:80]:
+            print(line, file=sys.stderr)
+        if len(diff) > 80:
+            print(f"  ... ({len(diff) - 80} more lines)", file=sys.stderr)
+        failed = True
+    if failed:
         sys.exit(1)
-    generated = _assemble_private()
-    committed = committed_path.read_text()
-    if generated == committed:
-        print("neo4j-private.template.yaml is up to date")
-        return
-    diff = list(difflib.unified_diff(
-        committed.splitlines(),
-        generated.splitlines(),
-        fromfile="committed",
-        tofile="generated",
-        lineterm="",
-    ))
-    print("ERROR: neo4j-private.template.yaml is out of date. Run build.py to regenerate.", file=sys.stderr)
-    for line in diff[:80]:
-        print(line, file=sys.stderr)
-    if len(diff) > 80:
-        print(f"  ... ({len(diff) - 80} more lines)", file=sys.stderr)
-    sys.exit(1)
 
 
 def main() -> None:
@@ -216,7 +313,7 @@ def main() -> None:
     parser.add_argument(
         "--verify",
         action="store_true",
-        help="exit non-zero if committed neo4j-private.template.yaml differs from a fresh build",
+        help="exit non-zero if committed templates differ from a fresh build",
     )
     args = parser.parse_args()
     if args.verify:

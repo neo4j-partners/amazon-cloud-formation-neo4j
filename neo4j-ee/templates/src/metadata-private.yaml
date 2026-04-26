@@ -15,7 +15,6 @@
       - Label:
           default: "Security & Monitoring"
         Parameters:
-          - DeploymentMode
           - AllowedCIDR
           - AlertEmail
           - BoltCertificateSecretArn
@@ -35,8 +34,6 @@
         default: Data Volume KMS Key ID
       AlertEmail:
         default: Alert Email Address
-      DeploymentMode:
-        default: Deployment Mode
       AllowedCIDR:
         default: Allowed CIDR
       BoltCertificateSecretArn:

@@ -6,13 +6,5 @@
     - !Equals
       - !Ref AlertEmail
       - ''
-  IsPrivate: !Equals [!Ref DeploymentMode, Private]
-  IsPublic:
-    Fn::Not:
-      - Condition: IsPrivate
-  IsPrivateCluster:
-    Fn::And:
-      - Condition: IsPrivate
-      - Condition: CreateCluster
   BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
   HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]

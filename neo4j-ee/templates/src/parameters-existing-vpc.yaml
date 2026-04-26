@@ -1,0 +1,41 @@
+  VpcId:
+    Type: String
+    Description: ID of the existing VPC to deploy Neo4j into.
+  PrivateSubnet1Id:
+    Type: String
+    Description: >-
+      First private subnet ID (must be in a different AZ from Subnet 2 and 3).
+  PrivateSubnet2Id:
+    Type: String
+    Default: ''
+    Description: Second private subnet ID; required when NumberOfServers is 3.
+  PrivateSubnet3Id:
+    Type: String
+    Default: ''
+    Description: Third private subnet ID; required when NumberOfServers is 3.
+  CreateSSMEndpoint:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description: >-
+      Create VPC interface endpoints for Systems Manager (ssm, ssmmessages)
+      and CloudWatch Logs. Set false if your VPC already has these endpoints
+      — creating duplicates fails the deployment.
+  CreateSecretsManagerEndpoint:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description: >-
+      Create a VPC interface endpoint for Secrets Manager. Set false if your
+      VPC already has one — creating a duplicate fails the deployment.
+  AllowedCIDR:
+    Description: >-
+      Enter the CIDR of your existing VPC, e.g. 10.0.0.0/16 or
+      172.16.0.0/12. 0.0.0.0/0 is not accepted.
+    Type: String
+    AllowedPattern: ^(?!0\.0\.0\.0\/0)(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR range. 0.0.0.0/0 is not accepted.

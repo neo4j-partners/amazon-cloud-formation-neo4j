@@ -1,0 +1,10 @@
+  CreateCluster: !Not
+    - !Equals
+      - !Ref NumberOfServers
+      - '1'
+  HasAlertEmail: !Not
+    - !Equals
+      - !Ref AlertEmail
+      - ''
+  BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
+  HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]

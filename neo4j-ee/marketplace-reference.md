@@ -4,6 +4,20 @@ Reference document for the three-template split. Covers the recommended architec
 
 ---
 
+## Network Encryption Requirement
+
+AWS Marketplace explicitly requires end-to-end encryption for network traffic. From the official AMI best practices:
+
+> "Whenever possible, use end-to-end encryption for network traffic. For example, use Secure Sockets Layer (SSL) to secure HTTP sessions between you and your buyers. Ensure that your service uses only valid and up-to-date certificates."
+>
+> — [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html)
+
+A security group `AllowedCIDR` restriction does not satisfy this requirement. It controls which source IPs can initiate a connection at the AWS network layer, but it does not encrypt traffic. An attacker controlling any network hop between the buyer's client and the EC2 instance — ISP, corporate router, VPN exit node — can read Neo4j credentials, Cypher queries, and query results in plaintext. This is true even when `AllowedCIDR` is locked to a single `/32` address.
+
+The practical consequence for this listing: plain HTTP on port 7474 and unencrypted `neo4j://` Bolt on port 7687 do not meet the Marketplace standard. TLS must be enabled on both ports for any deployment topology intended for production use.
+
+---
+
 ## Three Templates, Three Resource Topologies
 
 AWS Marketplace allows up to three CloudFormation templates per AMI-based product listing. Using all three slots is only justified when the templates represent genuinely different infrastructure footprints. Each of the three Neo4j EE templates passes that test because the resource sets they create are structurally distinct, not parameter variations of each other.
@@ -188,16 +202,18 @@ Each template requires a separate diagram submitted to the Marketplace seller po
 
 ## References
 
-1. [CloudFormation Templates 101 for Sellers in AWS Marketplace](https://aws.amazon.com/blogs/awsmarketplace/cloudformation-templates-101-for-sellers-in-aws-marketplace/) — Covers IAM roles, Auto Scaling, password handling, and cluster deployment patterns for Marketplace sellers.
+1. [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html) — Official Marketplace AMI guidelines. Explicitly requires end-to-end encryption for network traffic; recommends SSL/TLS for HTTP sessions and valid, up-to-date certificates.
+
+2. [CloudFormation Templates 101 for Sellers in AWS Marketplace](https://aws.amazon.com/blogs/awsmarketplace/cloudformation-templates-101-for-sellers-in-aws-marketplace/) — Covers IAM roles, Auto Scaling, password handling, and cluster deployment patterns for Marketplace sellers.
 
 2. [Taking NAT to the Next Level in AWS CloudFormation Templates](https://aws.amazon.com/blogs/apn/taking-nat-to-the-next-level-in-aws-cloudformation-templates/) — NAT gateway vs. NAT instance comparison with CloudFormation examples; the case for per-AZ NAT gateways.
 
-3. [Add CloudFormation templates to your product](https://docs.aws.amazon.com/marketplace/latest/userguide/cloudformation.html) — Official Marketplace requirements: AMI parameter handling, network security, nested stack parameters, maximum template count per listing.
+4. [Add CloudFormation templates to your product](https://docs.aws.amazon.com/marketplace/latest/userguide/cloudformation.html) — Official Marketplace requirements: AMI parameter handling, network security, nested stack parameters, maximum template count per listing.
 
-4. [AWS CloudFormation template guidelines for AMI-based products](https://aws.amazon.com/blogs/awsmarketplace/aws-cloudformation-template-guidelines-ami-based-products-aws-marketplace/) — Confirms templates are topology slots, not version slots; describes how Marketplace handles AMI parameter injection.
+5. [AWS CloudFormation template guidelines for AMI-based products](https://aws.amazon.com/blogs/awsmarketplace/aws-cloudformation-template-guidelines-ami-based-products-aws-marketplace/) — Confirms templates are topology slots, not version slots; describes how Marketplace handles AMI parameter injection.
 
-5. [NAT gateway use cases](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-scenarios.html) — Architecture diagrams, routing table configuration, and testing private subnet internet access via NAT.
+6. [NAT gateway use cases](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateway-scenarios.html) — Architecture diagrams, routing table configuration, and testing private subnet internet access via NAT.
 
-6. [Systems Manager Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) — SSM Session Manager as the replacement for SSH-based bastion access; no inbound ports required.
+7. [Systems Manager Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) — SSM Session Manager as the replacement for SSH-based bastion access; no inbound ports required.
 
-7. [AWS Marketplace AMI buyer guide — topology selection](https://docs.aws.amazon.com/marketplace/latest/buyerguide/buyer-server-products.html) — Describes CloudFormation templates as topology selectors from the buyer's perspective.
+8. [AWS Marketplace AMI buyer guide — topology selection](https://docs.aws.amazon.com/marketplace/latest/buyerguide/buyer-server-products.html) — Describes CloudFormation templates as topology selectors from the buyer's perspective.

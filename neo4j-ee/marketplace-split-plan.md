@@ -279,6 +279,19 @@ The partials do not need to map one-to-one to YAML sections. Extract by concern,
 
 ---
 
+## Execution Model for Phases 3–5
+
+Phases 3 and 4 can run in parallel — every topology-specific file is separate (`networking-public.yaml`, `conditions-public.yaml`, `outputs-public.yaml` vs. `networking-private.yaml`), and neither phase touches a shared source partial that the other modifies. The only shared file is `build.py`: Phase 3 adds `_assemble_public()` and Phase 4 modifies `_assemble_private()`. These are distinct functions; the only merge conflict is additive lines in `_build()` and `_verify()`.
+
+Phase 5 must wait for Phase 4 to merge. `src/stack-config.yaml` gates all ten of its resources on `IsPrivate` or `IsPrivateCluster`. Phase 4 must replace those with unconditional or `CreateCluster` conditions. Phase 5 then inherits that cleaned-up partial — its first task explicitly revisits those condition names. Two agents modifying `stack-config.yaml` in parallel would produce a non-trivial merge conflict.
+
+```
+Phase 3 (Public)  ──────────────────────────────────────► merge
+Phase 4 (Private) ──────────────────────────────────────► merge ──► Phase 5 (Existing VPC)
+```
+
+---
+
 ## Phase 3: Public Template
 
 **Goal:** `templates/neo4j-public.template.yaml` is generated, deployed, and validated.
@@ -338,6 +351,8 @@ This template is the closest to the current Private mode. The main work is remov
 ---
 
 ## Phase 5: Private, Existing VPC Template
+
+**Depends on Phase 4 merge.** `src/stack-config.yaml` must have its `IsPrivate`/`IsPrivateCluster` conditions replaced (Phase 4 work) before this phase begins.
 
 **Goal:** `templates/neo4j-private-existing-vpc.template.yaml` is generated, deployed into a pre-existing VPC, and validated.
 

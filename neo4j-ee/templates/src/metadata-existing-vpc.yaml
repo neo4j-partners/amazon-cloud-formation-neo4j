@@ -1,0 +1,66 @@
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "AWS Marketplace Parameters"
+        Parameters:
+          - ImageId
+      - Label:
+          default: "Neo4j Configuration"
+        Parameters:
+          - Password
+          - NumberOfServers
+          - InstanceType
+          - DataDiskSize
+          - DataVolumeKmsKeyId
+      - Label:
+          default: "Existing VPC"
+        Parameters:
+          - VpcId
+          - PrivateSubnet1Id
+          - PrivateSubnet2Id
+          - PrivateSubnet3Id
+          - CreateSSMEndpoint
+          - CreateSecretsManagerEndpoint
+          - AllowedCIDR
+      - Label:
+          default: "TLS"
+        Parameters:
+          - BoltCertificateSecretArn
+          - BoltAdvertisedDNS
+      - Label:
+          default: "Monitoring"
+        Parameters:
+          - AlertEmail
+    ParameterLabels:
+      ImageId:
+        default: Image ID
+      Password:
+        default: Password
+      NumberOfServers:
+        default: Number of Servers
+      InstanceType:
+        default: Instance Type
+      DataDiskSize:
+        default: Data Disk Size (GB)
+      DataVolumeKmsKeyId:
+        default: Data Volume KMS Key ID
+      VpcId:
+        default: VPC ID
+      PrivateSubnet1Id:
+        default: Private Subnet 1 ID
+      PrivateSubnet2Id:
+        default: Private Subnet 2 ID
+      PrivateSubnet3Id:
+        default: Private Subnet 3 ID
+      CreateSSMEndpoint:
+        default: Create SSM VPC Endpoints
+      CreateSecretsManagerEndpoint:
+        default: Create Secrets Manager VPC Endpoint
+      AllowedCIDR:
+        default: Allowed CIDR
+      AlertEmail:
+        default: Alert Email Address
+      BoltCertificateSecretArn:
+        default: Bolt TLS Certificate Secret ARN
+      BoltAdvertisedDNS:
+        default: Bolt Advertised DNS Name

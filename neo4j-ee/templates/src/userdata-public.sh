@@ -165,7 +165,7 @@ build_neo4j_conf_file() {
   set_neo4j_conf server.default_listen_address 0.0.0.0
   set_neo4j_conf server.default_advertised_address "${loadBalancerDNSName}"
   set_neo4j_conf server.bolt.listen_address 0.0.0.0:7687
-  set_neo4j_conf server.bolt.advertised_address "${loadBalancerDNSName}:7687"
+  set_neo4j_conf server.bolt.advertised_address "${boltAdvertisedDNS:-${loadBalancerDNSName}}:7687"
   set_neo4j_conf server.http.listen_address 0.0.0.0:7474
   set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
   neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
@@ -221,6 +221,31 @@ build_neo4j_conf_file() {
     echo "CoreMembers = ${coreMembers}"
     set_neo4j_conf dbms.cluster.discovery.resolver_type LIST
     set_neo4j_conf dbms.cluster.endpoints "${coreMembers}"
+  fi
+  if [ -n "${boltCertArn}" ]; then
+    command -v jq >/dev/null || dnf install -y jq
+    mkdir -p /var/lib/neo4j/certificates/bolt
+    local _secret_json
+    _secret_json=$(aws secretsmanager get-secret-value --region "${region}" \
+      --secret-id "${boltCertArn}" --query SecretString --output text)
+    if ! echo "${_secret_json}" | jq -e 'has("certificate") and has("private_key")' >/dev/null; then
+      echo "ERROR: Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM). Exiting." >&2
+      exit 1
+    fi
+    umask 077
+    echo "${_secret_json}" | jq -r '.private_key' > /var/lib/neo4j/certificates/bolt/private.key
+    echo "${_secret_json}" | jq -r '.certificate' > /var/lib/neo4j/certificates/bolt/public.crt
+    umask 022
+    unset _secret_json
+    chown -R neo4j:neo4j /var/lib/neo4j/certificates
+    chmod 600 /var/lib/neo4j/certificates/bolt/private.key
+    chmod 644 /var/lib/neo4j/certificates/bolt/public.crt
+    set_neo4j_conf dbms.ssl.policy.bolt.enabled true
+    set_neo4j_conf dbms.ssl.policy.bolt.base_directory /var/lib/neo4j/certificates/bolt
+    set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key
+    set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt
+    set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE
+    set_neo4j_conf server.bolt.tls_level REQUIRED
   fi
 }
 add_cypher_ip_blocklist() {

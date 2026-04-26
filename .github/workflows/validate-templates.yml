@@ -24,3 +24,12 @@ jobs:
 
       - name: Lint neo4j-private.template.yaml
         run: cfn-lint neo4j-ee/templates/neo4j-private.template.yaml
+
+      - name: Lint neo4j-public.template.yaml
+        run: cfn-lint neo4j-ee/templates/neo4j-public.template.yaml
+
+      - name: Lint neo4j-private-existing-vpc.template.yaml
+        # W1030 is suppressed: PrivateSubnet2Id/3Id default to '' for 1-node
+        # deploys but are only used inside !If [CreateCluster, ...], making the
+        # "not a valid subnet ID" warning a false positive.
+        run: cfn-lint --ignore-checks W1030 neo4j-ee/templates/neo4j-private-existing-vpc.template.yaml

@@ -49,7 +49,8 @@ _PREAMBLE_COMMON = [
     '"\\n"',
 ]
 
-# Present only in Private and Existing-VPC templates.
+# Present in all three templates — Bolt over an internet-facing NLB must be
+# encryptable, so the public template carries TLS parameters too.
 _PREAMBLE_TLS = [
     '"boltCertArn="',
     "Ref: BoltCertificateSecretArn",
@@ -71,8 +72,7 @@ def _userdata_block(topology: str, base_indent: int = 8) -> str:
     p8 = " " * (base_indent + 8)  # block literal content
 
     items = _PREAMBLE_COMMON[:]
-    if topology in ("private", "existing-vpc", "public"):
-        items.extend(_PREAMBLE_TLS)
+    items.extend(_PREAMBLE_TLS)
 
     result = [
         f"{p}UserData:\n",

@@ -30,7 +30,23 @@ SUPPORTED_REGIONS = [
     "eu-west-1", "eu-central-1",
     "ap-southeast-1", "ap-southeast-2",
 ]
-INSTANCE_TYPES = {"t3": "t3.medium", "r8i": "r8i.xlarge"}
+# Mirrors the InstanceType AllowedValues block in templates/neo4j-private
+# .template.yaml, neo4j-public.template.yaml, and
+# neo4j-private-existing-vpc.template.yaml. Keep these in sync.
+INSTANCE_TYPES = [
+    "t3.medium",
+    "r8i.large",
+    "r8i.xlarge",
+    "r8i.2xlarge",
+    "r8i.4xlarge",
+    "r8i.8xlarge",
+    "r8i.12xlarge",
+    "r8i.16xlarge",
+    "r8i.24xlarge",
+    "r8i.32xlarge",
+    "r8i.48xlarge",
+    "r8i.96xlarge",
+]
 TEMPLATE_MAP = {
     "Private":     "templates/neo4j-private.template.yaml",
     "Public":      "templates/neo4j-public.template.yaml",
@@ -43,9 +59,15 @@ def parse_args():
         description="Deploy Neo4j Enterprise Edition CloudFormation stack for local testing.",
     )
     p.add_argument(
-        "instance_family", nargs="?", default="t3",
-        choices=list(INSTANCE_TYPES), metavar="INSTANCE_FAMILY",
-        help="Instance family: t3 (default) or r8i",
+        "instance_type", nargs="?", default="t3.medium",
+        choices=INSTANCE_TYPES, metavar="INSTANCE_TYPE",
+        help=(
+            "Fully-qualified EC2 instance type (default: t3.medium). "
+            "Allowed: t3.medium, r8i.{large,xlarge,2xlarge,4xlarge,"
+            "8xlarge,12xlarge,16xlarge,24xlarge,32xlarge,48xlarge,"
+            "96xlarge}. Must match the InstanceType AllowedValues "
+            "in the template."
+        ),
     )
     p.add_argument("--region", dest="region_override", metavar="REGION")
     p.add_argument("--number-of-servers", type=int, default=3, choices=[1, 3])
@@ -166,7 +188,7 @@ def main():
         if args.create_vpc_endpoints == "false" and not args.existing_endpoint_sg_id:
             sys.exit("ERROR: --existing-endpoint-sg-id is required when --create-vpc-endpoints false")
 
-    instance_type = INSTANCE_TYPES[args.instance_family]
+    instance_type = args.instance_type
 
     if args.allowed_cidr:
         allowed_cidr = args.allowed_cidr
@@ -285,7 +307,7 @@ def main():
     print("=============================================")
     print(f"  Stack:          {stack_name}")
     print(f"  Region:         {region}")
-    print(f"  Instance:       {instance_type} (family: {args.instance_family})")
+    print(f"  Instance:       {instance_type}")
     print(f"  Servers:        {args.number_of_servers}")
     print(f"  Mode:           {args.mode}")
     print(f"  AllowedCIDR:    {allowed_cidr}")

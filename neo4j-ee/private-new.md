@@ -12,7 +12,7 @@ Defaults used throughout this plan. Adjust at the top before running.
 |---|---|---|
 | `REGION` | `us-east-1` | Pinned to source region — avoids 10-20 min AMI copy |
 | `SERVERS` | `3` | 3-node required by the failover and resilience suites |
-| `INSTANCE_FAMILY` | `t3` | `t3.medium`; swap to `r8i` for memory-optimized |
+| `INSTANCE_TYPE` | `t3.medium` | Fully-qualified EC2 instance type. Allowed: `t3.medium` or any `r8i.*` size from `r8i.large` through `r8i.96xlarge` (see `deploy.py:33` and template `InstanceType` AllowedValues). |
 | `TLS` | off | Add `--tls` to deploy if Bolt TLS path needs coverage |
 | `DELETE_VOLUMES` | yes | Automated test; retain only for post-mortem inspection |
 

@@ -41,7 +41,7 @@ End-to-end plan for deploying and validating `templates/neo4j-private-existing-v
 |---|---|---|---|
 | `REGION` | `us-east-1` | `us-east-1` | Pinned to source region — avoids 10–20 min AMI copy |
 | `SERVERS` | `3` | `1` | 3-node required by failover + resilience suites (Path A only) |
-| `INSTANCE_FAMILY` | `t3` | `t3` | `t3.medium`; swap to `r8i` for memory-optimized |
+| `INSTANCE_TYPE` | `t3.medium` | `t3.medium` | Fully-qualified EC2 instance type. Allowed: `t3.medium` or any `r8i.*` size from `r8i.large` through `r8i.96xlarge` (see `deploy.py:33` and template `InstanceType` AllowedValues). |
 | `TLS` | off | off | Add `--tls` to deploy if Bolt TLS path needs coverage |
 | `DELETE_VOLUMES` | yes | yes | Automated test; retain only for post-mortem inspection |
 

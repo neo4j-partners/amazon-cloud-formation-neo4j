@@ -110,6 +110,22 @@ The custom resolver pattern is available in all official Neo4j drivers.
 
 ---
 
+## Password Secret Format
+
+The Neo4j admin password is stored in Secrets Manager as a **plain string** — the password value itself, not JSON. Consumers retrieve it with:
+
+```
+aws secretsmanager get-secret-value \
+  --secret-id <password-secret-arn> \
+  --query SecretString --output text
+```
+
+and pass the result directly as `NEO4J_PASSWORD`. The ARN is published at `/neo4j-ee/<stack>/password-secret-arn` and surfaced in the deploy-outputs file as `Neo4jPasswordSecretArn`.
+
+The Bolt TLS secret (when `--tls` is set) follows a different convention: a JSON object with `certificate` and `private_key` keys. See [TLS on Bolt → Secret Format](#secret-format) below.
+
+---
+
 ## TLS on Bolt
 
 The template provisions TLS on the Bolt connector from a customer-supplied certificate. When `BoltCertificateSecretArn` is set, Neo4j is configured with `server.bolt.tls_level=REQUIRED` against the cert and key in the named Secrets Manager secret. When empty (the default), Bolt runs as plain TCP — appropriate for internal-only deployments where the VPC and security group boundary is the trust boundary.

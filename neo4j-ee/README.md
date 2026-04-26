@@ -22,7 +22,7 @@ Two AMI modes depending on what you are testing.
 
 ```bash
 ./deploy.py --marketplace                                  # t3.medium, 3 nodes, random region, Private mode
-./deploy.py --marketplace r8i                              # memory optimized (r8i.xlarge)
+./deploy.py --marketplace r8i.xlarge                       # memory optimized r8i
 ./deploy.py --marketplace --number-of-servers 1            # single instance
 ./deploy.py --marketplace --region eu-west-1               # specific region
 ./deploy.py --marketplace --mode Public                    # internet-facing NLB (opt-in)
@@ -43,7 +43,7 @@ Then deploy using that AMI:
 
 ```bash
 ./deploy.py                                    # t3.medium, 3 nodes, random region, Private mode
-./deploy.py r8i                                # memory optimized (r8i.xlarge)
+./deploy.py r8i.xlarge                         # memory optimized r8i (any allowed r8i.* size works)
 ./deploy.py --number-of-servers 1              # single instance
 ./deploy.py --region eu-west-1                 # specific region (AMI auto-copied)
 ./deploy.py --mode Public                      # internet-facing NLB (opt-in)
@@ -120,7 +120,7 @@ cd templates && python build.py
 ```bash
 ./deploy.py                              # 3-node cluster, t3.medium, random region
 ./deploy.py --number-of-servers 1        # single instance
-./deploy.py r8i                          # r8i.xlarge
+./deploy.py r8i.xlarge                   # memory optimized r8i (any allowed r8i.* size works)
 ./deploy.py --region eu-west-1           # specific region (AMI auto-copied if needed)
 ./deploy.py --marketplace                # use published Marketplace AMI
 ```
@@ -179,7 +179,7 @@ cd templates && python build.py
 ```bash
 ./deploy.py --mode Public                              # 3-node cluster, t3.medium, random region
 ./deploy.py --mode Public --number-of-servers 1        # single instance
-./deploy.py --mode Public r8i                          # r8i.xlarge
+./deploy.py --mode Public r8i.xlarge                   # memory optimized r8i
 ./deploy.py --mode Public --region eu-west-1           # specific region
 ./deploy.py --mode Public --marketplace                # use published Marketplace AMI
 ```

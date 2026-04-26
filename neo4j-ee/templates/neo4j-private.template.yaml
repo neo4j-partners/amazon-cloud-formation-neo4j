@@ -1640,6 +1640,32 @@ Resources:
       Value: !GetAtt VpcEndpointSecurityGroup.GroupId
       Description: Security group ID on all interface VPC endpoints. In-VPC apps add this as an ingress rule source so their SG can reach SSM, Secrets Manager, and CloudWatch Logs via PrivateLink.
 
+  Neo4jConfigPrivateRouteTable1Parameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-route-table-1-id'
+      Type: String
+      Value: !Ref Neo4jPrivateRouteTable1
+      Description: Route table ID associated with private subnet 1. In-VPC apps attach S3/DynamoDB gateway endpoints to this route table to keep workload egress on the AWS backbone.
+
+  Neo4jConfigPrivateRouteTable2Parameter:
+    Type: AWS::SSM::Parameter
+    Condition: CreateCluster
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-route-table-2-id'
+      Type: String
+      Value: !Ref Neo4jPrivateRouteTable2
+      Description: Route table ID associated with private subnet 2 (cluster mode only).
+
+  Neo4jConfigPrivateRouteTable3Parameter:
+    Type: AWS::SSM::Parameter
+    Condition: CreateCluster
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-route-table-3-id'
+      Type: String
+      Value: !Ref Neo4jPrivateRouteTable3
+      Description: Route table ID associated with private subnet 3 (cluster mode only).
+
   Neo4jFlowLogsGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -1774,7 +1800,9 @@ Outputs:
     Description: >-
       SSM Parameter Store path prefix for non-secret stack configuration.
       Entries: vpc-id, nlb-dns, region, stack-name, private-subnet-1-id,
-      private-subnet-2-id, password-secret-arn, external-sg-id, vpc-endpoint-sg-id.
+      private-subnet-2-id, private-route-table-1-id, private-route-table-2-id,
+      private-route-table-3-id, password-secret-arn, external-sg-id,
+      vpc-endpoint-sg-id.
       In-VPC apps read from here instead of the operator's local
       .deploy/<stack>.txt file.
     Value: !Sub '/neo4j-ee/${AWS::StackName}/'

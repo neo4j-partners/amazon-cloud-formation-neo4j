@@ -1,6 +1,6 @@
 # Neo4j Private Cluster — Lambda Demo App
 
-The neo4j-ee stack deploys its cluster in private subnets behind an internal NLB with no public IPs. [`OPERATOR_GUIDE.md`](../OPERATOR_GUIDE.md) covers how to connect a laptop via SSM port-forwarding. This app answers a different question: how does an application workload connect to that same cluster from inside the VPC?
+The neo4j-ee stack deploys its cluster in private subnets behind an internal NLB with no public IPs. [`docs/PRIVATE.md`](../docs/PRIVATE.md) covers how to connect a laptop via SSM port-forwarding. This app answers a different question: how does an application workload connect to that same cluster from inside the VPC?
 
 For the full architecture, security group wiring, and design decisions behind this pattern, see [`APP_GUIDE.md`](../APP_GUIDE.md).
 

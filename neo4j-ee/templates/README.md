@@ -23,6 +23,4 @@ python templates/build.py
 
 ## Source partials (src/)
 
-`neo4j.template.yaml` — copy of the current monolithic template, kept as reference for Phase 2 extraction. Once all partials are extracted and the build system is confirmed, this file will be removed.
-
-Phase 2 will introduce individual partial files (`parameters-common.yaml`, `iam.yaml`, `security-groups.yaml`, `userdata.sh`, etc.) as the monolithic template is decomposed. See `marketplace-split-plan.md` for the full plan.
+`neo4j.template.yaml` is a copy of the original monolithic template kept for reference. It will be removed once the partial-based build is confirmed stable.

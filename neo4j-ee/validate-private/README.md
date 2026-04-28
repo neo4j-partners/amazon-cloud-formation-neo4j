@@ -2,7 +2,7 @@
 
 Operator tooling for Neo4j EE Private-mode stacks. All commands run from this directory (`neo4j-ee/validate-private/`).
 
-For a full operator walkthrough, see [`../OPERATOR_GUIDE.md`](../OPERATOR_GUIDE.md).
+For a full operator walkthrough, see [`../docs/PRIVATE.md`](../docs/PRIVATE.md).
 
 ---
 

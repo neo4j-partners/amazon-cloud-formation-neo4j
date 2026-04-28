@@ -82,6 +82,7 @@ def parse_args():
     p.add_argument("--subnet-3", metavar="SUBNET_ID", default="")
     p.add_argument("--create-vpc-endpoints", default="true", choices=["true", "false"])
     p.add_argument("--existing-endpoint-sg-id", metavar="SG_ID", default="")
+    p.add_argument("--disk-size", type=int, metavar="GB", help="Data volume size in GB (default: 100, min: 100, max: 65536)")
     p.add_argument(
         "--vpc-file", metavar="PATH",
         help="Path to vpc-*.txt from scripts/create-test-vpc.py. "
@@ -351,6 +352,8 @@ def main():
         cfn_params.append({"ParameterKey": "ImageId", "ParameterValue": ssm_param_path})
     if args.alert_email:
         cfn_params.append({"ParameterKey": "AlertEmail", "ParameterValue": args.alert_email})
+    if args.disk_size is not None:
+        cfn_params.append({"ParameterKey": "DataDiskSize", "ParameterValue": str(args.disk_size)})
     if args.mode == "ExistingVpc":
         cfn_params += [
             {"ParameterKey": "VpcId",            "ParameterValue": args.vpc_id},
@@ -510,7 +513,7 @@ def main():
     print()
     print(f"Outputs saved to {outputs_file}")
     print()
-    print(f"To test:      cd test_neo4j && uv run test-neo4j --edition ee --stack {stack_name}")
+    print(f"To test:      cd ../test_neo4j && uv run test-neo4j --edition ee --stack {stack_name}")
     print(f"To tear down: ./teardown.sh {stack_name}")
 
 

@@ -22,6 +22,15 @@
       - CreateCluster
       - !Sub '${Neo4jNode1DataVolume},${Neo4jNode2DataVolume},${Neo4jNode3DataVolume}'
       - !Ref Neo4jNode1DataVolume
+  Neo4jPasswordSecretArn:
+    Description: >-
+      Secrets Manager ARN holding the Neo4j admin password. The plaintext
+      password is deliberately not exposed as a CFN Output — reading it
+      requires separate secretsmanager:GetSecretValue IAM on this ARN.
+    Value: !Ref Neo4jPasswordSecret
+  Neo4jPasswordRetrieveCommand:
+    Description: "Copy-paste CLI to retrieve the Neo4j password from Secrets Manager."
+    Value: !Sub "aws secretsmanager get-secret-value --secret-id ${Neo4jPasswordSecret} --query SecretString --output text --region ${AWS::Region}"
   Username:
     Description: 'The username is neo4j.'
     Value: 'neo4j'

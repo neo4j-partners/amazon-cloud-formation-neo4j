@@ -22,9 +22,10 @@
     Properties:
       AvailabilityZone: !Select [0, Fn::GetAZs: !Ref 'AWS::Region']
       Size: !Ref DataDiskSize
+      SnapshotId: !If [HasNode1Snapshot, !Ref Node1SnapshotId, !Ref 'AWS::NoValue']
       VolumeType: gp3
-      Iops: 3000
-      Throughput: 125
+      Iops: 4000
+      Throughput: 250
       Encrypted: true
       KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
       Tags:
@@ -48,8 +49,8 @@
       AvailabilityZone: !Select [1, Fn::GetAZs: !Ref 'AWS::Region']
       Size: !Ref DataDiskSize
       VolumeType: gp3
-      Iops: 3000
-      Throughput: 125
+      Iops: 4000
+      Throughput: 250
       Encrypted: true
       KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
       Tags:
@@ -73,8 +74,8 @@
       AvailabilityZone: !Select [2, Fn::GetAZs: !Ref 'AWS::Region']
       Size: !Ref DataDiskSize
       VolumeType: gp3
-      Iops: 3000
-      Throughput: 125
+      Iops: 4000
+      Throughput: 250
       Encrypted: true
       KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
       Tags:

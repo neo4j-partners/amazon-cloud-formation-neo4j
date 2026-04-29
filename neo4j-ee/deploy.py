@@ -83,6 +83,7 @@ def parse_args():
     p.add_argument("--create-vpc-endpoints", default="true", choices=["true", "false"])
     p.add_argument("--existing-endpoint-sg-id", metavar="SG_ID", default="")
     p.add_argument("--disk-size", type=int, metavar="GB", help="Data volume size in GB (default: 100, min: 100, max: 65536)")
+    p.add_argument("--snapshot-id", metavar="SNAPSHOT_ID", help="Snapshot ID to restore Node 1 data volume from (must match --disk-size)")
     p.add_argument(
         "--vpc-file", metavar="PATH",
         help="Path to vpc-*.txt from scripts/create-test-vpc.py. "
@@ -354,6 +355,8 @@ def main():
         cfn_params.append({"ParameterKey": "AlertEmail", "ParameterValue": args.alert_email})
     if args.disk_size is not None:
         cfn_params.append({"ParameterKey": "DataDiskSize", "ParameterValue": str(args.disk_size)})
+    if args.snapshot_id:
+        cfn_params.append({"ParameterKey": "Node1SnapshotId", "ParameterValue": args.snapshot_id})
     if args.mode == "ExistingVpc":
         cfn_params += [
             {"ParameterKey": "VpcId",            "ParameterValue": args.vpc_id},

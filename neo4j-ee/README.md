@@ -1,20 +1,36 @@
 # Neo4j Enterprise Edition: AWS CloudFormation
 
-CloudFormation templates and tooling for the Neo4j Enterprise Edition AWS Marketplace listing. Supports single-instance and three-node cluster deployments fronted by a Network Load Balancer. Three topologies are available: public new VPC, private new VPC, and private existing VPC.
+CloudFormation templates and operator tooling for the Neo4j Enterprise Edition AWS Marketplace listing. Each template deploys a one or three-node Neo4j cluster fronted by a Network Load Balancer. Every node runs in a dedicated Auto Scaling group for self-healing, with a GP3 EBS data volume that is retained across stack deletion. Bolt TLS is optional on all three templates. Three topologies are available to match different infrastructure requirements: a public new-VPC deployment for evaluation, a private new-VPC deployment for production, and a private deployment into an existing VPC for environments with pre-existing network infrastructure.
 
 ---
 
-## Which template should I use?
+## Templates
 
-| Your situation | Template | Guide |
-|---|---|---|
-| Proof of concept, demo, or evaluation | Public | [docs/PUBLIC.md](docs/PUBLIC.md) |
-| Production or staging, new VPC | Private | [docs/PRIVATE.md](docs/PRIVATE.md) |
-| Production or staging, existing VPC | Private, Existing VPC | [docs/PRIVATE-EXISTING-VPC.md](docs/PRIVATE-EXISTING-VPC.md) |
+| Template | Topology | Use case | Guide |
+|---|---|---|---|
+| **Public** | New VPC, public subnets, internet-facing NLB | Proof of concept, demos, and evaluation. Instances have public IPs; no bastion required. Direct Bolt and Browser access from `AllowedCIDR`. | [docs/PUBLIC.md](docs/PUBLIC.md) |
+| **Private** | New VPC, private subnets, internal NLB, SSM bastion | Production and staging where AWS manages the VPC. Instances have no public IPs; operator access via SSM Session Manager port forwarding through a dedicated bastion. | [docs/PRIVATE.md](docs/PRIVATE.md) |
+| **Private, Existing VPC** | Your VPC, private subnets, internal NLB, SSM bastion | Production into a pre-existing network: peered VPC, Transit Gateway, or Direct Connect. No VPC or NAT provisioning; requires caller-supplied VPC and subnet IDs. | [docs/PRIVATE-EXISTING-VPC.md](docs/PRIVATE-EXISTING-VPC.md) |
 
 ---
 
-## Quick Start
+## Sample Application
+
+[`sample-private-app/`](sample-private-app/README.md) is a worked example of connecting an application workload to a Private-mode cluster. It covers the platform contract the EE stack publishes, the security group wiring required to reach the VPC interface endpoints, two Python 3.13 Lambdas behind IAM-authenticated Function URLs, and a resilience test that stops and restarts a follower via SSM.
+
+---
+
+## For Marketplace Users
+
+Deploy from the AWS Marketplace listing. Once the stack is complete, the guide for your topology covers prerequisites, accessing the cluster, retrieving the password, observability checks, and tear down:
+
+- **Public:** [docs/PUBLIC.md — General Operator Guide](docs/PUBLIC.md#general-operator-guide)
+- **Private:** [docs/PRIVATE.md — General Operator Guide](docs/PRIVATE.md#general-operator-guide)
+- **Private, Existing VPC:** [docs/PRIVATE-EXISTING-VPC.md — General Operator Guide](docs/PRIVATE-EXISTING-VPC.md#general-operator-guide)
+
+---
+
+## Local Development
 
 All scripts read `AWS_PROFILE` from the environment and fall back to the `default` profile:
 
@@ -67,38 +83,6 @@ Multiple deployments can coexist; each gets its own file in `.deploy/`.
 
 ---
 
-## Common Utilities
-
-### Observability Checks
-
-Verifies CloudWatch agent, application log streams, VPC flow logs, failed-auth alarm, and CloudTrail:
-
-```bash
-./test-observability.sh                   # most recent deployment
-./test-observability.sh <stack-name>      # specific deployment
-./test-observability.sh --step <name>     # single step (cloudwatch, logs, flowlogs, alarm, cloudtrail)
-```
-
-The `alarm` step takes up to 7 minutes. All others complete in under a minute.
-
-### Private and Existing-VPC Validation
-
-Full operator tooling for private-mode stacks lives in `validate-private/`:
-
-```bash
-cd validate-private
-./scripts/preflight.sh              # 11 checks: stack, bastion, VPC endpoints
-uv run validate-private             # cluster validation
-uv run admin-shell                  # interactive cypher-shell via bastion
-uv run run-cypher '<cypher>'        # one-off Cypher query
-./scripts/smoke-write.sh            # write smoke test
-./scripts/browser-tunnel.sh         # port-forward to Neo4j Browser
-```
-
-See [the Operator Guide in docs/PRIVATE.md](docs/PRIVATE.md#operator-guide) for the full workflow and troubleshooting reference.
-
----
-
 ## Modifying Templates
 
 The three output templates are assembled from source partials in `templates/src/`. Edit the partials, then regenerate:
@@ -116,25 +100,9 @@ python build.py --verify
 
 ---
 
-## Template Guides
-
-| Guide | What it covers |
-|---|---|
-| [docs/PUBLIC.md](docs/PUBLIC.md) | POC and demo deployments: public subnets, internet-facing NLB, direct access |
-| [docs/PRIVATE.md](docs/PRIVATE.md) | Production deployments: private subnets, internal NLB, bastion access, Bolt TLS, full validation suite |
-| [docs/PRIVATE-EXISTING-VPC.md](docs/PRIVATE-EXISTING-VPC.md) | Production deployments into an existing VPC: same cluster and bastion design, no VPC or NAT provisioning |
-
----
-
-## For Application Developers
-
-[APP_GUIDE.md](APP_GUIDE.md) covers building applications that connect to a private cluster: the SSM platform contract, VPC endpoint wiring, Lambda connection patterns, and CDK deployment examples.
-
----
-
 ## Marketplace Reference
 
-[marketplace-reference.md](marketplace-reference.md) covers the AWS Marketplace listing, AMI build process, and publishing workflow.
+[docs/marketplace-reference.md](docs/marketplace-reference.md) covers the CloudFormation best practices required for the AWS Marketplace listing: security group patterns, IAM scoping, IMDSv2, AMI parameter type, and the full requirements checklist.
 
 ---
 

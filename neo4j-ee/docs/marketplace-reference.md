@@ -1,6 +1,6 @@
 # Neo4j EE Marketplace: Architecture and CloudFormation Requirements
 
-Reference document for the three-template split. Covers the recommended architecture for each template, the design decisions behind them, and the CloudFormation requirements AWS Marketplace enforces.
+Reference document for the three-template split. Covers the key design decisions behind each template and the CloudFormation requirements AWS Marketplace enforces. For a description of each template's topology and target use case, see the [README](../README.md#templates).
 
 ---
 
@@ -12,39 +12,9 @@ AWS Marketplace explicitly requires end-to-end encryption for network traffic. F
 >
 > — [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html)
 
-A security group `AllowedCIDR` restriction does not satisfy this requirement. It controls which source IPs can initiate a connection at the AWS network layer, but it does not encrypt traffic. An attacker controlling any network hop between the buyer's client and the EC2 instance — ISP, corporate router, VPN exit node — can read Neo4j credentials, Cypher queries, and query results in plaintext. This is true even when `AllowedCIDR` is locked to a single `/32` address.
+A security group `AllowedCIDR` restriction does not satisfy this requirement. It controls which source IPs can initiate a connection at the AWS network layer, but it does not encrypt traffic. An attacker controlling any network hop between the buyer's client and the EC2 instance, including ISPs, corporate routers, and VPN exit nodes, can read Neo4j credentials, Cypher queries, and query results in plaintext. This is true even when `AllowedCIDR` is locked to a single `/32` address.
 
 The practical consequence for this listing: plain HTTP on port 7474 and unencrypted `neo4j://` Bolt on port 7687 do not meet the Marketplace standard. TLS must be enabled on both ports for any deployment topology intended for production use.
-
----
-
-## Three Templates, Three Resource Topologies
-
-AWS Marketplace allows up to three CloudFormation templates per AMI-based product listing. Using all three slots is only justified when the templates represent genuinely different infrastructure footprints. Each of the three Neo4j EE templates passes that test because the resource sets they create are structurally distinct, not parameter variations of each other.
-
-### Template 1: Public
-
-Creates a VPC, public subnets, an internet gateway, and an internet-facing Network Load Balancer. Instances sit in public subnets. No NAT gateways, no private subnets, no bastion, no VPC endpoints.
-
-Target buyer: proof of concept, demos, and short-lived evaluation clusters. The template description must make clear that the database is reachable from outside the buyer's network perimeter and that this topology is not appropriate for production.
-
-TLS parameters (`BoltCertificateSecretArn`, `BoltAdvertisedDNS`) are absent. Certificate management adds friction that evaluation deployments do not need and that buyers in this mode are unlikely to have in place.
-
-### Template 2: Private
-
-Creates a VPC, public subnets that carry NAT gateways, private subnets that carry the cluster nodes, VPC interface endpoints for Systems Manager and Secrets Manager, an SSM-connected bastion with no ingress rules, and an internal Network Load Balancer. Instances have no public IP addresses.
-
-Target buyer: production and staging deployments where the buyer wants AWS to handle VPC setup and is willing to accept the template's network layout.
-
-TLS parameters are present as optional fields. Production and regulated workloads frequently require TLS on the Bolt port; omitting the option would make this template unsuitable for its target buyer.
-
-### Template 3: Private, Existing VPC
-
-Accepts an existing VPC and existing private subnets. Creates the cluster nodes, internal NLB, security groups, IAM role, and Auto Scaling groups. Creates nothing related to VPC setup: no VPC, no subnets, no internet gateway, no NAT gateways, no route tables.
-
-Target buyer: enterprises with pre-existing VPC infrastructure, often connected to on-premises networks via Direct Connect or VPN, where a separate network team controls which VPCs and subnets applications may use. These buyers cannot accept a template that creates a new VPC with a hardcoded CIDR.
-
-TLS parameters are present as optional fields, for the same reasons as Template 2.
 
 ---
 
@@ -52,21 +22,21 @@ TLS parameters are present as optional fields, for the same reasons as Template 
 
 ### TLS availability
 
-TLS is available in Templates 2 and 3. It is not available in Template 1. The split follows security posture, not networking complexity. Public mode targets evaluation deployments where TLS adds friction without meaningful benefit. Both private templates target production workloads where TLS is a legitimate requirement.
+TLS parameters (`BoltCertificateSecretArn`, `BoltAdvertisedDNS`) are present in all three templates as optional fields that default to empty. Both private templates highlight TLS in their operator guides because production and regulated workloads commonly require it. The public template includes the same parameters for buyers who choose to enable TLS on an evaluation deployment.
 
 ### AllowedCIDR default
 
 Template 2 defaults `AllowedCIDR` to `10.0.0.0/16` because it creates that VPC. Template 3 has no default. Any CIDR default in Template 3 is likely wrong for most enterprise buyers because their VPC CIDR is unknown to the template. A wrong default silently misconfigures the security group. The parameter description instructs the buyer to enter their VPC CIDR explicitly, with examples (`10.0.0.0/16`, `172.16.0.0/12`).
 
-### Bastion in Template 3
+### Operator bastion in private templates
 
-Template 3 creates a bastion instance reachable only through AWS Systems Manager Session Manager. It has no ingress rules. The bastion is not optional because buyers deploying into an existing VPC may have network topologies where no other path exists to reach the internal NLB. The template description must explain that the bastion is created, what it does, and that it uses SSM rather than SSH. Buyers in environments with strict instance provisioning policies need this information before they launch.
+Both Template 2 and Template 3 create a `t4g.nano` bastion instance reachable only through AWS Systems Manager Session Manager. It has no ingress rules. The bastion is not optional: the NLB is internal and cluster nodes have no public IPs, so there is no direct path from an operator's machine without it. Template descriptions must explain that the bastion is created, what it does, and that it uses SSM rather than SSH. Buyers in environments with strict instance provisioning policies need this information before they launch.
 
 ### VPC endpoint creation in Template 3
 
 Template 2 creates VPC interface endpoints for Systems Manager and Secrets Manager inside the VPC it creates. Template 3 deploys into a buyer-controlled VPC that may already have those endpoints. Creating a duplicate endpoint fails the deployment.
 
-Two boolean parameters, `CreateSSMEndpoint` and `CreateSecretsManagerEndpoint`, both default to true. A buyer whose VPC already has centralized endpoint management sets the relevant parameter to false. The parameter description states plainly: set this to false if your VPC already has the endpoint, otherwise the deployment will fail with a duplicate resource error.
+A single boolean parameter, `CreateVpcEndpoints`, defaults to `true`. When set to `false`, the caller supplies an existing endpoint security group via `ExistingEndpointSgId`. The parameter description states plainly: set this to `false` if your VPC already has these endpoints, otherwise the deployment will fail with a duplicate resource error.
 
 ### NumberOfServers
 
@@ -96,7 +66,7 @@ EC2 instances must use an IAM role, not long-term access keys. Each permission m
 - CloudFormation signaling: restrict to the current stack ARN using `!Sub`.
 - EBS operations (`ec2:AttachVolume`, `ec2:DescribeVolumes`, `ec2:DescribeInstances`): resource `*` is acceptable because EBS volumes lack ARN-level scoping on all relevant APIs.
 - Auto Scaling discovery (`autoscaling:DescribeAutoScalingGroups`): required for cluster node discovery; resource `*` is unavoidable.
-- Secrets Manager (`secretsmanager:GetSecretValue`): restrict to the specific secret ARN when TLS is enabled using `!If [BoltTLSEnabled, !Ref BoltCertificateSecretArn, !Ref AWS::NoValue]`.
+- Secrets Manager (`secretsmanager:GetSecretValue`): always scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`); additionally scoped to the Bolt TLS cert ARN when TLS is enabled using `!If [BoltTLSEnabled, !Ref BoltCertificateSecretArn, !Ref AWS::NoValue]`.
 
 ### Auto Scaling groups for all topologies
 
@@ -135,16 +105,27 @@ For single-node deployments, one NAT gateway in one public subnet is sufficient.
 
 ### Password handling
 
-The `Password` parameter must carry `NoEcho: true` so it does not appear in the CloudFormation console or event log. Apply a pattern that enforces minimum complexity:
+The `Password` parameter must carry `NoEcho: true` so it does not appear in the CloudFormation console or event log. Restrict `AllowedPattern` to alphanumerics only; lookahead-based patterns that admit arbitrary characters permit shell metacharacters (`$`, `` ` ``, `\`, `;`, `|`) which are evaluated inside double-quoted bash assignments and can execute arbitrary code as root at boot:
 
 ```yaml
 Password:
   Type: String
   NoEcho: true
   MinLength: 8
-  AllowedPattern: '^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$'
-  ConstraintDescription: Must be at least 8 characters and contain both letters and numbers.
+  AllowedPattern: '^[a-zA-Z0-9]{8,}$'
+  ConstraintDescription: Must be at least 8 characters and contain only letters and numbers (no special characters).
 ```
+
+The password must not appear in the EC2 LaunchTemplate UserData. `NoEcho: true` only hides the value in CloudFormation API responses; it has no effect on UserData, which is stored in plaintext (base64-encoded) in the LaunchTemplate and is readable by any IAM principal with `ec2:DescribeLaunchTemplateVersions`. Instead, store the parameter value in a Secrets Manager secret and have the instance retrieve it at boot after the error trap is set:
+
+```bash
+password=$(aws secretsmanager get-secret-value \
+  --secret-id "neo4j/${stackName}/password" \
+  --query SecretString --output text \
+  --region "${region}")
+```
+
+The instance IAM role must have `secretsmanager:GetSecretValue` scoped to the password secret ARN.
 
 ### Parameter grouping metadata
 
@@ -178,25 +159,6 @@ Metadata:
 ### Architectural diagrams
 
 Each template requires a separate diagram submitted to the Marketplace seller portal. Dimensions: 1100x700 pixels. Use current AWS service icons. The diagram must accurately represent what that template deploys: a diagram showing NAT gateways and VPC endpoints is incorrect for the Public template; a diagram showing VPC creation is incorrect for the Existing VPC template.
-
----
-
-## Marketplace Requirements Checklist
-
-- [ ] No application ports open to `0.0.0.0/0`; `AllowedCIDR` parameter rejects it via `AllowedPattern`
-- [ ] No SSH port (22) ingress in any security group; operator access via SSM Session Manager only
-- [ ] IAM role uses specific actions and scoped resource ARNs; no wildcard permissions
-- [ ] All EC2 instances launched through Auto Scaling groups, including single-node deployments
-- [ ] AZs selected dynamically via `Fn::GetAZs`; no hardcoded AZ names
-- [ ] `HttpTokens: required` in LaunchTemplate metadata options (IMDSv2 enforcement)
-- [ ] `ImageId` uses `AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>` type for region portability
-- [ ] NAT gateways used for private subnet outbound; no NAT instances
-- [ ] `Password` parameter carries `NoEcho: true`
-- [ ] Default CIDR values do not allow ingress to database ports from the public internet
-- [ ] `AWS::CloudFormation::Interface` metadata groups parameters by concern
-- [ ] Each template has a separate architectural diagram (1100x700 pixels, accurate to that template's resource set)
-- [ ] All three generated templates pass `cfn-lint` before submission
-- [ ] Templates tested across at least `us-east-1`, `us-west-2`, `eu-west-1`, and `ap-southeast-1`
 
 ---
 

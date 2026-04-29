@@ -53,11 +53,11 @@ Parameters:
   Password:
     Description: >
       Password for the neo4j admin user. Must be at least 8 characters
-      and contain both letters and numbers.
+      and contain only letters and numbers.
     Type: String
     MinLength: 8
-    AllowedPattern: ^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$
-    ConstraintDescription: Must be at least 8 characters and contain both letters and numbers.
+    AllowedPattern: ^[a-zA-Z0-9]{8,}$
+    ConstraintDescription: Must be at least 8 characters and contain only letters and numbers (no special characters).
     NoEcho: true
   NumberOfServers:
     Description: Number of EC2 instances to deploy
@@ -114,6 +114,12 @@ Parameters:
     AllowedValues:
       - 'true'
       - 'false'
+  Node1SnapshotId:
+    Description: >-
+      Optional. Snapshot ID to restore Node 1's data volume from. Leave blank
+      to create a fresh empty volume. DataDiskSize must be >= the snapshot size.
+    Type: String
+    Default: ''
 
   BoltCertificateSecretArn:
     Type: String
@@ -152,6 +158,7 @@ Conditions:
       - ''
   BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
   HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
+  HasNode1Snapshot: !Not [!Equals [!Ref Node1SnapshotId, '']]
 
 Resources:
   Neo4jInstanceProfile:
@@ -220,6 +227,10 @@ Resources:
                     - secretsmanager:GetSecretValue
                   Resource: !Ref BoltCertificateSecretArn
                 - !Ref AWS::NoValue
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref Neo4jPasswordSecret
 
   Neo4jNLBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -344,9 +355,10 @@ Resources:
     Properties:
       AvailabilityZone: !Select [0, Fn::GetAZs: !Ref 'AWS::Region']
       Size: !Ref DataDiskSize
+      SnapshotId: !If [HasNode1Snapshot, !Ref Node1SnapshotId, !Ref 'AWS::NoValue']
       VolumeType: gp3
-      Iops: 3000
-      Throughput: 125
+      Iops: 4000
+      Throughput: 250
       Encrypted: true
       KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
       Tags:
@@ -370,8 +382,8 @@ Resources:
       AvailabilityZone: !Select [1, Fn::GetAZs: !Ref 'AWS::Region']
       Size: !Ref DataDiskSize
       VolumeType: gp3
-      Iops: 3000
-      Throughput: 125
+      Iops: 4000
+      Throughput: 250
       Encrypted: true
       KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
       Tags:
@@ -395,8 +407,8 @@ Resources:
       AvailabilityZone: !Select [2, Fn::GetAZs: !Ref 'AWS::Region']
       Size: !Ref DataDiskSize
       VolumeType: gp3
-      Iops: 3000
-      Throughput: 125
+      Iops: 4000
+      Throughput: 250
       Encrypted: true
       KmsKeyId: !If [HasDataVolumeCmk, !Ref DataVolumeKmsKeyId, !Ref AWS::NoValue]
       Tags:
@@ -576,9 +588,6 @@ Resources:
             - - "#!/bin/bash\n"
               - "set -euo pipefail\n"
               - "echo Running startup script...\n"
-              - "password=\""
-              - Ref: Password
-              - "\"\n"
               - "nodeCount="
               - Ref: NumberOfServers
               - "\n"
@@ -607,6 +616,11 @@ Resources:
                 _instance_id=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169.254/latest/meta-data/instance-id)
                 logicalId=$(aws ec2 describe-tags --region "$region" --filters "Name=resource-id,Values=${_instance_id}" "Name=key,Values=aws:cloudformation:logical-id" --query "Tags[0].Value" --output text 2>/dev/null || true)
                 trap 'if [[ -n "${logicalId:-}" ]]; then cfn-signal --success false --stack "$stackName" --resource "$logicalId" --region "$region"; fi' ERR
+
+                password=$(aws secretsmanager get-secret-value \
+                  --secret-id "neo4j/${stackName}/password" \
+                  --query SecretString --output text \
+                  --region "${region}")
 
                 set_neo4j_conf() {
                   local conf=/etc/neo4j/neo4j.conf
@@ -1167,6 +1181,18 @@ Resources:
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       VpcId: !Ref Neo4jVPC
 
+  Neo4jPasswordSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'neo4j/${AWS::StackName}/password'
+      Description: !Sub 'Neo4j admin password for stack ${AWS::StackName}'
+      SecretString: !Ref Password
+      Tags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
   Neo4jFlowLogsGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -1278,6 +1304,15 @@ Outputs:
       - CreateCluster
       - !Sub '${Neo4jNode1DataVolume},${Neo4jNode2DataVolume},${Neo4jNode3DataVolume}'
       - !Ref Neo4jNode1DataVolume
+  Neo4jPasswordSecretArn:
+    Description: >-
+      Secrets Manager ARN holding the Neo4j admin password. The plaintext
+      password is deliberately not exposed as a CFN Output — reading it
+      requires separate secretsmanager:GetSecretValue IAM on this ARN.
+    Value: !Ref Neo4jPasswordSecret
+  Neo4jPasswordRetrieveCommand:
+    Description: "Copy-paste CLI to retrieve the Neo4j password from Secrets Manager."
+    Value: !Sub "aws secretsmanager get-secret-value --secret-id ${Neo4jPasswordSecret} --query SecretString --output text --region ${AWS::Region}"
   Username:
     Description: 'The username is neo4j.'
     Value: 'neo4j'

@@ -5,6 +5,11 @@ _instance_id=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169
 logicalId=$(aws ec2 describe-tags --region "$region" --filters "Name=resource-id,Values=${_instance_id}" "Name=key,Values=aws:cloudformation:logical-id" --query "Tags[0].Value" --output text 2>/dev/null || true)
 trap 'if [[ -n "${logicalId:-}" ]]; then cfn-signal --success false --stack "$stackName" --resource "$logicalId" --region "$region"; fi' ERR
 
+password=$(aws secretsmanager get-secret-value \
+  --secret-id "neo4j/${stackName}/password" \
+  --query SecretString --output text \
+  --region "${region}")
+
 set_neo4j_conf() {
   local conf=/etc/neo4j/neo4j.conf
   sed -i "s|^#\?$1=.*|$1=$2|" "$conf"

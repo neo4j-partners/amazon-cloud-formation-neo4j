@@ -127,7 +127,7 @@ hdr "Step 1: CloudWatch Agent Status (SSM)"
 COMMAND_ID=$(aws ssm send-command \
   --document-name "AWS-RunShellScript" \
   --parameters 'commands=["systemctl is-active amazon-cloudwatch-agent"]' \
-  --targets "Key=tag:aws:cloudformation:stack-name,Values=${STACK_NAME}" \
+  --targets "Key=tag:Role,Values=neo4j-cluster-node" \
   --region "${REGION}" \
   --query "Command.CommandId" \
   --output text 2>/dev/null || echo "")
@@ -269,10 +269,9 @@ fi
 # Send 12 authentication requests with the wrong password to trigger the metric filter.
 # The Neo4j HTTP transactional API returns 401 and writes "Failed to log in" to security.log.
 info "Sending 12 failed authentication requests to ${NEO4J_HOST}:7474..."
-BAD_PASSWORD="ObsTest_WrongPassword_$(date +%s)"
 for i in $(seq 1 12); do
   curl -s -o /dev/null \
-    -u "neo4j:${BAD_PASSWORD}" \
+    -u "obstest_${i}_${RANDOM}:WrongPassword" \
     -H "Content-Type: application/json" \
     -d '{"statements":[{"statement":"RETURN 1"}]}' \
     "http://${NEO4J_HOST}:7474/db/neo4j/tx" \

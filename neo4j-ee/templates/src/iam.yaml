@@ -64,6 +64,10 @@
                     - secretsmanager:GetSecretValue
                   Resource: !Ref BoltCertificateSecretArn
                 - !Ref AWS::NoValue
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref Neo4jPasswordSecret
 
   Neo4jBastionRole:
     Type: AWS::IAM::Role

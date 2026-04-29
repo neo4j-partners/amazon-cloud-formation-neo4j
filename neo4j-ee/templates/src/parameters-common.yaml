@@ -4,11 +4,11 @@
   Password:
     Description: >
       Password for the neo4j admin user. Must be at least 8 characters
-      and contain both letters and numbers.
+      and contain only letters and numbers.
     Type: String
     MinLength: 8
-    AllowedPattern: ^(?=.*[a-zA-Z])(?=.*[0-9]).{8,}$
-    ConstraintDescription: Must be at least 8 characters and contain both letters and numbers.
+    AllowedPattern: ^[a-zA-Z0-9]{8,}$
+    ConstraintDescription: Must be at least 8 characters and contain only letters and numbers (no special characters).
     NoEcho: true
   NumberOfServers:
     Description: Number of EC2 instances to deploy
@@ -65,3 +65,9 @@
     AllowedValues:
       - 'true'
       - 'false'
+  Node1SnapshotId:
+    Description: >-
+      Optional. Snapshot ID to restore Node 1's data volume from. Leave blank
+      to create a fresh empty volume. DataDiskSize must be >= the snapshot size.
+    Type: String
+    Default: ''

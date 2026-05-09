@@ -123,7 +123,7 @@ If the bastion SSM check fails immediately after a fresh deploy, the bastion Use
 
 All operator access goes through the `t4g.nano` bastion via SSM. Tunnels are only needed when your laptop talks to the NLB directly. Run `uv run` commands from `neo4j-ee/validate-private/`.
 
-`CreatePrivateDns=true` makes `AdvertisedDNS` resolve inside the VPC, so bastion-run tools such as `admin-shell`, `run-cypher`, `validate-private`, and `smoke-write.sh` need no local DNS changes. It does not change your laptop resolver. For local SSM port-forward tunnels, keep the `/etc/hosts` entry so `AdvertisedDNS` resolves to `127.0.0.1` and the NLB certificate SAN still validates.
+`CreatePrivateDns=true` makes `AdvertisedDNS` resolve inside the VPC, so bastion-run tools such as `admin-shell`, `run-cypher`, `validate-private`, and `smoke-write.sh` need no local DNS changes. It does not change your laptop resolver. For local SSM port-forward tunnels, keep the `/etc/hosts` entry so `AdvertisedDNS` resolves to `127.0.0.1` and the connection still uses the certificate name rather than `localhost`.
 
 | Tool | How it connects | Tunnel needed? |
 |---|---|---|
@@ -142,9 +142,9 @@ Use the Bolt tunnel when you want to connect a local driver, client tool, or scr
 ./scripts/bolt-tunnel.sh      # localhost:7687 → NLB:7687  (blocks; Ctrl-C to close)
 ```
 
-- **Connect URL:** `neo4j+s://<AdvertisedDNS>:7687`
-- **Required hosts entry for laptop tunnels:** `127.0.0.1 <AdvertisedDNS>` in `/etc/hosts` — the NLB's ACM cert SAN matches `AdvertisedDNS`, so connecting to `localhost` fails TLS validation. Stack-managed private DNS helps clients inside the VPC; it does not affect local laptop DNS.
-- **Bypass routing table:** use `bolt+s://` instead of `neo4j+s://`. With `neo4j+s://` the routing table contains `AdvertisedDNS` itself, which resolves back to `localhost` via the hosts entry and works through the same tunnel
+- **Connect URL:** `neo4j+s://<AdvertisedDNS>:7687` for a certificate trusted by the client, or `neo4j+ssc://<AdvertisedDNS>:7687` for self-signed test certificates
+- **Required hosts entry for laptop tunnels:** `127.0.0.1 <AdvertisedDNS>` in `/etc/hosts` — the NLB-presented certificate is issued for `AdvertisedDNS`, so connecting to `localhost` fails hostname validation for trusted certs. Stack-managed private DNS helps clients inside the VPC; it does not affect local laptop DNS.
+- **Bypass routing table:** use `bolt+s://` instead of `neo4j+s://`, or `bolt+ssc://` instead of `neo4j+ssc://` for self-signed tests. With `neo4j+s://` or `neo4j+ssc://`, the routing table contains `AdvertisedDNS` itself, which resolves back to `localhost` via the hosts entry and works through the same tunnel
 - **Also required for Neo4j Browser:** open this tunnel alongside the [Browser Tunnel](#browser-tunnel)
 
 ### Browser Tunnel
@@ -167,7 +167,9 @@ Use this to open the Neo4j Browser web UI. The browser makes two connections: HT
 ./scripts/bolt-tunnel.sh      # localhost:7687 → NLB:7687  (blocks; Ctrl-C to close)
 ```
 
-Add `127.0.0.1 <AdvertisedDNS>` to your laptop's `/etc/hosts`, then open `https://<AdvertisedDNS>:7473`. When prompted for a connection URL, enter `neo4j+s://<AdvertisedDNS>:7687`. For the password, see [Retrieve the Password](#retrieve-the-password).
+Add `127.0.0.1 <AdvertisedDNS>` to your laptop's `/etc/hosts`, then open `https://<AdvertisedDNS>:7473`. When prompted for a connection URL, enter `neo4j+s://<AdvertisedDNS>:7687`, or `neo4j+ssc://<AdvertisedDNS>:7687` for self-signed test certificates. For the password, see [Retrieve the Password](#retrieve-the-password).
+
+For self-signed test certificates, the browser will still show a certificate warning for `https://<AdvertisedDNS>:7473`; that is expected for local testing. Marketplace/customer deployments should use a certificate trusted by the client.
 
 > **Note:** Connection strings inside Neo4j Browser show `AdvertisedDNS`, which now resolves to `127.0.0.1` for the duration of the tunnel session. Remove the hosts entry when finished.
 
@@ -196,7 +198,7 @@ uv run admin-shell                     # most recent deployment
 uv run admin-shell <stack-name>        # specific deployment
 ```
 
-Opens `cypher-shell` on the bastion with a `neo4j+s://<AdvertisedDNS>:7687` URI. The Neo4j driver fetches the routing table and directs writes to the current leader automatically. The password is resolved on the bastion using the bastion's IAM role. It does not appear on the local machine or in CloudTrail.
+Opens `cypher-shell` on the bastion with `neo4j+s://<AdvertisedDNS>:7687` for trusted certificates, or `neo4j+ssc://<AdvertisedDNS>:7687` when the EE output file has `SelfSignedCertificate=true`. The Neo4j driver fetches the routing table and directs writes to the current leader automatically. The password is resolved on the bastion using the bastion's IAM role. It does not appear on the local machine or in CloudTrail.
 
 ```
 neo4j@neo4j> CREATE (n:Test {msg: "hello"}) RETURN n;
@@ -288,7 +290,7 @@ Every routing table entry points back to `AdvertisedDNS`. A driver connecting wi
 |---|---|---|
 | Same VPC | `neo4j+s://<AdvertisedDNS>:7687` | Full cluster failover. `AdvertisedDNS` should normally resolve to the NLB through Route 53 private DNS. |
 | Peered VPC / Transit Gateway | `neo4j+s://<AdvertisedDNS>:7687` | Same. The NLB DNS resolves to private IPs reachable through the peering route; the Route 53 record can target the NLB hostname. |
-| SSM tunnel | `neo4j+s://<AdvertisedDNS>:7687` (with `127.0.0.1 <AdvertisedDNS>` in `/etc/hosts`) | Routing table returns `AdvertisedDNS` → loops back to the tunnel via the hosts entry. |
+| SSM tunnel | `neo4j+s://<AdvertisedDNS>:7687`, or `neo4j+ssc://<AdvertisedDNS>:7687` for self-signed tests, with `127.0.0.1 <AdvertisedDNS>` in `/etc/hosts` | Routing table returns `AdvertisedDNS` -> loops back to the tunnel via the hosts entry. |
 | Direct node IP | `neo4j+ssc://<node-ip>:7687` | Bypasses NLB; single node, no failover. `+ssc` skips cert validation since the self-signed backend cert is not bound to an IP. |
 
 **`neo4j+s://` through an SSM tunnel relies on `/etc/hosts`.** The driver opens a TLS handshake to `<AdvertisedDNS>:7687`. The hosts entry resolves that to `127.0.0.1`, so the tunnel terminates the connection at the NLB. The NLB presents the ACM cert; the cert's SAN matches `AdvertisedDNS`, so the driver validates successfully. The server then returns a routing table containing `<AdvertisedDNS>:7687`, and the driver loops back through the same tunnel for subsequent connections. No custom Python resolver is needed.
@@ -417,7 +419,7 @@ cd neo4j-ee
 ./certificate.py --region us-east-2 --domain-name neo4j.test.local --self-signed
 ```
 
-This is instant. The trade-off: clients must connect with `neo4j+ssc://` (skip cert validation) instead of `neo4j+s://`. The `validate-private` suite and all SSM-based tools are unaffected. In-VPC applications still need `AdvertisedDNS` to resolve. Private mode creates that private DNS record by default unless you pass `--no-create-private-dns`. The sample app detects `certificate.py --self-signed` deployments from the EE output file and switches to `neo4j+ssc://` automatically.
+This is instant. The trade-off: clients must connect with `neo4j+ssc://` (skip cert validation) instead of `neo4j+s://`. `deploy.py` records `SelfSignedCertificate=true` in the EE output file when it can match the cert to a local `certificate.py --self-signed` cert file, and the `validate-private` suite, `admin-shell`, `run-cypher`, and `smoke-write.sh` use `neo4j+ssc://` for those test stacks. In-VPC applications still need `AdvertisedDNS` to resolve. Private mode creates that private DNS record by default unless you pass `--no-create-private-dns`. The sample app also reads the EE output file and switches away from system trust for self-signed test deployments.
 
 **Option B — Real domain with Route 53**
 
@@ -519,7 +521,7 @@ cfn-lint templates/neo4j-private.template.yaml
 ```bash
 cd neo4j-ee/validate-private
 
-./scripts/preflight.sh <stack-name>            # 12 checks: stack, bastion, endpoints
+./scripts/preflight.sh <stack-name>            # 11 checks: stack, bastion, endpoints
 
 uv run validate-private                        # most recent deployment
 uv run validate-private --stack <stack-name>   # specific deployment
@@ -591,7 +593,7 @@ The bastion UserData may still be running in the first 3 minutes after stack cre
 The bastion's IAM role does not have access to the secret or SSM parameter for this stack. The policy scopes to `neo4j/<stack-name>/password` and `/neo4j-ee/<stack-name>/*`. Re-deploying the stack re-creates the policy with the correct scope.
 
 **"NotALeader" error in Neo4j Browser**
-The NLB routed a write to a follower. Use `uv run admin-shell` for writes: `neo4j+s://` routing directs writes to the leader automatically.
+The NLB routed a write to a follower. Use `uv run admin-shell` for writes: `neo4j+s://` or `neo4j+ssc://` routing directs writes to the leader automatically.
 
 **Bastion Python checks fail but SSM is Online**
 The bastion installs Python 3.11 alongside the AL2023 system Python 3.9, with `neo4j` and `boto3` under 3.11. If package installation failed during UserData, reinstall via SSM:

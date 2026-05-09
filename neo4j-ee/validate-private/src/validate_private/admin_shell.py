@@ -16,8 +16,9 @@ log = logging.getLogger(__name__)
 _NEO4J_EE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 _DEPLOY_DIR = _NEO4J_EE_DIR / ".deploy"
 
-# Launcher script that runs ON the bastion. Placeholders __STACK__ and __REGION__
-# are replaced with str.replace before base64 encoding, so no shell expansion is needed.
+# Launcher script that runs ON the bastion. Placeholders __STACK__, __REGION__,
+# and __BOLT_SCHEME__ are replaced before base64 encoding, so no shell expansion
+# is needed.
 _LAUNCHER_TEMPLATE = """\
 #!/bin/bash
 set -euo pipefail
@@ -27,7 +28,7 @@ export NEO4J_PASSWORD=$(aws secretsmanager get-secret-value \\
 ADVERTISED_DNS=$(aws ssm get-parameter \\
   --name '/neo4j-ee/__STACK__/advertised-dns' \\
   --query Parameter.Value --output text --region '__REGION__')
-exec cypher-shell -a "neo4j+s://${ADVERTISED_DNS}:7687" -u neo4j -p "${NEO4J_PASSWORD}"
+exec cypher-shell -a "__BOLT_SCHEME__://${ADVERTISED_DNS}:7687" -u neo4j -p "${NEO4J_PASSWORD}"
 """
 
 
@@ -66,6 +67,7 @@ def main() -> None:
     log.info("  Stack:   %s", config.stack_name)
     log.info("  Region:  %s", config.region)
     log.info("  Bastion: %s", config.bastion_id)
+    log.info("  URI:     %s://%s:7687", config.bolt_scheme, config.advertised_dns)
     log.info("")
     log.info("  Password is resolved on the bastion — not visible here or in CloudTrail.")
     log.info("  Type ':exit' or press Ctrl-D to close the session.")
@@ -77,6 +79,7 @@ def main() -> None:
         _LAUNCHER_TEMPLATE
         .replace("__STACK__", config.stack_name)
         .replace("__REGION__", config.region)
+        .replace("__BOLT_SCHEME__", config.bolt_scheme)
     )
     b64_launcher = base64.b64encode(launcher.encode()).decode()
 

@@ -28,6 +28,7 @@ import argparse
 import os
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -39,7 +40,7 @@ try:
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
-    print("Note: 'requests' not installed — HTTPS check will be skipped (TCP only).")
+    print("Note: 'requests' not installed — requests-based HTTPS check will be skipped.")
 
 
 LOCAL_PORT = 17474   # use a non-standard port to avoid conflicts
@@ -136,20 +137,22 @@ def probe_tunnel(
 
         print(f"  Port open after {result['port_open_after_s']}s")
 
-        # Step 2: TCP-only check — does a full TCP handshake AND data exchange work?
-        # (just connecting is not enough; we need to send/receive bytes)
+        # Step 2: TLS data exchange. A plain HTTP probe is invalid here because
+        # the NLB listener is HTTPS-only.
         try:
+            context = ssl._create_unverified_context()
             with socket.create_connection(("localhost", local_port), timeout=3) as s:
-                s.settimeout(3)
-                s.sendall(b"GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
-                data = s.recv(16)
+                with context.wrap_socket(s, server_hostname=host) as tls:
+                    tls.settimeout(3)
+                    tls.sendall(f"GET / HTTP/1.0\r\nHost: {host}\r\n\r\n".encode())
+                    data = tls.recv(16)
                 if data:
                     result["tcp_only_ok"] = True
-                    print(f"  TCP data exchange: OK ({data[:16]!r})")
+                    print(f"  TLS data exchange: OK ({data[:16]!r})")
                 else:
-                    print("  TCP data exchange: connected but received no data")
+                    print("  TLS data exchange: connected but received no data")
         except Exception as e:
-            print(f"  TCP data exchange: {type(e).__name__}: {e}")
+            print(f"  TLS data exchange: {type(e).__name__}: {e}")
 
         # Step 3: HTTPS check (if requests is available). Certificate validation
         # is intentionally disabled because this diagnostic connects to localhost.
@@ -220,7 +223,7 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--host", help="Remote host to forward to (NLB DNS or IP)")
     p.add_argument("--remote-port", type=int, default=7473, help="Remote port (default: 7473)")
     p.add_argument("--local-port", type=int, default=LOCAL_PORT, help=f"Local port (default: {LOCAL_PORT})")
-    p.add_argument("--region", default="us-east-1")
+    p.add_argument("--region")
     p.add_argument("--stack-file", type=Path,
                    help="Path to .deploy/<stack>.txt — auto-populates --instance, --host, --region")
     p.add_argument("--combo", type=int, default=None,
@@ -266,11 +269,16 @@ def main() -> None:
     if args.stack_file:
         fields = _load_stack_file(args.stack_file)
         host = host or fields.get("Neo4jInternalDNS")
-        region = region or fields.get("Region", "us-east-1")
-        asg_name = fields.get("Neo4jASGName")
-        if not instance_id and asg_name:
-            print(f"Resolving instance from ASG {asg_name}...")
-            instance_id = _get_any_instance(asg_name, region)
+        region = region or fields.get("Region")
+        if not instance_id:
+            instance_id = fields.get("Neo4jOperatorBastionId")
+        if not instance_id:
+            asg_name = fields.get("Neo4jNode1ASGName") or fields.get("Neo4jASGName")
+            if asg_name:
+                print(f"Resolving instance from ASG {asg_name}...")
+                instance_id = _get_any_instance(asg_name, region)
+
+    region = region or "us-east-1"
 
     if not instance_id or not host:
         print("ERROR: --instance and --host are required (or use --stack-file)")
@@ -298,12 +306,15 @@ def main() -> None:
         time.sleep(3)
 
     print("\n\n=== RESULTS ===")
-    print(f"{'Label':<45} {'Port':<6} {'TCP':<5} {'HTTP':<5} {'Note'}")
+    print(f"{'Label':<45} {'Port':<6} {'TLS':<5} {'HTTP':<5} {'Note'}")
     print("-" * 80)
     for r in results:
         port_s = f"{r['port_open_after_s']}s" if r['port_open_after_s'] is not None else "FAIL"
         tcp_s = "OK" if r["tcp_only_ok"] else "FAIL"
-        http_s = f"OK@{r['http_attempts_before_ok']}" if r["http_ok"] else "FAIL"
+        if HAS_REQUESTS:
+            http_s = f"OK@{r['http_attempts_before_ok']}" if r["http_ok"] else "FAIL"
+        else:
+            http_s = "N/A"
         note = r["error"] or ""
         print(f"{r['label']:<45} {port_s:<6} {tcp_s:<5} {http_s:<5} {note}")
 

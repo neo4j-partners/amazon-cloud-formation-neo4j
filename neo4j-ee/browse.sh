@@ -6,8 +6,8 @@
 #
 # If stack-name is omitted, uses the most recently modified file in .deploy/.
 # Forwards both port 7473 (HTTPS Browser) and 7687 (Bolt) via SSM and prints login info.
-# Both ports are TLS; the operator must map AdvertisedDNS to 127.0.0.1 in /etc/hosts
-# so the ACM cert SAN validates against the local connection.
+# Both ports are TLS; the operator must map AdvertisedDNS to 127.0.0.1 in
+# /etc/hosts so the certificate name matches the local connection.
 
 set -euo pipefail
 
@@ -57,6 +57,11 @@ ADVERTISED_DNS=$(read_field "AdvertisedDNS")
 USERNAME=$(read_field "Username")
 PASSWORD=$(read_field "Password")
 STACK_NAME=$(read_field "StackName")
+SELF_SIGNED_CERTIFICATE=$(read_field "SelfSignedCertificate" || true)
+BOLT_SCHEME="neo4j+s"
+if [ "${SELF_SIGNED_CERTIFICATE}" = "true" ]; then
+  BOLT_SCHEME="neo4j+ssc"
+fi
 
 echo "Stack:         ${STACK_NAME}"
 echo "Region:        ${REGION}"
@@ -65,10 +70,11 @@ echo "AdvertisedDNS: ${ADVERTISED_DNS}"
 echo ""
 echo "Opening SSM port-forwards → localhost:7473 (HTTPS) and localhost:7687 (Bolt)"
 echo ""
-echo "Add this line to /etc/hosts so the ACM cert SAN validates:"
+echo "Add this line to /etc/hosts so the connection uses the certificate name:"
 echo "  127.0.0.1 ${ADVERTISED_DNS}"
 echo ""
 echo "Then open: https://${ADVERTISED_DNS}:7473"
+echo "Bolt URI:  ${BOLT_SCHEME}://${ADVERTISED_DNS}:7687"
 echo "Username: ${USERNAME}"
 echo "Password: ${PASSWORD}"
 echo ""

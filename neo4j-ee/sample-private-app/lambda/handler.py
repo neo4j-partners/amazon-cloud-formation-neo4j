@@ -5,7 +5,7 @@ import random
 import time
 
 import boto3
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, TrustCustomCAs
 from neo4j.exceptions import AuthError
 
 log = logging.getLogger(__name__)
@@ -17,10 +17,33 @@ _driver = None
 
 
 def _init_driver():
-    advertised_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_ADVERTISED_DNS_PATH"])["Parameter"]["Value"]
+    advertised_dns = ssm.get_parameter(
+        Name=os.environ["NEO4J_SSM_ADVERTISED_DNS_PATH"]
+    )["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
     bolt_scheme = os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s")
-    return GraphDatabase.driver(f"{bolt_scheme}://{advertised_dns}:7687", auth=("neo4j", password))
+    driver_config = {}
+
+    trusted_ca_file = os.environ.get("NEO4J_TRUSTED_CA_CERT_FILE", "").strip()
+    if trusted_ca_file:
+        if bolt_scheme in {"bolt+s", "bolt+ssc"}:
+            bolt_scheme = "bolt"
+        elif bolt_scheme in {"neo4j+s", "neo4j+ssc"}:
+            bolt_scheme = "neo4j"
+        ca_path = trusted_ca_file
+        if not os.path.isabs(ca_path):
+            ca_path = os.path.join(
+                os.environ.get("LAMBDA_TASK_ROOT", os.path.dirname(__file__)),
+                ca_path,
+            )
+        driver_config["encrypted"] = True
+        driver_config["trusted_certificates"] = TrustCustomCAs(ca_path)
+
+    return GraphDatabase.driver(
+        f"{bolt_scheme}://{advertised_dns}:7687",
+        auth=("neo4j", password),
+        **driver_config,
+    )
 
 
 def _get_driver():
@@ -97,9 +120,11 @@ def _run(driver):
         ).single()
         edition = edition_row["edition"] if edition_row else "unknown"
 
-        routing_rows = session.run(
-            "CALL dbms.routing.getRoutingTable({}, 'neo4j')"
-        ).data()
+        routing_rows = []
+        if os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s").startswith("neo4j"):
+            routing_rows = session.run(
+                "CALL dbms.routing.getRoutingTable({}, 'neo4j')"
+            ).data()
 
         graph_sample = session.run(
             """
@@ -124,6 +149,7 @@ def _run(driver):
 
     body = {
         "bolt_scheme": os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s"),
+        "trusted_ca": bool(os.environ.get("NEO4J_TRUSTED_CA_CERT_FILE", "").strip()),
         "edition": edition,
         "nodes_created": nodes_created,
         "relationships_created": rels_created,

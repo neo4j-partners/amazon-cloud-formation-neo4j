@@ -2,8 +2,9 @@
 # browser-tunnel.sh — Open an SSM port-forward tunnel to the Neo4j Browser (port 7473, HTTPS)
 #
 # After the tunnel opens, map AdvertisedDNS to 127.0.0.1 in /etc/hosts so the
-# ACM cert SAN validates, then go to https://<AdvertisedDNS>:7473.
-# Use neo4j+s://<AdvertisedDNS>:7687 for Bolt from the same laptop session.
+# connection uses the certificate name, then go to https://<AdvertisedDNS>:7473.
+# Use neo4j+s://<AdvertisedDNS>:7687 for trusted certs, or neo4j+ssc:// for
+# self-signed test certs, from the same laptop session.
 #
 # Note: writes through Neo4j Browser go to whichever cluster node the NLB picks,
 # which may or may not be the leader. For guaranteed-leader writes, use:
@@ -26,6 +27,11 @@ REGION=$(read_field "$OUTPUTS_FILE" "Region")
 BASTION_ID=$(read_field "$OUTPUTS_FILE" "Neo4jOperatorBastionId")
 NLB_DNS=$(read_field "$OUTPUTS_FILE" "Neo4jInternalDNS")
 ADVERTISED_DNS=$(read_field "$OUTPUTS_FILE" "AdvertisedDNS")
+SELF_SIGNED_CERTIFICATE=$(read_field "$OUTPUTS_FILE" "SelfSignedCertificate")
+BOLT_SCHEME="neo4j+s"
+if [ "${SELF_SIGNED_CERTIFICATE}" = "true" ]; then
+  BOLT_SCHEME="neo4j+ssc"
+fi
 
 echo "=== Neo4j Browser Tunnel ==="
 echo ""
@@ -36,12 +42,12 @@ echo "  AdvertisedDNS: ${ADVERTISED_DNS}"
 echo ""
 echo "  Tunnel:  localhost:7473  ->  ${NLB_DNS}:7473  (HTTPS, NLB-terminated TLS)"
 echo ""
-echo "  Add to /etc/hosts so the ACM cert SAN validates:"
+echo "  Add to /etc/hosts so the connection uses the certificate name:"
 echo "    127.0.0.1 ${ADVERTISED_DNS}"
 echo ""
 echo "  Once the tunnel opens:"
 echo "    Browser: https://${ADVERTISED_DNS}:7473"
-echo "    Bolt:    neo4j+s://${ADVERTISED_DNS}:7687  (if Bolt tunnel is also open)"
+echo "    Bolt:    ${BOLT_SCHEME}://${ADVERTISED_DNS}:7687  (if Bolt tunnel is also open)"
 echo ""
 echo "  Press Ctrl-C to close."
 echo ""

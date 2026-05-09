@@ -30,9 +30,9 @@ Bash operator scripts that use the AWS CLI directly. All scripts read `AWS_PROFI
 | `scripts/preflight.sh [stack]` | Run 12 prerequisite checks (+ 1 informational): stack status, bastion SSM, Python driver, cypher-shell, secret, contract SSM params, VPC endpoints, and endpoint reachability probes. Exits 0 only if all required checks pass. | 45–75s |
 | `scripts/smoke-write.sh [stack] [N=20]` | Run N `CREATE ... DELETE` write operations through the cluster. Fails if any iteration fails. | ~60s at N=20 |
 | `scripts/browser-tunnel.sh [stack]` | Open a port-forward tunnel to the NLB on port 7473 (HTTPS). After mapping AdvertisedDNS to 127.0.0.1 in /etc/hosts, go to `https://<AdvertisedDNS>:7473`. | Interactive |
-| `scripts/bolt-tunnel.sh [stack]` | Open a port-forward tunnel to the NLB on port 7687 (Bolt). Connect a local driver or client to `neo4j+s://<AdvertisedDNS>:7687` (requires `127.0.0.1 <AdvertisedDNS>` in /etc/hosts for TLS SAN validation). | Interactive |
-| `scripts/ssm_check_sessions.sh [stack] [region]` | List active SSM sessions for the stack's ASG instances. | <5s |
-| `scripts/ssm_tunnel_test.py` | Diagnostic: test SSM port-forward tunnel flag combinations against the bastion. | Varies |
+| `scripts/bolt-tunnel.sh [stack]` | Open a port-forward tunnel to the NLB on port 7687 (Bolt). Connect a local driver or client to the URI printed by the script: `neo4j+s://<AdvertisedDNS>:7687` for trusted certs, or `neo4j+ssc://<AdvertisedDNS>:7687` for self-signed test certs. Requires `127.0.0.1 <AdvertisedDNS>` in `/etc/hosts`. | Interactive |
+| `scripts/ssm_check_sessions.sh [stack]` | List active SSM sessions for the stack's Neo4j instance(s) and operator bastion. | <5s |
+| `scripts/ssm_tunnel_test.py --stack-file ../.deploy/<stack>.txt --combo 0` | Diagnostic: test the production SSM port-forward subprocess settings against the bastion. Omit `--combo` to run the full flag matrix. | Varies |
 
 `scripts/common.sh` is sourced by the bash scripts and is not executed directly.
 

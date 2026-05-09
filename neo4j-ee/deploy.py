@@ -166,6 +166,25 @@ def _parse_cert_file(path: str) -> dict[str, str]:
     return json.loads(Path(path).read_text())
 
 
+def _detect_self_signed_cert(
+    cert_arn: str,
+    advertised_dns: str,
+    deploy_dir: str,
+) -> bool:
+    for cert_file in Path(deploy_dir).glob("cert-*.json"):
+        try:
+            cert_fields = _parse_cert_file(str(cert_file))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not cert_fields.get("self_signed", False):
+            continue
+        if cert_fields.get("cert_arn") == cert_arn:
+            return True
+        if cert_fields.get("domain_name") == advertised_dns:
+            return True
+    return False
+
+
 def _resolve_vpc_file(explicit: str | None, deploy_dir: str) -> str | None:
     if explicit:
         return explicit
@@ -330,6 +349,13 @@ def main():
     if not args.advertised_dns:
         sys.exit(
             "ERROR: --advertised-dns is required (or run certificate.py first to write .deploy/cert-*.json)."
+        )
+    deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
+    if not cert_self_signed:
+        cert_self_signed = _detect_self_signed_cert(
+            args.cert_arn,
+            args.advertised_dns,
+            deploy_dir,
         )
     if args.create_private_dns is None:
         args.create_private_dns = args.mode == "Private"

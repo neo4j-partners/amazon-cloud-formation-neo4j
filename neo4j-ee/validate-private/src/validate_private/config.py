@@ -18,6 +18,7 @@ class StackConfig:
     bastion_id: str
     nlb_dns: str
     advertised_dns: str
+    bolt_scheme: str
     password: str
     install_apoc: bool
     install_gds: bool
@@ -73,6 +74,8 @@ def load_config(
     stack_name = fields["StackName"]
     region = fields["Region"]
     secret_name = f"neo4j/{stack_name}/password"
+    self_signed_certificate = fields.get("SelfSignedCertificate", "").lower() == "true"
+    bolt_scheme = "neo4j+ssc" if self_signed_certificate else "neo4j+s"
 
     if password_override is not None:
         password = password_override
@@ -96,6 +99,7 @@ def load_config(
         bastion_id=fields["Neo4jOperatorBastionId"],
         nlb_dns=fields["Neo4jInternalDNS"],
         advertised_dns=fields["AdvertisedDNS"],
+        bolt_scheme=bolt_scheme,
         password=password,
         install_apoc=fields.get("InstallAPOC", "no").lower() == "yes",
         install_gds=fields.get("InstallGDS", "false").lower() == "true",

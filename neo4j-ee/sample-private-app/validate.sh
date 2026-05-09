@@ -1,11 +1,11 @@
 #!/bin/bash
-# validate.sh — Trigger the resilience test: stop a follower via SSM, verify it rejoins.
+# validate.sh - Trigger the resilience test: stop a follower via SSM, verify it rejoins.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_FILE=$(ls -t "${SCRIPT_DIR}/../.deploy"/sample-private-app-*.json 2>/dev/null | head -1 || true)
 if [ -z "${APP_FILE}" ]; then
-  echo "ERROR: No sample-private-app deployment found. Run ./deploy-sample-private-app.sh first." >&2
+  echo "ERROR: No sample-private-app deployment found. Run uv run deploy-sample-private-app.py first." >&2
   exit 1
 fi
 
@@ -13,7 +13,7 @@ VALIDATE_URL=$(python3 -c "import json; d=json.load(open('${APP_FILE}')); print(
 REGION=$(python3 -c "import json; d=json.load(open('${APP_FILE}')); print(d['region'])")
 if [ -z "${VALIDATE_URL}" ]; then
   echo "ERROR: This sample app was deployed without --enable-resilience." >&2
-  echo "Redeploy with ./deploy-sample-private-app.sh --enable-resilience to create the test-only stop/start Lambda." >&2
+  echo "Redeploy with uv run deploy-sample-private-app.py --enable-resilience to create the test-only stop/start Lambda." >&2
   exit 1
 fi
 

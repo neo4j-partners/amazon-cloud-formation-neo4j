@@ -25,12 +25,18 @@ ITERATIONS="${2:-20}"
 STACK_NAME=$(read_field "$OUTPUTS_FILE" "StackName")
 REGION=$(read_field "$OUTPUTS_FILE" "Region")
 BASTION_ID=$(read_field "$OUTPUTS_FILE" "Neo4jOperatorBastionId")
+SELF_SIGNED_CERTIFICATE=$(read_field "$OUTPUTS_FILE" "SelfSignedCertificate")
+BOLT_SCHEME="neo4j+s"
+if [ "${SELF_SIGNED_CERTIFICATE}" = "true" ]; then
+  BOLT_SCHEME="neo4j+ssc"
+fi
 
 echo "=== Smoke Write Test ==="
 echo ""
 echo "  Stack:      ${STACK_NAME}"
 echo "  Region:     ${REGION}"
 echo "  Bastion:    ${BASTION_ID}"
+echo "  URI:        ${BOLT_SCHEME}://$(read_field "$OUTPUTS_FILE" "AdvertisedDNS"):7687"
 echo "  Iterations: ${ITERATIONS}"
 echo ""
 
@@ -40,7 +46,8 @@ from neo4j import GraphDatabase
 
 stack = sys.argv[1]
 region = sys.argv[2]
-n = int(sys.argv[3])
+bolt_scheme = sys.argv[3]
+n = int(sys.argv[4])
 
 sm = boto3.client("secretsmanager", region_name=region)
 password = sm.get_secret_value(SecretId=f"neo4j/{stack}/password")["SecretString"]
@@ -48,7 +55,7 @@ password = sm.get_secret_value(SecretId=f"neo4j/{stack}/password")["SecretString
 ssm_client = boto3.client("ssm", region_name=region)
 advertised_dns = ssm_client.get_parameter(Name=f"/neo4j-ee/{stack}/advertised-dns")["Parameter"]["Value"]
 
-driver = GraphDatabase.driver(f"neo4j+s://{advertised_dns}:7687", auth=("neo4j", password))
+driver = GraphDatabase.driver(f"{bolt_scheme}://{advertised_dns}:7687", auth=("neo4j", password))
 successes = 0
 failures = 0
 try:
@@ -72,7 +79,7 @@ SCRIPT_EOF
 B64_SCRIPT=$(printf '%s' "${BASTION_SCRIPT}" | base64 | tr -d '\n')
 
 CMD_1="echo ${B64_SCRIPT} | base64 -d > /tmp/vpsmoke.py"
-CMD_2="python3.11 /tmp/vpsmoke.py ${STACK_NAME} ${REGION} ${ITERATIONS}"
+CMD_2="python3.11 /tmp/vpsmoke.py ${STACK_NAME} ${REGION} ${BOLT_SCHEME} ${ITERATIONS}"
 
 CMD_ID=$(aws ssm send-command \
   --instance-ids "${BASTION_ID}" \

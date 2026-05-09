@@ -9,8 +9,8 @@
 #   5.  Secrets Manager secret exists
 #   6.  Contract SSM params (6 named: vpc-id, nlb-dns, advertised-dns,
 #         external-sg-id, password-secret-arn, vpc-endpoint-sg-id)
-#   7.  Operational SSM params (4 named: region, stack-name,
-#         private-subnet-1-id, private-subnet-2-id) [informational — WARN, not FAIL]
+#   7.  Operational SSM params (region, stack-name, private-subnet-1-id,
+#         plus private-subnet-2-id for multi-server stacks) [informational — WARN, not FAIL]
 #   8.  VPC interface endpoints exist (secretsmanager, logs, ssm, ssmmessages)
 #   9.  Endpoint reachable: secretsmanager
 #   10. Endpoint reachable: logs
@@ -30,6 +30,7 @@ OUTPUTS_FILE=$(resolve_stack "${1:-}")
 STACK_NAME=$(read_field "$OUTPUTS_FILE" "StackName")
 REGION=$(read_field "$OUTPUTS_FILE" "Region")
 BASTION_ID=$(read_field "$OUTPUTS_FILE" "Neo4jOperatorBastionId")
+NUMBER_OF_SERVERS=$(read_field "$OUTPUTS_FILE" "NumberOfServers")
 
 echo "=== Preflight Checks ==="
 echo ""
@@ -145,8 +146,10 @@ _operational_params_exist() {
     "region"
     "stack-name"
     "private-subnet-1-id"
-    "private-subnet-2-id"
   )
+  if [ "${NUMBER_OF_SERVERS:-3}" != "1" ]; then
+    params+=("private-subnet-2-id")
+  fi
   for param in "${params[@]}"; do
     aws ssm get-parameter \
       --name "/neo4j-ee/${STACK_NAME}/${param}" \
@@ -198,7 +201,12 @@ _check "cypher-shell installed on bastion"                  _cypher_shell_instal
 _check "Secret 'neo4j/${STACK_NAME}/password' exists"       _secret_exists
 _check "Contract SSM params: vpc-id, nlb-dns, advertised-dns, external-sg-id, password-secret-arn, vpc-endpoint-sg-id" \
   _contract_params_exist
-_info_check "Operational SSM params: region, stack-name, private-subnet-1-id, private-subnet-2-id" \
+if [ "${NUMBER_OF_SERVERS:-3}" = "1" ]; then
+  OPERATIONAL_PARAM_LABEL="Operational SSM params: region, stack-name, private-subnet-1-id"
+else
+  OPERATIONAL_PARAM_LABEL="Operational SSM params: region, stack-name, private-subnet-1-id, private-subnet-2-id"
+fi
+_info_check "${OPERATIONAL_PARAM_LABEL}" \
   _operational_params_exist
 
 # Read VPC_ID from the contract SSM param. Order is load-bearing: the contract

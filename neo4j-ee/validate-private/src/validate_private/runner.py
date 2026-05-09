@@ -28,6 +28,7 @@ from neo4j import GraphDatabase
 
 stack = sys.argv[1]
 region = sys.argv[2]
+bolt_scheme = sys.argv[3]
 
 data = json.load(sys.stdin)
 cypher = data["cypher"]
@@ -40,7 +41,7 @@ password = sm.get_secret_value(SecretId=f"neo4j/{stack}/password")["SecretString
 ssm_client = boto3.client("ssm", region_name=region)
 advertised_dns = ssm_client.get_parameter(Name=f"/neo4j-ee/{stack}/advertised-dns")["Parameter"]["Value"]
 
-driver = GraphDatabase.driver(f"neo4j+s://{advertised_dns}:7687", auth=("neo4j", password))
+driver = GraphDatabase.driver(f"{bolt_scheme}://{advertised_dns}:7687", auth=("neo4j", password))
 try:
     kwargs = {"parameters_": params}
     if database:
@@ -134,7 +135,7 @@ def run_cypher_on_bastion(
     command = (
         f"echo {b64_script} | base64 -d > /tmp/vprun.py && "
         f"echo {b64_payload} | base64 -d | python3.11 /tmp/vprun.py "
-        f"{config.stack_name} {config.region}"
+        f"{config.stack_name} {config.region} {config.bolt_scheme}"
     )
 
     ssm = boto3.Session(region_name=config.region).client("ssm", config=_RETRY_CFG)

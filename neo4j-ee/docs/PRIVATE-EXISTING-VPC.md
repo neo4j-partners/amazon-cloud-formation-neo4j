@@ -55,7 +55,9 @@ Applies to any running ExistingVpc stack, whether deployed from the Marketplace 
 
 ### Access, Admin Tools, and Password
 
-Access via bastion and all operator tools (`preflight.sh`, `validate-private`, `admin-shell`, `run-cypher`, `smoke-write.sh`, `browser-tunnel.sh`, `bolt-tunnel.sh`) are identical to the Private template. See [the Operator Guide in PRIVATE.md](PRIVATE.md#operator-guide) from "Access via Bastion" onward.
+Bastion access and all operator tools (`preflight.sh`, `validate-private`, `admin-shell`, `run-cypher`, `smoke-write.sh`, `browser-tunnel.sh`, `bolt-tunnel.sh`) are identical to the Private template. See [the Operator Guide in PRIVATE.md](PRIVATE.md#operator-guide) from "Access via Bastion" onward.
+
+ExistingVpc mode defaults `CreatePrivateDns=false`, so customer-managed DNS remains authoritative by default. If you leave it false, `AdvertisedDNS` must already resolve to the internal NLB from the supplied VPC, including from the operator bastion. Otherwise bastion-run tools fail during Bolt DNS resolution. For source-based test deployments, the simplest path is usually `--create-private-dns --private-dns-zone <zone>` or `--create-private-dns --private-dns-hosted-zone-id <zone-id>`.
 
 ### Observability Checks
 
@@ -243,17 +245,20 @@ For automated testing, `scripts/create-test-vpc.py` provisions a minimal private
 # Path A: template creates endpoints (default)
 scripts/create-test-vpc.py --region us-east-1
 ./deploy.py --mode ExistingVpc --number-of-servers 3 \
-  --cert-arn <arn> --advertised-dns <dns>
+  --cert-arn <arn> --advertised-dns neo4j.test.local \
+  --create-private-dns --private-dns-zone test.local
 
 # Path B: VPC already has endpoints
 scripts/create-test-vpc.py --region us-east-1 --with-endpoints
 ./deploy.py --mode ExistingVpc --number-of-servers 1 \
   --create-vpc-endpoints false \
-  --cert-arn <arn> --advertised-dns <dns>
+  --cert-arn <arn> --advertised-dns neo4j.test.local \
+  --create-private-dns --private-dns-zone test.local
 
 # Select a specific VPC file when multiple exist
 ./deploy.py --mode ExistingVpc --vpc-file .deploy/vpc-<ts>.txt \
-  --cert-arn <arn> --advertised-dns <dns>
+  --cert-arn <arn> --advertised-dns neo4j.test.local \
+  --create-private-dns --private-dns-zone test.local
 ```
 
 Tear down the test VPC after the stack is deleted:
@@ -276,10 +281,11 @@ scripts/create-test-vpc.py --region us-east-1
 
 # 2. Deploy 3-node cluster (auto-detects vpc-*.txt)
 ./deploy.py --mode ExistingVpc --number-of-servers 3 \
-  --cert-arn <arn> --advertised-dns <dns>
+  --cert-arn <arn> --advertised-dns neo4j.test.local \
+  --create-private-dns --private-dns-zone test.local
 STACK=$(ls -t .deploy/ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
 
-# 3. Preflight (12 checks: stack, bastion, endpoints)
+# 3. Preflight (11 checks: stack, bastion, endpoints)
 cd validate-private
 ./scripts/preflight.sh "$STACK"
 
@@ -306,7 +312,8 @@ scripts/create-test-vpc.py --region us-east-1 --with-endpoints
 # 2. Deploy 1-node cluster (auto-detects VPC file and reads EndpointSgId)
 ./deploy.py --mode ExistingVpc --number-of-servers 1 \
   --create-vpc-endpoints false \
-  --cert-arn <arn> --advertised-dns <dns>
+  --cert-arn <arn> --advertised-dns neo4j.test.local \
+  --create-private-dns --private-dns-zone test.local
 STACK=$(ls -t .deploy/ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
 
 # 3. Preflight: endpoint reachability confirms the wiring the template added

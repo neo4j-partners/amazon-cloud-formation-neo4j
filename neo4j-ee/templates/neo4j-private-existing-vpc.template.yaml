@@ -116,7 +116,7 @@ Parameters:
       fixed at 20 GB and not user-tunable.
     Type: Number
     Default: 100
-    MinValue: 100
+    MinValue: 50
     MaxValue: 65536
   DataVolumeKmsKeyId:
     Description: >-

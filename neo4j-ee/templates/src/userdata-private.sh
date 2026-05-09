@@ -182,7 +182,6 @@ build_neo4j_conf_file() {
   set_neo4j_conf server.bolt.advertised_address "${boltAdvertisedDNS:-${loadBalancerDNSName}}:7687"
   set_neo4j_conf server.http.listen_address 0.0.0.0:7474
   set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
-  neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
   set_neo4j_conf server.metrics.enabled true
   set_neo4j_conf server.metrics.jmx.enabled true
   set_neo4j_conf server.metrics.prefix neo4j

@@ -4,17 +4,28 @@ Reference document for the three-template split. Covers the key design decisions
 
 ---
 
-## Network Encryption Requirement
+## Network Encryption Guidance
 
-AWS Marketplace explicitly requires end-to-end encryption for network traffic. From the official AMI best practices:
+AWS Marketplace AMI policy pages distinguish mandatory product requirements from recommended best practices. The current AMI requirements page does not appear to state a blanket hard rejection rule for every plaintext application protocol, but the official AMI best practices strongly recommend end-to-end encryption for network traffic:
 
 > "Whenever possible, use end-to-end encryption for network traffic. For example, use Secure Sockets Layer (SSL) to secure HTTP sessions between you and your buyers. Ensure that your service uses only valid and up-to-date certificates."
 >
 > — [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html)
 
-A security group `AllowedCIDR` restriction does not satisfy this requirement. It controls which source IPs can initiate a connection at the AWS network layer, but it does not encrypt traffic. An attacker controlling any network hop between the buyer's client and the EC2 instance, including ISPs, corporate routers, and VPN exit nodes, can read Neo4j credentials, Cypher queries, and query results in plaintext. This is true even when `AllowedCIDR` is locked to a single `/32` address.
+The same best-practices page also tells sellers to document the minimum required ports and recommended source IP ranges for administrative access. Those controls are necessary, but they are not substitutes for encryption in transit. A security group `AllowedCIDR` restriction controls which source IPs can initiate a connection at the AWS network layer; it does not encrypt traffic. An attacker controlling a permitted client, a routed network segment, a traffic mirror, or a compromised workload in the same reachable private network can read Neo4j credentials, Cypher queries, and query results in plaintext.
 
-The practical consequence for this listing: plain HTTP on port 7474 and unencrypted `neo4j://` Bolt on port 7687 do not meet the Marketplace standard. TLS must be enabled on both ports for any deployment topology intended for production use.
+The practical consequence for this listing: plain HTTP on port 7474 and unencrypted `neo4j://` Bolt on port 7687 are Marketplace best-practice risks. Treat plaintext client traffic as acceptable only for explicit dev/test use. For production-oriented Marketplace templates, TLS should be the default: Bolt should require a certificate-backed TLS configuration, Browser should use HTTPS, and documentation should call out any remaining plaintext path as non-production.
+
+Related Marketplace policy points:
+
+- AMIs must comply with the current AWS Marketplace product requirements, and AWS says those policies are regularly updated to align with evolving security guidelines.
+- Password-based authentication for instance services is prohibited, with limited exceptions for non-administrative application access when strong one-time passwords are used and changed immediately after first login.
+- Products with deployment-time external dependencies must disclose those dependencies, and sellers are responsible for their availability and security.
+
+References:
+
+- [AMI-based product requirements for AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/product-and-ami-policies.html)
+- [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html)
 
 ---
 
@@ -164,7 +175,7 @@ Each template requires a separate diagram submitted to the Marketplace seller po
 
 ## References
 
-1. [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html) — Official Marketplace AMI guidelines. Explicitly requires end-to-end encryption for network traffic; recommends SSL/TLS for HTTP sessions and valid, up-to-date certificates.
+1. [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html) — Official Marketplace AMI guidelines. Strongly recommends end-to-end encryption for network traffic; recommends SSL/TLS for HTTP sessions and valid, up-to-date certificates.
 
 2. [CloudFormation Templates 101 for Sellers in AWS Marketplace](https://aws.amazon.com/blogs/awsmarketplace/cloudformation-templates-101-for-sellers-in-aws-marketplace/) — Covers IAM roles, Auto Scaling, password handling, and cluster deployment patterns for Marketplace sellers.
 

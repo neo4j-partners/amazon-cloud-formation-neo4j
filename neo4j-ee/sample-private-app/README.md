@@ -1,8 +1,10 @@
 # Neo4j Private Cluster: Lambda Demo App
 
-The neo4j-ee Private and ExistingVpc templates deploy a cluster in private subnets behind an internal NLB with no public IPs. [`docs/PRIVATE.md`](../docs/PRIVATE.md) covers how a laptop operator connects via SSM port-forwarding. This app answers the adjacent question: how does an application workload connect to that same cluster from inside the VPC?
+The neo4j-ee Private and ExistingVpc templates deploy a cluster in private subnets behind an internal NLB with no public IPs. [`docs/PRIVATE.md`](../docs/PRIVATE.md) covers how a laptop operator connects via SSM port-forwarding. This app shows how an application workload connects to that same cluster from inside the VPC.
 
-The answer is not just "connect to the NLB on port 7687." The VPC contains interface VPC endpoints with `PrivateDnsEnabled: true`, which means AWS API hostnames resolve to endpoint ENIs rather than public endpoints. Any call the application makes to SSM, Secrets Manager, or CloudWatch Logs hits those endpoint ENIs, and the endpoint security group gates access to them. An application not wired into the endpoint security group hangs silently on every AWS API call, including the log writes that would otherwise explain what went wrong.
+Connecting requires three things: attach to the correct VPC and subnets, wire the application's security group for Bolt traffic to Neo4j and for HTTPS to the VPC interface endpoints, then resolve the NLB DNS and password at runtime through those endpoints. The EE stack publishes all the resource IDs an application needs as SSM parameters under `/neo4j-ee/<stack-name>/`.
+
+The VPC contains interface endpoints for SSM, Secrets Manager, and CloudWatch Logs with `PrivateDnsEnabled: true`. Every AWS API call the application makes routes through those endpoint ENIs, and the endpoint security group gates access. An application that is not added to the endpoint security group will hang silently on every AWS API call, including the log writes that would otherwise surface the problem.
 
 This README explains the platform contract the EE stack publishes, the security group wiring required, and the Lambda implementation in this directory.
 
@@ -58,7 +60,7 @@ Each application creates its own security group and establishes two connections.
 
 **HTTPS to VPC endpoints.** The application's security group adds egress TCP 443 to `VpcEndpointSecurityGroup` (from `/vpc-endpoint-sg-id`). The application also adds an ingress rule on `VpcEndpointSecurityGroup` allowing 443 from its own security group.
 
-The second connection is the one applications miss. Without it, the endpoint SG drops the TCP SYN from the application's ENI before any bytes are exchanged. Because CloudWatch Logs writes take the same path, the function times out with no log output.
+Both connections are required. Without the ingress rule on `VpcEndpointSecurityGroup`, the endpoint SG drops every TCP SYN from the application's ENI before any bytes are exchanged. Because CloudWatch Logs writes take the same path, the function times out with no log output.
 
 This sample establishes both wiring connections in `sample-private-app.template.yaml` using `AWS::EC2::SecurityGroupIngress` resources on the EE stack's security groups. Stack deletion removes those rules automatically.
 

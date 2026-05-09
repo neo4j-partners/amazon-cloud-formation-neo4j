@@ -37,6 +37,8 @@
 
 ## General Operator Guide
 
+All `uv run` commands (`admin-shell`, `run-cypher`, `validate-private`) must be run from `neo4j-ee/validate-private/`. Shell scripts under `scripts/` must be run from `neo4j-ee/validate-private/` as well.
+
 ### Prerequisites
 
 **AWS tooling**
@@ -117,6 +119,8 @@ Instances have no public IP. All operator access goes through the `t4g.nano` bas
 | Local driver or client tool | Bolt connection from your laptop | Yes — Bolt tunnel (7687) |
 | Neo4j Browser | HTTP for the web UI + Bolt for queries | Yes — both tunnels (7474 + 7687) |
 
+Run `uv run` commands from `neo4j-ee/validate-private/`.
+
 Local port-forwarding is only needed when your laptop connects to the NLB directly. All CLI tools dispatch commands to the bastion over SSM and receive results back without a tunnel.
 
 ### Bolt Tunnel
@@ -133,7 +137,18 @@ The Bolt tunnel is also required alongside the Browser Tunnel when using Neo4j B
 
 ### Browser Tunnel
 
-Use this to open the Neo4j Browser web UI. The browser makes two connections: HTTP to load the UI (port 7474) and Bolt to run queries (port 7687). Both tunnels must be open simultaneously. Run each in a separate terminal:
+Use this to open the Neo4j Browser web UI. The browser makes two connections: HTTP to load the UI (port 7474) and Bolt to run queries (port 7687). Both tunnels must be open simultaneously.
+
+**Single-command option** — run from `neo4j-ee/`:
+
+```bash
+./browse.sh                   # most recent deployment
+./browse.sh <stack-name>      # specific deployment
+```
+
+`browse.sh` reads `.deploy/<stack-name>.txt`, opens both SSM port-forward tunnels in the same shell (7474 and 7687), and prints the URL and credentials. Press Ctrl+C to close both tunnels.
+
+**Two-terminal option** — run from `neo4j-ee/validate-private/`:
 
 ```bash
 ./scripts/browser-tunnel.sh   # localhost:7474 → NLB:7474  (blocks; Ctrl-C to close)
@@ -164,6 +179,7 @@ Only the Browser Tunnel requires the password locally — you type it into the N
 For Cypher queries and write operations:
 
 ```bash
+cd neo4j-ee/validate-private
 uv run admin-shell                     # most recent deployment
 uv run admin-shell <stack-name>        # specific deployment
 ```
@@ -179,6 +195,7 @@ neo4j@neo4j> :exit
 ### Ad-Hoc Cypher Queries
 
 ```bash
+cd neo4j-ee/validate-private
 uv run run-cypher "CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition"
 
 # Output is JSON; pipe to jq for formatting
@@ -435,6 +452,7 @@ Runs write operations through the cluster via the bastion. Each iteration uses a
 ### Failover Suite
 
 ```bash
+cd neo4j-ee/validate-private
 uv run validate-private --stack <stack-name> --suite failover
 ```
 
@@ -450,6 +468,7 @@ Four cases using `systemctl stop`/`start` via SSM; no instance termination:
 ### Resilience Suite
 
 ```bash
+cd neo4j-ee/validate-private
 uv run validate-private --stack <stack-name> --suite resilience
 ```
 
@@ -559,3 +578,22 @@ The `<Neo4jNode1ASGName>` value is in `.deploy/<stack-name>.txt`. For a three-no
 > **Note:** `dbms.security.auth_enabled` may appear multiple times in `neo4j.conf` if the recovery procedure is run more than once. Neo4j 5 treats duplicate keys as a fatal config error and refuses to start. The `sed -i "/dbms.security.auth_enabled/d"` step above removes all occurrences before adding a single clean entry, which prevents this.
 
 Reference: [Recover admin user and password — Neo4j Operations Manual](https://neo4j.com/docs/operations-manual/current/authentication-authorization/password-and-user-recovery/)
+
+---
+
+## EBS Snapshots
+
+`snapshot.sh` creates EBS snapshots of all Neo4j data volumes for a deployed stack. Snapshots are incremental and stored in AWS-managed S3; snapshot size reflects used blocks only, not the allocated volume size.
+
+```bash
+./snapshot.sh                  # most recent deployment
+./snapshot.sh <stack-name>     # specific deployment
+./snapshot.sh --list           # list all snapshots for the most recent deployment
+./snapshot.sh --list <stack-name>  # list all snapshots for a specific deployment
+```
+
+The script reads `.deploy/<stack-name>.txt` for volume IDs and region. Each snapshot is tagged with the stack name and date. For a three-node cluster all three volumes are snapshotted in the same run.
+
+`--list` queries by the `stack` tag and shows snapshot ID, timestamp, state, progress, volume size, and description.
+
+**Note on memory.** The `neo4j-admin database backup` recovery phase runs inside the Neo4j JVM and competes with the running database for heap. On an `r8i.xlarge` (32 GB) with a 19.3 GB heap and a 21.5 GB store, the combined footprint exceeds available RAM and triggers an OOM kill. EBS snapshots do not touch the JVM; they are taken at the block-device level and are safe to run on any instance size without restarting Neo4j.

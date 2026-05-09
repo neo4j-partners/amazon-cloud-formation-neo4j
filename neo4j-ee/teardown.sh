@@ -206,30 +206,6 @@ if [ -n "${STACK_ID}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3: Clean up copied AMI (cross-region local AMI deploys only)
-# ---------------------------------------------------------------------------
-if [ -n "${COPIED_AMI_ID}" ]; then
-  echo ""
-  echo "Deregistering copied AMI ${COPIED_AMI_ID} in ${REGION}..."
-  aws ec2 deregister-image \
-    --region "${REGION}" \
-    --image-id "${COPIED_AMI_ID}" 2>/dev/null || true
-
-  echo "Deleting backing snapshots..."
-  aws ec2 describe-snapshots \
-    --region "${REGION}" \
-    --filters "Name=description,Values=*${COPIED_AMI_ID}*" \
-    --query "Snapshots[].SnapshotId" \
-    --output text 2>/dev/null | while read -r snap_id; do
-      if [ -n "${snap_id}" ]; then
-        echo "  Deleting snapshot ${snap_id}..."
-        aws ec2 delete-snapshot --region "${REGION}" --snapshot-id "${snap_id}" 2>/dev/null || true
-      fi
-    done
-  echo "Copied AMI cleaned up."
-fi
-
-# ---------------------------------------------------------------------------
 # Step 4: Clean up local files
 # ---------------------------------------------------------------------------
 CA_BUNDLE="${SCRIPT_DIR}/sample-private-app/lambda/neo4j-ca.crt"

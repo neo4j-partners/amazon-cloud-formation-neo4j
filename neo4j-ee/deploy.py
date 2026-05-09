@@ -75,6 +75,7 @@ def parse_args():
     p.add_argument("--tls", action="store_true")
     p.add_argument("--alert-email", metavar="EMAIL")
     p.add_argument("--mode", default="Private", choices=["Public", "Private", "ExistingVpc"])
+    p.add_argument("--name", metavar="NAME", help="Stack name suffix (default: timestamp). Stack becomes ee-{NAME}.")
     p.add_argument("--allowed-cidr", metavar="CIDR")
     p.add_argument("--vpc-id", metavar="VPC_ID")
     p.add_argument("--subnet-1", metavar="SUBNET_ID")
@@ -204,7 +205,20 @@ def main():
 
     region = args.region_override or random.choice(SUPPORTED_REGIONS)
     ts = int(time.time())
-    stack_name = f"test-ee-{ts}"
+    stack_name = f"ee-{args.name}" if args.name else f"ee-{ts}"
+
+    # NLB target group names are "{stack_name}-http-tg" (the longest suffix).
+    # AWS enforces a 32-character limit on target group names.
+    _MAX_TG_SUFFIX = len("-http-tg")
+    if len(stack_name) + _MAX_TG_SUFFIX > 32:
+        max_name_len = 32 - len("ee-") - _MAX_TG_SUFFIX
+        sys.exit(
+            f"ERROR: --name '{args.name}' is too long. "
+            f"Stack name '{stack_name}' would produce NLB target group names "
+            f"exceeding AWS's 32-character limit. "
+            f"Shorten --name to {max_name_len} characters or fewer."
+        )
+
     password = generate_password()
 
     cleanup_state = {
@@ -248,7 +262,7 @@ def main():
         ami_id_file = os.path.join(SCRIPT_DIR, "marketplace", "ami-id.txt")
         if not os.path.exists(ami_id_file):
             sys.exit(
-                f"ERROR: {ami_id_file} not found. Run marketplace/build.sh first,\n"
+                f"ERROR: {ami_id_file} not found. Run marketplace/create-ami.sh first,\n"
                 "       or use --marketplace to deploy from the live Marketplace listing."
             )
         source_ami_id = Path(ami_id_file).read_text().strip()

@@ -3,6 +3,7 @@
     Properties:
       GroupDescription: Allow client traffic to Neo4j NLB on ports 7473 and 7687
       VpcId: !Ref Neo4jVPC
+      SecurityGroupEgress: []
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 7473
@@ -27,6 +28,24 @@
           FromPort: 7687
           ToPort: 7687
           SourceSecurityGroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+
+  Neo4jNLBEgressToHTTPS:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7473
+      ToPort: 7473
+      DestinationSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+
+  Neo4jNLBEgressToBolt:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7687
+      ToPort: 7687
+      DestinationSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
 
   Neo4jInternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -125,7 +144,7 @@
   # VPC endpoints for Systems Manager (Private mode only)
   # Routes SSM control-plane traffic through AWS PrivateLink rather than NAT.
   # Required: ssm (registration/polling), ssmmessages (Session Manager),
-  #           ec2messages (backward compat with pre-2024 regions).
+  #           ec2messages (legacy SSM Agent message delivery fallback).
   # S3 gateway endpoint is free and prevents SSM Agent update traffic from
   # consuming NAT Gateway data-processing charges.
   # ---------------------------------------------------------------------------
@@ -135,6 +154,7 @@
     Properties:
       GroupDescription: Allow HTTPS from Neo4j instances and operator bastion to VPC interface endpoints
       VpcId: !Ref Neo4jVPC
+      SecurityGroupEgress: []
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443

@@ -269,6 +269,7 @@ Resources:
     Properties:
       GroupDescription: Allow client traffic to Neo4j NLB on ports 7473 and 7687
       VpcId: !Ref Neo4jVPC
+      SecurityGroupEgress: []
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 7473
@@ -293,6 +294,24 @@ Resources:
           FromPort: 7687
           ToPort: 7687
           SourceSecurityGroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+
+  Neo4jNLBEgressToHTTPS:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7473
+      ToPort: 7473
+      DestinationSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+
+  Neo4jNLBEgressToBolt:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7687
+      ToPort: 7687
+      DestinationSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
 
   Neo4jInternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -391,7 +410,7 @@ Resources:
   # VPC endpoints for Systems Manager (Private mode only)
   # Routes SSM control-plane traffic through AWS PrivateLink rather than NAT.
   # Required: ssm (registration/polling), ssmmessages (Session Manager),
-  #           ec2messages (backward compat with pre-2024 regions).
+  #           ec2messages (legacy SSM Agent message delivery fallback).
   # S3 gateway endpoint is free and prevents SSM Agent update traffic from
   # consuming NAT Gateway data-processing charges.
   # ---------------------------------------------------------------------------
@@ -401,6 +420,7 @@ Resources:
     Properties:
       GroupDescription: Allow HTTPS from Neo4j instances and operator bastion to VPC interface endpoints
       VpcId: !Ref Neo4jVPC
+      SecurityGroupEgress: []
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
@@ -1565,6 +1585,22 @@ Resources:
         - !Ref VpcEndpointSecurityGroup
       PrivateDnsEnabled: true
 
+  Ec2MessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2messages'
+      VpcId: !Ref Neo4jVPC
+      SubnetIds: !If
+        - CreateCluster
+        - - !Ref Neo4jPrivateSubnet1
+          - !Ref Neo4jPrivateSubnet2
+          - !Ref Neo4jPrivateSubnet3
+        - - !Ref Neo4jPrivateSubnet1
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
   LogsVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
@@ -1709,7 +1745,7 @@ Resources:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/vpc-endpoint-sg-id'
       Type: String
       Value: !GetAtt VpcEndpointSecurityGroup.GroupId
-      Description: Security group ID on all interface VPC endpoints. In-VPC apps add this as an ingress rule source so their SG can reach SSM, Secrets Manager, and CloudWatch Logs via PrivateLink.
+      Description: Security group ID on all interface VPC endpoints. In-VPC apps add this as an ingress rule source so their SG can reach SSM, SSM Messages, EC2 Messages, Secrets Manager, and CloudWatch Logs via PrivateLink.
 
   Neo4jFlowLogsGroup:
     Type: AWS::Logs::LogGroup

@@ -84,6 +84,23 @@
         - !Ref VpcEndpointSecurityGroup
       PrivateDnsEnabled: true
 
+  Ec2MessagesVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Condition: CreateVpcEndpoints
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2messages'
+      VpcId: !Ref VpcId
+      SubnetIds: !If
+        - CreateCluster
+        - - !Ref PrivateSubnet1Id
+          - !Ref PrivateSubnet2Id
+          - !Ref PrivateSubnet3Id
+        - - !Ref PrivateSubnet1Id
+      SecurityGroupIds:
+        - !Ref VpcEndpointSecurityGroup
+      PrivateDnsEnabled: true
+
   LogsVpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Condition: CreateVpcEndpoints

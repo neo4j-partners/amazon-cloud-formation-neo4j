@@ -4,7 +4,7 @@ The neo4j-ee Private and ExistingVpc templates deploy a cluster in private subne
 
 Connecting requires three things: attach to the correct VPC and subnets, wire the application's security group for Bolt traffic to the Neo4j NLB and for HTTPS to the VPC interface endpoints, then resolve `AdvertisedDNS` and the password at runtime through those endpoints. The EE stack publishes all the resource IDs an application needs as SSM parameters under `/neo4j-ee/<stack-name>/`.
 
-The VPC contains interface endpoints for SSM, Secrets Manager, and CloudWatch Logs with `PrivateDnsEnabled: true`. Every AWS API call the application makes routes through those endpoint ENIs, and the endpoint security group gates access. An application that is not added to the endpoint security group will hang silently on every AWS API call, including the log writes that would otherwise surface the problem.
+The VPC contains interface endpoints for SSM, SSM Messages, EC2 Messages, Secrets Manager, and CloudWatch Logs with `PrivateDnsEnabled: true`. Every AWS API call the application makes routes through those endpoint ENIs, and the endpoint security group gates access. An application that is not added to the endpoint security group will hang silently on every AWS API call, including the log writes that would otherwise surface the problem.
 
 This README explains the platform contract the EE stack publishes, the security group wiring required, and the Lambda implementation in this directory.
 
@@ -30,7 +30,7 @@ Lambda Function URL  (HTTPS, AWS_IAM auth)
   (private subnet, each AZ)
 ```
 
-The Lambda's security group has two egress rules: TCP 7687 to the Neo4j NLB SG for Bolt, and TCP 443 to the VPC interface endpoint SG for SSM, Secrets Manager, and CloudWatch Logs. No traffic leaves the VPC.
+The Lambda's security group has two egress rules: TCP 7687 to the Neo4j NLB SG for Bolt, and TCP 443 to the VPC interface endpoint SG for SSM, SSM Messages, EC2 Messages, Secrets Manager, and CloudWatch Logs. No traffic leaves the VPC.
 
 ---
 
@@ -210,7 +210,7 @@ Sample output:
 
 The resilience Lambda is test-only and is not deployed by default. When `--enable-resilience` is used, its role has `ssm:SendCommand` on `AWS-RunShellScript` scoped to EC2 instances via `aws:ResourceTag/StackID = <full EE stack ARN>`, so it can issue the fixed stop/start commands only to instances launched by the paired EE stack. `ec2:DescribeInstances` is `*` because the service does not support resource-level authorization, but is read-only. The main invoke Lambda has none of these permissions.
 
-This stack also provisions an `ec2` VPC interface endpoint reusing the EE stack's endpoint SG. The EE stack provides `ssm`, `ssmmessages`, `logs`, and `secretsmanager` endpoints but no `ec2` endpoint, and the resilience Lambda has no internet egress. Without this endpoint, `DescribeInstances` hangs until timeout.
+This stack also provisions an `ec2` VPC interface endpoint reusing the EE stack's endpoint SG. The EE stack provides `ssm`, `ssmmessages`, `ec2messages`, `logs`, and `secretsmanager` endpoints but no `ec2` API endpoint, and the resilience Lambda has no internet egress. Without this endpoint, `DescribeInstances` hangs until timeout.
 
 ### Lambda timeout
 
@@ -290,4 +290,4 @@ For this to work inside the VPC, AdvertisedDNS must resolve to the NLB. In Priva
 
 **Function URL auth is `AWS_IAM`.** An unsigned Function URL accepts requests from any caller who knows the URL. Since the Lambda writes to Neo4j, that is an unauthenticated write path. `AWS_IAM` requires Sigv4 signing using existing AWS credentials, with no extra infrastructure.
 
-**Additional AWS API calls need their own VPC endpoints.** If the application calls AWS services beyond SSM, Secrets Manager, and CloudWatch Logs, add a corresponding interface VPC endpoint. The per-endpoint cost is roughly $7/AZ/month; routing is automatic once `PrivateDnsEnabled: true` is set.
+**Additional AWS API calls need their own VPC endpoints.** If the application calls AWS services beyond SSM, SSM Messages, EC2 Messages, Secrets Manager, and CloudWatch Logs, add a corresponding interface VPC endpoint. The per-endpoint cost is roughly $7/AZ/month; routing is automatic once `PrivateDnsEnabled: true` is set.

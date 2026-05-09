@@ -11,10 +11,14 @@
   PrivateSubnet2Id:
     Type: String
     Default: ''
+    AllowedPattern: ^$|^subnet-([0-9A-Fa-f]{8}|[0-9A-Fa-f]{17})$
+    ConstraintDescription: Must be blank or a valid subnet ID.
     Description: Second private subnet ID; required when NumberOfServers is 3.
   PrivateSubnet3Id:
     Type: String
     Default: ''
+    AllowedPattern: ^$|^subnet-([0-9A-Fa-f]{8}|[0-9A-Fa-f]{17})$
+    ConstraintDescription: Must be blank or a valid subnet ID.
     Description: Third private subnet ID; required when NumberOfServers is 3.
   CreateVpcEndpoints:
     Type: String
@@ -23,13 +27,15 @@
       - 'false'
     Default: 'true'
     Description: >-
-      Create VPC interface endpoints for SSM, SSM Messages, CloudWatch Logs,
-      and Secrets Manager. Set to false if your VPC already has these endpoints
-      — creating duplicates fails the deployment. When false,
+      Create VPC interface endpoints for SSM, SSM Messages, EC2 Messages,
+      CloudWatch Logs, and Secrets Manager. Set to false if your VPC already
+      has these endpoints — creating duplicates fails the deployment. When false,
       ExistingEndpointSgId must be provided.
   ExistingEndpointSgId:
     Type: String
     Default: ''
+    AllowedPattern: ^$|^sg-([0-9A-Fa-f]{8}|[0-9A-Fa-f]{17})$
+    ConstraintDescription: Must be blank or a valid security group ID.
     Description: >-
       Security group ID already attached to your VPC's interface endpoints.
       Required when CreateVpcEndpoints is false. The stack adds ingress rules

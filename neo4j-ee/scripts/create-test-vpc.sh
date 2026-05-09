@@ -4,8 +4,9 @@
 # Usage:
 #   scripts/create-test-vpc.sh --region <region> [--with-endpoints]
 #
-# --with-endpoints: also creates ssm, ssmmessages, logs, secretsmanager interface
-#   endpoints in the private subnets with a shared endpoint security group.
+# --with-endpoints: also creates ssm, ssmmessages, ec2messages, logs,
+#   secretsmanager interface endpoints in the private subnets with a shared
+#   endpoint security group.
 #   Required for Path B (CreateVpcEndpoints=false) testing.
 #
 # Writes .deploy/vpc-<ts>.txt with all resource IDs for use by teardown-test-vpc.sh.
@@ -201,7 +202,7 @@ if [[ "$WITH_ENDPOINTS" == "true" ]]; then
         --cidr "$VPC_CIDR" > /dev/null
     echo "  Endpoint SG: $ENDPOINT_SG_ID"
 
-    for SVC in ssm ssmmessages logs secretsmanager; do
+    for SVC in ssm ssmmessages ec2messages logs secretsmanager; do
         EP_ID=$(aws ec2 create-vpc-endpoint \
             --region "$REGION" \
             --vpc-id "$VPC_ID" \

@@ -49,7 +49,7 @@ Applies to any running ExistingVpc stack, whether deployed from the Marketplace 
 **VPC requirements:**
 - Private subnets with outbound internet routing (NAT Gateway, Transit Gateway, or equivalent)
 - One subnet for a single-instance deployment; three subnets in different AZs for a three-node cluster
-- No pre-existing VPC interface endpoints for `ssm`, `ssmmessages`, `ec2messages`, `logs`, or `secretsmanager` when `CreateVpcEndpoints=true` (creating duplicates fails the deployment)
+- No pre-existing VPC interface endpoints for `ssm`, `ssmmessages`, `logs`, or `secretsmanager` when `CreateVpcEndpoints=true` (creating duplicates fails the deployment)
 
 **`AllowedCIDR`** defaults to `10.0.0.0/16`. Pass `--allowed-cidr` explicitly if your VPC uses a different CIDR.
 
@@ -83,7 +83,7 @@ The template creates the following inside your VPC. It does **not** create: VPC,
 | ASG per node | One Auto Scaling Group per Neo4j node, fixed at `MinSize=MaxSize=DesiredCapacity=1`, for self-healing |
 | EBS data volumes | One GP3 volume per node with `DeletionPolicy: Retain`; survives stack deletion |
 | Operator bastion | `t4g.nano` in your private subnet, not registered as an NLB target; receives SSM sessions for operator access |
-| VPC interface endpoints | `ssm`, `ssmmessages`, `ec2messages`, `logs`, `secretsmanager` with `PrivateDnsEnabled: true`; created when `CreateVpcEndpoints=true` (the default), skipped when `CreateVpcEndpoints=false` |
+| VPC interface endpoints | `ssm`, `ssmmessages`, `logs`, `secretsmanager` with `PrivateDnsEnabled: true`; created when `CreateVpcEndpoints=true` (the default), skipped when `CreateVpcEndpoints=false` |
 | Security groups | NLB SG (AllowedCIDR on 7473/7687 to the NLB); External SG (NLB SG as source on 7473/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
 | SSM parameters | `/neo4j-ee/<stack>/` prefix; publishes VPC ID, NLB DNS, security group IDs, and secret ARN |
 | Secrets Manager | Neo4j admin password at `neo4j/<stack>/password` |
@@ -100,7 +100,7 @@ Structurally identical to `neo4j-private.template.yaml`: same operator bastion, 
 
 **`CreateVpcEndpoints` parameter** (default `true`)
 
-- **`true` — Path A:** template creates all five endpoints (`ssm`, `ssmmessages`, `ec2messages`, `logs`, `secretsmanager`) and a dedicated endpoint security group
+- **`true` — Path A:** template creates endpoints for `ssm`, `ssmmessages`, `logs`, and `secretsmanager` plus a dedicated endpoint security group
 - **`false` — Path B:** caller supplies an existing endpoint SG via `ExistingEndpointSgId`. A CloudFormation `Rules` block enforces this — deployment fails at parameter validation if missing
 - **Why one flag, not per-service:** enterprise VPCs that have endpoints virtually always have a single shared SG covering all five. Per-service flags produce half-managed states that the single `vpc-endpoint-sg-id` SSM contract parameter cannot represent
 
@@ -116,7 +116,7 @@ Structurally identical to `neo4j-private.template.yaml`: same operator bastion, 
 |---|---|
 | Private subnets with outbound routing | NAT Gateway, Transit Gateway, or Direct Connect; the template provisions none of these |
 | One subnet per AZ for a 3-node cluster | Each Neo4j node and its bastion are placed in the subnet passed via `PrivateSubnet1/2/3Id` |
-| No duplicate interface endpoints | If `CreateVpcEndpoints=true`, the VPC must not already have `ssm`, `ssmmessages`, `ec2messages`, `logs`, or `secretsmanager` endpoints; use `CreateVpcEndpoints=false` if it does |
+| No duplicate interface endpoints | If `CreateVpcEndpoints=true`, the VPC must not already have `ssm`, `ssmmessages`, `logs`, or `secretsmanager` endpoints; use `CreateVpcEndpoints=false` if it does |
 | Matching CIDR in `AllowedCIDR` | Defaults to `10.0.0.0/16`; pass `--allowed-cidr` if your VPC uses a different range |
 
 ### Platform Contract

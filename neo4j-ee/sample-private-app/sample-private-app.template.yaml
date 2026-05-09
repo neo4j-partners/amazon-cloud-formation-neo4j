@@ -190,7 +190,7 @@ Resources:
       Value: !GetAtt FunctionUrl.FunctionUrl
       Description: Function URL of the Neo4j sample private app Lambda.
 
-  # The EE stack provisions ssm/ssmmessages/ec2messages/logs/secretsmanager VPC
+  # The EE stack provisions ssm/ssmmessages/logs/secretsmanager VPC
   # endpoints but not an ec2 API endpoint. The resilience Lambda calls
   # ec2:DescribeInstances, so this stack adds that endpoint, reusing the EE
   # stack's endpoint SG.

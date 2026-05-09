@@ -11,12 +11,11 @@
 #         external-sg-id, password-secret-arn, vpc-endpoint-sg-id)
 #   7.  Operational SSM params (4 named: region, stack-name,
 #         private-subnet-1-id, private-subnet-2-id) [informational — WARN, not FAIL]
-#   8.  VPC interface endpoints exist (secretsmanager, logs, ssm, ssmmessages, ec2messages)
+#   8.  VPC interface endpoints exist (secretsmanager, logs, ssm, ssmmessages)
 #   9.  Endpoint reachable: secretsmanager
 #   10. Endpoint reachable: logs
 #   11. Endpoint reachable: ssm
 #   12. Endpoint reachable: ssmmessages
-#   13. Endpoint reachable: ec2messages
 #
 # Usage: ./scripts/preflight.sh [stack-name]
 # Typical runtime: 45-75s. Exits 0 only if all required checks pass (check 7 is informational).
@@ -157,7 +156,7 @@ _operational_params_exist() {
   done
 }
 
-# VPC_ID is read from SSM after check 6 passes and used by checks 8-13.
+# VPC_ID is read from SSM after check 6 passes and used by checks 8-12.
 _vpc_endpoints_exist() {
   [ -n "${VPC_ID}" ] || return 1
   local services
@@ -170,8 +169,7 @@ _vpc_endpoints_exist() {
     "com.amazonaws.${REGION}.secretsmanager" \
     "com.amazonaws.${REGION}.logs" \
     "com.amazonaws.${REGION}.ssm" \
-    "com.amazonaws.${REGION}.ssmmessages" \
-    "com.amazonaws.${REGION}.ec2messages"; do
+    "com.amazonaws.${REGION}.ssmmessages"; do
     echo "${services}" | tr '\t' '\n' | grep -qxF "${svc}" || return 1
   done
 }
@@ -193,10 +191,6 @@ _endpoint_reachable_ssm() {
 _endpoint_reachable_ssmmessages() {
   _send_and_wait "curl -m 5 -sSo /dev/null -w '%{http_code}' https://ssmmessages.${REGION}.amazonaws.com/ | grep -qE '^(400|403|404)$'"
 }
-_endpoint_reachable_ec2messages() {
-  _send_and_wait "curl -m 5 -sSo /dev/null -w '%{http_code}' https://ec2messages.${REGION}.amazonaws.com/ | grep -qE '^(400|403|404)$'"
-}
-
 _check "Stack status = CREATE_COMPLETE or UPDATE_COMPLETE"  _cfn_complete
 _check "Bastion SSM PingStatus = Online"                    _ssm_online
 _check "neo4j Python driver installed on bastion"           _neo4j_driver_installed
@@ -209,14 +203,14 @@ _info_check "Operational SSM params: region, stack-name, private-subnet-1-id, pr
 
 # Read VPC_ID from the contract SSM param. Order is load-bearing: the contract
 # params check above must pass first so a missing /vpc-id surfaces as "contract
-# param missing" rather than a confusing "no such VPC" error in checks 8-13.
+# param missing" rather than a confusing "no such VPC" error in checks 8-12.
 VPC_ID=$(aws ssm get-parameter \
   --name "/neo4j-ee/${STACK_NAME}/vpc-id" \
   --region "${REGION}" \
   --query "Parameter.Value" \
   --output text 2>/dev/null || echo "")
 
-_check "VPC interface endpoints: secretsmanager, logs, ssm, ssmmessages, ec2messages" \
+_check "VPC interface endpoints: secretsmanager, logs, ssm, ssmmessages" \
   _vpc_endpoints_exist
 _check "Endpoint reachable: secretsmanager.${REGION}.amazonaws.com" \
   _endpoint_reachable_secretsmanager
@@ -226,9 +220,6 @@ _check "Endpoint reachable: ssm.${REGION}.amazonaws.com" \
   _endpoint_reachable_ssm
 _check "Endpoint reachable: ssmmessages.${REGION}.amazonaws.com" \
   _endpoint_reachable_ssmmessages
-_check "Endpoint reachable: ec2messages.${REGION}.amazonaws.com" \
-  _endpoint_reachable_ec2messages
-
 echo ""
 echo "  ${PASS_COUNT} passed, ${FAIL_COUNT} failed"
 

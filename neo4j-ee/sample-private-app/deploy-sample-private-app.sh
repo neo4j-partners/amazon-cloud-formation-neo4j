@@ -3,13 +3,12 @@
 # an existing EE stack, using plain CloudFormation (no CDK).
 #
 # Usage:
-#   ./deploy-sample-private-app.sh [stack-name] [--suffix <suffix>] [--enable-resilience] [--insecure-skip-verify]
+#   ./deploy-sample-private-app.sh [stack-name] [--suffix <suffix>] [--enable-resilience]
 #
 # If stack-name is omitted, uses the most recently modified file in .deploy/.
 # --suffix appends a string to the app stack name, allowing parallel deployments
 # against the same EE stack (e.g. while a previous app stack is being torn down).
 # --enable-resilience deploys the test-only Lambda that can stop/start Neo4j via SSM.
-# --insecure-skip-verify uses neo4j+ssc for local self-signed certificate testing.
 # Reads /neo4j-ee/<stack-name>/ SSM parameters written by the EE CloudFormation
 # stack, packages the Lambda, uploads it, deploys the template, then writes the
 # Function URL to SSM and .deploy/.
@@ -69,10 +68,6 @@ while [[ $# -gt 0 ]]; do
       ENABLE_RESILIENCE="true"
       shift
       ;;
-    --insecure-skip-verify)
-      BOLT_SCHEME="neo4j+ssc"
-      shift
-      ;;
     *)
       POSITIONAL_ARGS+=("$1")
       shift
@@ -114,7 +109,7 @@ if [ "${DEPLOYMENT_MODE}" != "Private" ] && [ "${DEPLOYMENT_MODE}" != "ExistingV
   exit 1
 fi
 
-if [ "${SELF_SIGNED_CERTIFICATE}" = "true" ] && [ "${BOLT_SCHEME}" = "neo4j+s" ]; then
+if [ "${SELF_SIGNED_CERTIFICATE}" = "true" ]; then
   BOLT_SCHEME="neo4j+ssc"
 fi
 

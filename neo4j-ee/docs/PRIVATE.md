@@ -108,14 +108,13 @@ Expected output on a healthy stack:
   [PASS] Secret 'neo4j/test-ee-1776575131/password' exists
   [PASS] Contract SSM params: vpc-id, nlb-dns, advertised-dns, external-sg-id, password-secret-arn, vpc-endpoint-sg-id
   [INFO] Operational SSM params: region, stack-name, private-subnet-1-id, private-subnet-2-id
-  [PASS] VPC interface endpoints: secretsmanager, logs, ssm, ssmmessages, ec2messages
+  [PASS] VPC interface endpoints: secretsmanager, logs, ssm, ssmmessages
   [PASS] Endpoint reachable: secretsmanager.us-east-1.amazonaws.com
   [PASS] Endpoint reachable: logs.us-east-1.amazonaws.com
   [PASS] Endpoint reachable: ssm.us-east-1.amazonaws.com
   [PASS] Endpoint reachable: ssmmessages.us-east-1.amazonaws.com
-  [PASS] Endpoint reachable: ec2messages.us-east-1.amazonaws.com
 
-  12 passed, 0 failed
+  11 passed, 0 failed
 ```
 
 If the bastion SSM check fails immediately after a fresh deploy, the bastion UserData may still be running. Wait 2-3 minutes and retry.
@@ -246,7 +245,7 @@ cd neo4j-ee
 - Three Neo4j EC2 instances in private subnets, forming a Raft cluster
 - Three NAT Gateways for outbound traffic from the cluster members
 - One `t4g.nano` operator bastion in a private subnet, not registered as an NLB target
-- VPC interface endpoints for `ssm`, `ssmmessages`, `ec2messages`, `logs`, and `secretsmanager` with `PrivateDnsEnabled: true`
+- VPC interface endpoints for `ssm`, `ssmmessages`, `logs`, and `secretsmanager` with `PrivateDnsEnabled: true`
 
 **Single instance:**
 - VPC with one public subnet (NAT Gateway) and one private subnet (EC2 instance)
@@ -265,7 +264,7 @@ cd neo4j-ee
 | ASG per node | One Auto Scaling Group per Neo4j node, fixed at `MinSize=MaxSize=DesiredCapacity=1`, for self-healing |
 | EBS data volumes | One GP3 volume per node with `DeletionPolicy: Retain`; survives stack deletion |
 | Operator bastion | `t4g.nano` in a private subnet, not registered as an NLB target; receives SSM sessions for operator access |
-| VPC interface endpoints | `ssm`, `ssmmessages`, `ec2messages`, `logs`, `secretsmanager` with `PrivateDnsEnabled: true`; no NAT required for AWS service calls |
+| VPC interface endpoints | `ssm`, `ssmmessages`, `logs`, `secretsmanager` with `PrivateDnsEnabled: true`; no NAT required for AWS service calls |
 | Security groups | NLB SG (AllowedCIDR on 7473/7687 to the NLB); External SG (NLB SG as source on 7473/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
 | SSM parameters | `/neo4j-ee/<stack>/` prefix; publishes VPC ID, NLB DNS, security group IDs, and secret ARN for downstream consumers |
 | Secrets Manager | Neo4j admin password at `neo4j/<stack>/password` |
@@ -338,7 +337,7 @@ The stack publishes resource IDs via SSM under `/neo4j-ee/<stack-name>/` so that
 | `/neo4j-ee/<stack>/private-subnet-2-id` | Second private subnet |
 | `/neo4j-ee/<stack>/private-route-table-1-id` | Route table for the first private subnet |
 
-**VPC interface endpoints.** All five regional service hostnames (`ssm`, `ssmmessages`, `ec2messages`, `logs`, `secretsmanager`) resolve to private IPs inside the VPC. No endpoint URL overrides are needed in application code, and no NAT data-processing charges apply to AWS service calls.
+**VPC interface endpoints.** The regional service hostnames (`ssm`, `ssmmessages`, `logs`, `secretsmanager`) resolve to private IPs inside the VPC. No endpoint URL overrides are needed in application code, and no NAT data-processing charges apply to AWS service calls.
 
 The `vpc-endpoint-sg-id` parameter is the mechanism by which applications opt into reaching these endpoints. Each application adds its own security group to the endpoint SG's ingress on port 443. Opening the endpoint SG to the whole VPC CIDR would allow any workload in the VPC to call SSM and Secrets Manager via PrivateLink. The published SG ID approach requires each application to explicitly opt in, creating an auditable per-application record and a clean removal path.
 
@@ -580,7 +579,7 @@ cd neo4j-ee && ./teardown.sh --delete-volumes <stack>
 ### Troubleshooting
 
 **"Bastion SSM PingStatus = Online" fails**
-The bastion UserData may still be running in the first 3 minutes after stack creation. Retry after waiting. If the check still fails after 10 minutes, confirm the bastion's IAM role has `AmazonSSMManagedInstanceCore` and the VPC has `ssm`, `ssmmessages`, and `ec2messages` interface endpoints.
+The bastion UserData may still be running in the first 3 minutes after stack creation. Retry after waiting. If the check still fails after 10 minutes, confirm the bastion's IAM role has `AmazonSSMManagedInstanceCore` and the VPC has `ssm` and `ssmmessages` interface endpoints.
 
 **"AccessDenied" on `GetSecretValue` or `GetParameter`**
 The bastion's IAM role does not have access to the secret or SSM parameter for this stack. The policy scopes to `neo4j/<stack-name>/password` and `/neo4j-ee/<stack-name>/*`. Re-deploying the stack re-creates the policy with the correct scope.

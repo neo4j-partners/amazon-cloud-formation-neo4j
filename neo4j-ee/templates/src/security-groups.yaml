@@ -143,8 +143,7 @@
   # ---------------------------------------------------------------------------
   # VPC endpoints for Systems Manager (Private mode only)
   # Routes SSM control-plane traffic through AWS PrivateLink rather than NAT.
-  # Required: ssm (registration/polling), ssmmessages (Session Manager),
-  #           ec2messages (legacy SSM Agent message delivery fallback).
+  # Required: ssm (registration/polling) and ssmmessages (Session Manager).
   # S3 gateway endpoint is free and prevents SSM Agent update traffic from
   # consuming NAT Gateway data-processing charges.
   # ---------------------------------------------------------------------------

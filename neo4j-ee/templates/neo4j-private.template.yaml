@@ -463,8 +463,7 @@ Resources:
   # ---------------------------------------------------------------------------
   # VPC endpoints for Systems Manager (Private mode only)
   # Routes SSM control-plane traffic through AWS PrivateLink rather than NAT.
-  # Required: ssm (registration/polling), ssmmessages (Session Manager),
-  #           ec2messages (legacy SSM Agent message delivery fallback).
+  # Required: ssm (registration/polling) and ssmmessages (Session Manager).
   # S3 gateway endpoint is free and prevents SSM Agent update traffic from
   # consuming NAT Gateway data-processing charges.
   # ---------------------------------------------------------------------------
@@ -1661,22 +1660,6 @@ Resources:
     Properties:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
-      VpcId: !Ref Neo4jVPC
-      SubnetIds: !If
-        - CreateCluster
-        - - !Ref Neo4jPrivateSubnet1
-          - !Ref Neo4jPrivateSubnet2
-          - !Ref Neo4jPrivateSubnet3
-        - - !Ref Neo4jPrivateSubnet1
-      SecurityGroupIds:
-        - !Ref VpcEndpointSecurityGroup
-      PrivateDnsEnabled: true
-
-  Ec2MessagesVpcEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      VpcEndpointType: Interface
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2messages'
       VpcId: !Ref Neo4jVPC
       SubnetIds: !If
         - CreateCluster

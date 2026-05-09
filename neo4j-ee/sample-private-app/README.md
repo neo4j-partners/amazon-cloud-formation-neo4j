@@ -51,9 +51,6 @@ All scripts run from the `sample-private-app/` directory:
 # Or target a specific EE stack
 ./deploy-sample-private-app.sh test-ee-1776575131
 
-# For manually supplied self-signed certs not created by certificate.py
-./deploy-sample-private-app.sh test-ee-1776575131 --insecure-skip-verify
-
 # Invoke the Lambda
 ./invoke.sh
 
@@ -64,7 +61,7 @@ All scripts run from the `sample-private-app/` directory:
 ./teardown-sample-private-app.sh
 ```
 
-`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, packages the Lambda, uploads it to a deploy S3 bucket, runs `aws cloudformation deploy`, and writes the Function URL to `/neo4j-sample-private-app/<stack>/function-url` in SSM and `../.deploy/sample-private-app-<ee-stack>.json` locally. It also generates `invoke.sh` in the same directory. Pass `--enable-resilience` only for test deployments that should include the stop/start validation Lambda. Stacks created from `certificate.py --self-signed` are detected automatically; pass `--insecure-skip-verify` only for manually supplied self-signed ACM certificates.
+`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, packages the Lambda, uploads it to a deploy S3 bucket, runs `aws cloudformation deploy`, and writes the Function URL to `/neo4j-sample-private-app/<stack>/function-url` in SSM and `../.deploy/sample-private-app-<ee-stack>.json` locally. It also generates `invoke.sh` in the same directory. Pass `--enable-resilience` only for test deployments that should include the stop/start validation Lambda. Self-signed test certificates created by `certificate.py --self-signed` are detected from the EE deploy outputs.
 
 ### Teardown Ordering
 
@@ -131,8 +128,8 @@ This sample establishes both wiring connections in `sample-private-app.template.
 
 - **TLS is mandatory.** The NLB terminates TLS on 7687 using the customer-supplied ACM cert whose SAN matches `AdvertisedDNS`; the target group re-encrypts to a self-signed backend cert generated on each instance
 - **Driver-side validation is automatic.** The Lambda reads `AdvertisedDNS` from SSM (`<SsmPrefix>/advertised-dns`) and connects via `neo4j+s://<AdvertisedDNS>:7687`. The driver validates the NLB-presented ACM cert against the system trust store, so no certificate file or custom SSL context is needed
-- **Self-signed test certificates require `neo4j+ssc://`.** Local stacks created with `certificate.py --self-signed` are detected from the EE deploy outputs. For manually supplied self-signed ACM certificates, deploy this app with `--insecure-skip-verify`
-- **DNS must resolve inside the VPC.** In Private mode, deploy the EE stack with `--create-private-dns`, or set up equivalent Route 53 private DNS yourself. The Lambda must be able to resolve `AdvertisedDNS` via the VPC resolver
+- **Self-signed test certificates require `neo4j+ssc://`.** Local stacks created with `certificate.py --self-signed` are detected from the EE deploy outputs, and the sample app switches the driver scheme automatically
+- **DNS must resolve inside the VPC.** In Private mode, deploy the EE stack with `--create-private-dns`. The Lambda must be able to resolve `AdvertisedDNS` via the VPC resolver
 
 ---
 
@@ -232,7 +229,7 @@ The resilience Lambda is test-only and is not deployed by default. When `--enabl
 
 Production accounts should additionally restrict who can update the resilience Lambda code, pass its role, or invoke its Function URL. Those controls belong in customer or organization IAM policy because the sample app cannot safely deny every legitimate deployment principal.
 
-This stack also provisions an `ec2` VPC interface endpoint reusing the EE stack's endpoint SG. The EE stack provides `ssm`, `ssmmessages`, `ec2messages`, `logs`, and `secretsmanager` endpoints but no `ec2` API endpoint, and the resilience Lambda has no internet egress. Without this endpoint, `DescribeInstances` hangs until timeout.
+This stack also provisions an `ec2` VPC interface endpoint reusing the EE stack's endpoint SG. The EE stack provides `ssm`, `ssmmessages`, `logs`, and `secretsmanager` endpoints but no `ec2` API endpoint, and the resilience Lambda has no internet egress. Without this endpoint, `DescribeInstances` hangs until timeout.
 
 ### Lambda Timeout
 

@@ -78,7 +78,7 @@ These are the minimum permissions the operator's local IAM principal (user or as
 | Permission | Resource | Used by |
 |---|---|---|
 | `cloudformation:DescribeStacks`, `cloudformation:DescribeStackResources` | The stack ARN | `preflight.sh`, `deploy.py` (reads stack outputs) |
-| `ssm:SendCommand`, `ssm:GetCommandInvocation`, `ssm:StartSession`, `ssm:DescribeInstanceInformation` | The bastion instance | `browser-tunnel.sh`, `bolt-tunnel.sh`, `admin-shell`, `run-cypher`, `validate-private`, `preflight.sh` (bastion ping check) |
+| `ssm:SendCommand`, `ssm:GetCommandInvocation`, `ssm:StartSession`, `ssm:DescribeInstanceInformation` | The bastion instance | `uv run scripts/browser-tunnel.py`, `uv run scripts/bolt-tunnel.py`, `admin-shell`, `run-cypher`, `validate-private`, `preflight.sh` (bastion ping check) |
 | `ssm:GetParameter`, `ssm:GetParametersByPath` | `/neo4j-ee/<stack-name>/*` | Any tool that resolves the NLB DNS or security group IDs from the platform contract |
 | `secretsmanager:GetSecretValue`, `secretsmanager:DescribeSecret` | `neo4j/<stack-name>/password` | `get-password.sh`, `preflight.sh` (secret existence check) |
 
@@ -123,14 +123,14 @@ If the bastion SSM check fails immediately after a fresh deploy, the bastion Use
 
 All operator access goes through the `t4g.nano` bastion via SSM. Tunnels are only needed when your laptop talks to the NLB directly. Run `uv run` commands from `neo4j-ee/validate-private/`.
 
-`CreatePrivateDns=true` makes `AdvertisedDNS` resolve inside the VPC, so bastion-run tools such as `admin-shell`, `run-cypher`, `validate-private`, and `smoke-write.sh` need no local DNS changes. It does not change your laptop resolver. For local SSM port-forward tunnels, keep the `/etc/hosts` entry so `AdvertisedDNS` resolves to `127.0.0.1` and the connection still uses the certificate name rather than `localhost`.
+`CreatePrivateDns=true` makes `AdvertisedDNS` resolve inside the VPC, so bastion-run tools such as `admin-shell`, `run-cypher`, `validate-private`, and `uv run scripts/smoke-write.py` need no local DNS changes. It does not change your laptop resolver. For local SSM port-forward tunnels, keep the `/etc/hosts` entry so `AdvertisedDNS` resolves to `127.0.0.1` and the connection still uses the certificate name rather than `localhost`.
 
 | Tool | How it connects | Tunnel needed? |
 |---|---|---|
 | `uv run admin-shell` | SSM interactive session on the bastion | No |
 | `uv run run-cypher` | SSM `RunShellScript` on the bastion | No |
 | `uv run validate-private` | SSM `RunShellScript` on the bastion | No |
-| `./scripts/smoke-write.sh` | SSM `RunShellScript` on the bastion | No |
+| `uv run scripts/smoke-write.py` | SSM `RunShellScript` on the bastion | No |
 | Local driver or client tool | Bolt connection from your laptop | Yes — Bolt tunnel (7687) |
 | Neo4j Browser | HTTPS for the web UI + Bolt for queries | Yes — both tunnels (7473 + 7687) |
 
@@ -139,10 +139,10 @@ All operator access goes through the `t4g.nano` bastion via SSM. Tunnels are onl
 Use the Bolt tunnel when you want to connect a local driver, client tool, or script to the cluster from your laptop.
 
 ```bash
-./scripts/bolt-tunnel.sh      # localhost:7687 → NLB:7687  (blocks; Ctrl-C to close)
+uv run scripts/bolt-tunnel.py      # localhost:7687 -> NLB:7687  (blocks; Ctrl-C to close)
 ```
 
-- **Connect URL:** `neo4j+s://<AdvertisedDNS>:7687` for a certificate trusted by the client, or `neo4j+ssc://<AdvertisedDNS>:7687` for self-signed test certificates
+- **Connect URL:** use the URI printed by `uv run scripts/bolt-tunnel.py`. It chooses `bolt` for single-server stacks, `neo4j` for clusters, `+s` for system-trusted certificates, and `+ssc` for self-signed/imported/private certificates that are not installed in the client trust store.
 - **Required hosts entry for laptop tunnels:** `127.0.0.1 <AdvertisedDNS>` in `/etc/hosts` — the NLB-presented certificate is issued for `AdvertisedDNS`, so connecting to `localhost` fails hostname validation for trusted certs. Stack-managed private DNS helps clients inside the VPC; it does not affect local laptop DNS.
 - **Bypass routing table:** use `bolt+s://` instead of `neo4j+s://`, or `bolt+ssc://` instead of `neo4j+ssc://` for self-signed tests. With `neo4j+s://` or `neo4j+ssc://`, the routing table contains `AdvertisedDNS` itself, which resolves back to `localhost` via the hosts entry and works through the same tunnel
 - **Also required for Neo4j Browser:** open this tunnel alongside the [Browser Tunnel](#browser-tunnel)
@@ -154,20 +154,20 @@ Use this to open the Neo4j Browser web UI. The browser makes two connections: HT
 **Single-command option** — run from `neo4j-ee/`:
 
 ```bash
-./browse.sh                   # most recent deployment
-./browse.sh <stack-name>      # specific deployment
+uv run browse.py                   # most recent deployment
+uv run browse.py <stack-name>      # specific deployment
 ```
 
-`browse.sh` reads `.deploy/<stack-name>.txt`, opens both SSM port-forward tunnels in the same shell (7473 and 7687), and prints the URL and credentials. Press Ctrl+C to close both tunnels.
+`browse.py` reads `.deploy/<stack-name>.txt`, opens both SSM port-forward tunnels in the same shell (7473 and 7687), and prints the URL and credentials. Press Ctrl+C to close both tunnels.
 
 **Two-terminal option** — run from `neo4j-ee/validate-private/`:
 
 ```bash
-./scripts/browser-tunnel.sh   # localhost:7473 → NLB:7473  (blocks; Ctrl-C to close)
-./scripts/bolt-tunnel.sh      # localhost:7687 → NLB:7687  (blocks; Ctrl-C to close)
+uv run scripts/browser-tunnel.py   # localhost:7473 -> NLB:7473  (blocks; Ctrl-C to close)
+uv run scripts/bolt-tunnel.py      # localhost:7687 -> NLB:7687  (blocks; Ctrl-C to close)
 ```
 
-Add `127.0.0.1 <AdvertisedDNS>` to your laptop's `/etc/hosts`, then open `https://<AdvertisedDNS>:7473`. When prompted for a connection URL, enter `neo4j+s://<AdvertisedDNS>:7687`, or `neo4j+ssc://<AdvertisedDNS>:7687` for self-signed test certificates. For the password, see [Retrieve the Password](#retrieve-the-password).
+Add `127.0.0.1 <AdvertisedDNS>` to your laptop's `/etc/hosts`, then open `https://<AdvertisedDNS>:7473`. When prompted for a connection URL, enter the Bolt URI printed by `uv run browse.py` or `uv run scripts/bolt-tunnel.py`. For the password, see [Retrieve the Password](#retrieve-the-password).
 
 For self-signed test certificates, the browser will still show a certificate warning for `https://<AdvertisedDNS>:7473`; that is expected for local testing. Marketplace/customer deployments should use a certificate trusted by the client.
 
@@ -419,7 +419,7 @@ cd neo4j-ee
 ./certificate.py --region us-east-2 --domain-name neo4j.test.local --self-signed
 ```
 
-This is instant. The trade-off: clients must connect with `neo4j+ssc://` (skip cert validation) instead of `neo4j+s://`. `deploy.py` records `SelfSignedCertificate=true` in the EE output file when it can match the cert to a local `certificate.py --self-signed` cert file, and the `validate-private` suite, `admin-shell`, `run-cypher`, and `smoke-write.sh` use `neo4j+ssc://` for those test stacks. In-VPC applications still need `AdvertisedDNS` to resolve. Private mode creates that private DNS record by default unless you pass `--no-create-private-dns`. The sample app also reads the EE output file and switches away from system trust for self-signed test deployments.
+This is instant. The trade-off: clients must use a skip-validation scheme such as `bolt+ssc://` or `neo4j+ssc://` instead of `+s`. `deploy.py` records `SelfSignedCertificate=true` in the EE output file when it can match the cert to a local `certificate.py --self-signed` cert file, and the `validate-private` suite, `admin-shell`, `run-cypher`, and `uv run scripts/smoke-write.py` choose `+ssc` for those test stacks. In-VPC applications still need `AdvertisedDNS` to resolve. Private mode creates that private DNS record by default unless you pass `--no-create-private-dns`. The sample app also reads the EE output file and switches away from system trust for self-signed test deployments.
 
 **Option B — Real domain with Route 53**
 
@@ -532,8 +532,8 @@ uv run validate-private --stack <stack-name>   # specific deployment
 ### Smoke Test
 
 ```bash
-./scripts/smoke-write.sh                       # 20 CREATE/DELETE iterations
-./scripts/smoke-write.sh <stack-name> 50       # custom iteration count
+uv run scripts/smoke-write.py                       # 20 CREATE/DELETE iterations
+uv run scripts/smoke-write.py <stack-name> 50       # custom iteration count
 ```
 
 Runs write operations through the cluster via the bastion. Each iteration uses a fresh driver connection to exercise routing table handling.

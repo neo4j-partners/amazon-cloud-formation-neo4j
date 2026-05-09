@@ -55,7 +55,7 @@ Applies to any running ExistingVpc stack, whether deployed from the Marketplace 
 
 ### Access, Admin Tools, and Password
 
-Bastion access and all operator tools (`preflight.sh`, `validate-private`, `admin-shell`, `run-cypher`, `smoke-write.sh`, `browser-tunnel.sh`, `bolt-tunnel.sh`) are identical to the Private template. See [the Operator Guide in PRIVATE.md](PRIVATE.md#operator-guide) from "Access via Bastion" onward.
+Bastion access and all operator tools (`preflight.sh`, `validate-private`, `admin-shell`, `run-cypher`, `uv run scripts/smoke-write.py`, `uv run scripts/browser-tunnel.py`, `uv run scripts/bolt-tunnel.py`) are identical to the Private template. See [the Operator Guide in PRIVATE.md](PRIVATE.md#operator-guide) from "Access via Bastion" onward.
 
 ExistingVpc mode defaults `CreatePrivateDns=false`, so customer-managed DNS remains authoritative by default. If you leave it false, `AdvertisedDNS` must already resolve to the internal NLB from the supplied VPC, including from the operator bastion. Otherwise bastion-run tools fail during Bolt DNS resolution. For source-based test deployments, the simplest path is usually `--create-private-dns --private-dns-zone <zone>` or `--create-private-dns --private-dns-hosted-zone-id <zone-id>`.
 

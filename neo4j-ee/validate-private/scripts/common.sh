@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# common.sh — shared helpers sourced by neo4j-ee/validate-private/scripts/*.sh (not executed directly)
+# common.sh - shared helpers sourced by Bash-only validate-private scripts.
 
 export AWS_PROFILE="${AWS_PROFILE:-default}"
 
@@ -40,7 +40,6 @@ resolve_stack() {
 }
 
 # Exit with an error if the stack is not Private or ExistingVpc mode.
-# Protects smoke-write.sh and browser-tunnel.sh from Public stacks.
 require_private_mode() {
   local outputs_file="$1"
   local mode stack_name

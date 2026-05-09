@@ -9,6 +9,7 @@
 # --suffix appends a string to the app stack name, allowing parallel deployments
 # against the same EE stack (e.g. while a previous app stack is being torn down).
 # --enable-resilience deploys the test-only Lambda that can stop/start Neo4j via SSM.
+# --insecure-skip-verify uses neo4j+ssc for local self-signed certificate testing.
 # Reads /neo4j-ee/<stack-name>/ SSM parameters written by the EE CloudFormation
 # stack, packages the Lambda, uploads it, deploys the template, then writes the
 # Function URL to SSM and .deploy/.
@@ -56,6 +57,7 @@ require_ssm() {
 # ---------------------------------------------------------------------------
 SUFFIX=""
 ENABLE_RESILIENCE="false"
+BOLT_SCHEME="neo4j+s"
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -65,6 +67,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --enable-resilience)
       ENABLE_RESILIENCE="true"
+      shift
+      ;;
+    --insecure-skip-verify)
+      BOLT_SCHEME="neo4j+ssc"
       shift
       ;;
     *)
@@ -95,6 +101,7 @@ fi
 NEO4J_STACK=$(read_field "${OUTPUTS_FILE}" "StackName")
 REGION=$(read_field "${OUTPUTS_FILE}" "Region")
 DEPLOYMENT_MODE=$(read_field "${OUTPUTS_FILE}" "DeploymentMode")
+NUMBER_OF_SERVERS=$(read_field "${OUTPUTS_FILE}" "NumberOfServers")
 
 if [ -z "${NEO4J_STACK}" ] || [ -z "${REGION}" ]; then
   echo "ERROR: Could not read StackName or Region from ${OUTPUTS_FILE}." >&2
@@ -126,6 +133,7 @@ echo "  App Stack:      ${APP_STACK_NAME}"
 echo "  Region:         ${REGION}"
 echo "  SSM Prefix:     ${SSM_PREFIX}"
 echo "  Resilience:     ${ENABLE_RESILIENCE}"
+echo "  Bolt Scheme:    ${BOLT_SCHEME}"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -137,14 +145,24 @@ EXTERNAL_SG_ID=$(require_ssm "${REGION}" "${SSM_PREFIX}/external-sg-id")
 PASSWORD_SECRET_ARN=$(require_ssm "${REGION}" "${SSM_PREFIX}/password-secret-arn")
 VPC_ENDPOINT_SG_ID=$(require_ssm "${REGION}" "${SSM_PREFIX}/vpc-endpoint-sg-id")
 PRIVATE_SUBNET_1_ID=$(require_ssm "${REGION}" "${SSM_PREFIX}/private-subnet-1-id")
-PRIVATE_SUBNET_2_ID=$(require_ssm "${REGION}" "${SSM_PREFIX}/private-subnet-2-id")
+SUBNET_IDS="${PRIVATE_SUBNET_1_ID}"
+PRIVATE_SUBNET_2_ID=""
+
+if [ "${NUMBER_OF_SERVERS:-1}" != "1" ]; then
+  PRIVATE_SUBNET_2_ID=$(require_ssm "${REGION}" "${SSM_PREFIX}/private-subnet-2-id")
+  SUBNET_IDS="${PRIVATE_SUBNET_1_ID},${PRIVATE_SUBNET_2_ID}"
+fi
 
 echo "  vpc-id:              ${VPC_ID}"
 echo "  external-sg-id:      ${EXTERNAL_SG_ID}"
 echo "  password-secret-arn: ${PASSWORD_SECRET_ARN}"
 echo "  vpc-endpoint-sg-id:  ${VPC_ENDPOINT_SG_ID}"
 echo "  private-subnet-1-id: ${PRIVATE_SUBNET_1_ID}"
-echo "  private-subnet-2-id: ${PRIVATE_SUBNET_2_ID}"
+if [ -n "${PRIVATE_SUBNET_2_ID}" ]; then
+  echo "  private-subnet-2-id: ${PRIVATE_SUBNET_2_ID}"
+else
+  echo "  private-subnet-2-id: not present for single-server EE stack"
+fi
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -213,7 +231,7 @@ aws cloudformation deploy \
   --parameter-overrides \
     "SsmPrefix=${SSM_PREFIX}" \
     "VpcId=${VPC_ID}" \
-    "SubnetIds=${PRIVATE_SUBNET_1_ID},${PRIVATE_SUBNET_2_ID}" \
+    "SubnetIds=${SUBNET_IDS}" \
     "ExternalSgId=${EXTERNAL_SG_ID}" \
     "VpcEndpointSgId=${VPC_ENDPOINT_SG_ID}" \
     "PasswordSecretArn=${PASSWORD_SECRET_ARN}" \
@@ -222,7 +240,8 @@ aws cloudformation deploy \
     "LambdaS3Bucket=${DEPLOY_BUCKET}" \
     "LambdaS3Key=${LAMBDA_KEY}" \
     "LambdaS3ObjectVersion=${LAMBDA_VERSION_ID}" \
-    "EnableResilienceTestFunction=${ENABLE_RESILIENCE}"
+    "EnableResilienceTestFunction=${ENABLE_RESILIENCE}" \
+    "BoltScheme=${BOLT_SCHEME}"
 
 # ---------------------------------------------------------------------------
 # Read stack outputs
@@ -273,7 +292,8 @@ cat > "${APP_LOCAL_FILE}" <<JSONEOF
   "function_url": "${FUNCTION_URL}",
   "function_arn": "${FUNCTION_ARN}",
   "validate_url": "${VALIDATE_URL}",
-  "validate_arn": "${VALIDATE_ARN}"
+  "validate_arn": "${VALIDATE_ARN}",
+  "bolt_scheme": "${BOLT_SCHEME}"
 }
 JSONEOF
 echo "Wrote ${APP_LOCAL_FILE}"
@@ -299,11 +319,24 @@ REGION=$(python3 -c "import json; d=json.load(open('${APP_FILE}')); print(d['reg
 
 eval "$(aws configure export-credentials --format env 2>/dev/null)"
 
-curl --silent --aws-sigv4 "aws:amz:${REGION}:lambda" \
+BODY_FILE=$(mktemp)
+STATUS=$(curl --silent --show-error --output "${BODY_FILE}" --write-out "%{http_code}" \
+  --aws-sigv4 "aws:amz:${REGION}:lambda" \
   --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
-  -H "x-amz-security-token: ${AWS_SESSION_TOKEN}" \
+  -H "x-amz-security-token: ${AWS_SESSION_TOKEN:-}" \
   -H "Content-Type: application/json" \
-  "${FUNCTION_URL}" | python3 -m json.tool
+  "${FUNCTION_URL}")
+
+if [ "${STATUS}" -lt 200 ] || [ "${STATUS}" -ge 300 ]; then
+  echo "ERROR: Function URL returned HTTP ${STATUS}" >&2
+  cat "${BODY_FILE}" >&2
+  echo >&2
+  rm -f "${BODY_FILE}"
+  exit 1
+fi
+
+python3 -m json.tool <"${BODY_FILE}"
+rm -f "${BODY_FILE}"
 INVOKE_EOF
 chmod +x "${INVOKE_SCRIPT}"
 echo "Wrote ${INVOKE_SCRIPT}"
@@ -331,11 +364,24 @@ fi
 
 eval "$(aws configure export-credentials --format env 2>/dev/null)"
 
-curl --silent --max-time 310 --aws-sigv4 "aws:amz:${REGION}:lambda" \
+BODY_FILE=$(mktemp)
+STATUS=$(curl --silent --show-error --output "${BODY_FILE}" --write-out "%{http_code}" \
+  --max-time 310 --aws-sigv4 "aws:amz:${REGION}:lambda" \
   --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
-  -H "x-amz-security-token: ${AWS_SESSION_TOKEN}" \
+  -H "x-amz-security-token: ${AWS_SESSION_TOKEN:-}" \
   -H "Content-Type: application/json" \
-  "${VALIDATE_URL}" | python3 -m json.tool
+  "${VALIDATE_URL}")
+
+if [ "${STATUS}" -lt 200 ] || [ "${STATUS}" -ge 300 ]; then
+  echo "ERROR: Function URL returned HTTP ${STATUS}" >&2
+  cat "${BODY_FILE}" >&2
+  echo >&2
+  rm -f "${BODY_FILE}"
+  exit 1
+fi
+
+python3 -m json.tool <"${BODY_FILE}"
+rm -f "${BODY_FILE}"
 VALIDATE_EOF
 chmod +x "${VALIDATE_SCRIPT}"
 echo "Wrote ${VALIDATE_SCRIPT}"

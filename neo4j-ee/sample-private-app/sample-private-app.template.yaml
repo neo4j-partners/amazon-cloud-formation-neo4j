@@ -50,6 +50,15 @@ Parameters:
     Description: >-
       Test-only. When true, deploys a resilience Function URL whose role can run
       fixed SSM command documents to stop/start Neo4j on parent stack instances.
+  BoltScheme:
+    Type: String
+    AllowedValues:
+      - neo4j+s
+      - neo4j+ssc
+    Default: neo4j+s
+    Description: >-
+      Neo4j Bolt URI scheme. Use neo4j+s for trusted ACM certificates. Use
+      neo4j+ssc only for local self-signed certificate testing.
 
 Conditions:
   HasObjectVersion: !Not [!Equals [!Ref LambdaS3ObjectVersion, '']]
@@ -161,6 +170,7 @@ Resources:
         Variables:
           NEO4J_SSM_ADVERTISED_DNS_PATH: !Sub '${SsmPrefix}/advertised-dns'
           NEO4J_SECRET_ARN: !Ref PasswordSecretArn
+          NEO4J_BOLT_SCHEME: !Ref BoltScheme
       Code:
         S3Bucket: !Ref LambdaS3Bucket
         S3Key: !Ref LambdaS3Key
@@ -325,6 +335,7 @@ Resources:
         Variables:
           NEO4J_SSM_ADVERTISED_DNS_PATH: !Sub '${SsmPrefix}/advertised-dns'
           NEO4J_SECRET_ARN: !Ref PasswordSecretArn
+          NEO4J_BOLT_SCHEME: !Ref BoltScheme
           NEO4J_STACK_NAME: !Ref Neo4jStackName
           NEO4J_STACK_ID: !Ref Neo4jStackId
           SSM_DOC_READ_SERVER_ID: !Ref ReadServerIdDocument

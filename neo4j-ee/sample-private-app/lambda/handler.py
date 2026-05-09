@@ -19,7 +19,8 @@ _driver = None
 def _init_driver():
     advertised_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_ADVERTISED_DNS_PATH"])["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
-    return GraphDatabase.driver(f"neo4j+s://{advertised_dns}:7687", auth=("neo4j", password))
+    bolt_scheme = os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s")
+    return GraphDatabase.driver(f"{bolt_scheme}://{advertised_dns}:7687", auth=("neo4j", password))
 
 
 def _get_driver():
@@ -115,7 +116,7 @@ def _run(driver):
                 readers += len(server.get("addresses", []))
 
     body = {
-        "bolt_scheme": "neo4j+s",
+        "bolt_scheme": os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s"),
         "edition": edition,
         "nodes_created": nodes_created,
         "relationships_created": rels_created,

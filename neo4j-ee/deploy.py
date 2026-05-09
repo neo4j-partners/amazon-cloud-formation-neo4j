@@ -6,6 +6,7 @@
 
 import argparse
 import atexit
+import json
 import os
 from pathlib import Path
 import random
@@ -66,13 +67,29 @@ def parse_args():
     p.add_argument("--region", dest="region_override", metavar="REGION")
     p.add_argument("--number-of-servers", type=int, default=3, choices=[1, 3])
     p.add_argument("--marketplace", action="store_true")
-    p.add_argument("--cert-arn", metavar="ARN", required=True,
-                   help="ACM certificate ARN for the NLB TLS listeners on 7473 and 7687.")
-    p.add_argument("--advertised-dns", metavar="DNS", required=True,
-                   help="DNS name that resolves to the NLB and matches the ACM cert SAN.")
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate arguments and print the deployment plan without making AWS API calls.",
+    )
+    p.add_argument(
+        "--cert-arn", metavar="ARN", default=None,
+        help=(
+            "ACM certificate ARN for the NLB TLS listeners on 7473 and 7687. "
+            "Auto-detected from the most recently modified .deploy/cert-*.json "
+            "(written by certificate.py) when not provided."
+        ),
+    )
+    p.add_argument(
+        "--advertised-dns", metavar="DNS", default=None,
+        help=(
+            "DNS name that resolves to the NLB and matches the ACM cert SAN. "
+            "Auto-detected from .deploy/cert-*.json when not provided."
+        ),
+    )
     p.add_argument("--alert-email", metavar="EMAIL")
     p.add_argument("--mode", default="Private", choices=["Public", "Private", "ExistingVpc"])
-    p.add_argument("--name", metavar="NAME", help="Stack name suffix (default: timestamp). Stack becomes ee-{NAME}.")
+    p.add_argument("--name", metavar="NAME", help="Stack name (default: ee-{timestamp}).")
     p.add_argument("--allowed-cidr", metavar="CIDR")
     p.add_argument("--vpc-id", metavar="VPC_ID")
     p.add_argument("--subnet-1", metavar="SUBNET_ID")
@@ -90,6 +107,21 @@ def parse_args():
              "from the file; any of those flags override the file values when provided explicitly.",
     )
     return p.parse_args()
+
+
+def _resolve_cert_file(explicit: str | None, deploy_dir: str) -> str | None:
+    if explicit:
+        return explicit
+    cert_files = sorted(
+        Path(deploy_dir).glob("cert-*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    return str(cert_files[0]) if cert_files else None
+
+
+def _parse_cert_file(path: str) -> dict[str, str]:
+    return json.loads(Path(path).read_text())
 
 
 def _resolve_vpc_file(explicit: str | None, deploy_dir: str) -> str | None:
@@ -123,6 +155,57 @@ def detect_public_ip():
             return r.read().decode().strip()
     except Exception:
         return None
+
+
+def build_cfn_params(
+    args: argparse.Namespace,
+    password: str,
+    allowed_cidr: str,
+    ssm_param_path: str,
+) -> list[dict[str, str]]:
+    params = [
+        {"ParameterKey": "Password", "ParameterValue": password},
+        {
+            "ParameterKey": "NumberOfServers",
+            "ParameterValue": str(args.number_of_servers),
+        },
+        {"ParameterKey": "InstanceType", "ParameterValue": args.instance_type},
+        {"ParameterKey": "AllowedCIDR", "ParameterValue": allowed_cidr},
+        {"ParameterKey": "CertificateArn", "ParameterValue": args.cert_arn},
+        {"ParameterKey": "AdvertisedDNS", "ParameterValue": args.advertised_dns},
+        {"ParameterKey": "InstallGDS", "ParameterValue": "true"},
+    ]
+    if ssm_param_path:
+        params.append({"ParameterKey": "ImageId", "ParameterValue": ssm_param_path})
+    if args.alert_email:
+        params.append({"ParameterKey": "AlertEmail", "ParameterValue": args.alert_email})
+    if args.disk_size is not None:
+        params.append(
+            {"ParameterKey": "DataDiskSize", "ParameterValue": str(args.disk_size)}
+        )
+    if args.snapshot_id:
+        params.append(
+            {"ParameterKey": "Node1SnapshotId", "ParameterValue": args.snapshot_id}
+        )
+    if args.mode == "ExistingVpc":
+        params += [
+            {"ParameterKey": "VpcId", "ParameterValue": args.vpc_id},
+            {"ParameterKey": "PrivateSubnet1Id", "ParameterValue": args.subnet_1},
+            {"ParameterKey": "PrivateSubnet2Id", "ParameterValue": args.subnet_2},
+            {"ParameterKey": "PrivateSubnet3Id", "ParameterValue": args.subnet_3},
+            {
+                "ParameterKey": "CreateVpcEndpoints",
+                "ParameterValue": args.create_vpc_endpoints,
+            },
+        ]
+        if args.existing_endpoint_sg_id:
+            params.append(
+                {
+                    "ParameterKey": "ExistingEndpointSgId",
+                    "ParameterValue": args.existing_endpoint_sg_id,
+                }
+            )
+    return params
 
 
 def main():
@@ -161,6 +244,28 @@ def main():
         if args.create_vpc_endpoints == "false" and not args.existing_endpoint_sg_id:
             sys.exit("ERROR: --existing-endpoint-sg-id is required when --create-vpc-endpoints false")
 
+    if not args.cert_arn or not args.advertised_dns:
+        deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
+        cert_file_path = _resolve_cert_file(None, deploy_dir)
+        if cert_file_path:
+            cert_fields = _parse_cert_file(cert_file_path)
+            print(f"Cert config from: {os.path.basename(cert_file_path)}")
+            if not args.cert_arn:
+                args.cert_arn = cert_fields.get("cert_arn", "")
+            if not args.advertised_dns:
+                args.advertised_dns = cert_fields.get("domain_name", "")
+            if not args.region_override:
+                args.region_override = cert_fields.get("region", "")
+
+    if not args.cert_arn:
+        sys.exit(
+            "ERROR: --cert-arn is required (or run certificate.py first to write .deploy/cert-*.json)."
+        )
+    if not args.advertised_dns:
+        sys.exit(
+            "ERROR: --advertised-dns is required (or run certificate.py first to write .deploy/cert-*.json)."
+        )
+
     instance_type = args.instance_type
 
     if args.allowed_cidr:
@@ -175,21 +280,58 @@ def main():
 
     region = args.region_override or random.choice(SUPPORTED_REGIONS)
     ts = int(time.time())
-    stack_name = f"ee-{args.name}" if args.name else f"ee-{ts}"
+    stack_name = args.name if args.name else f"ee-{ts}"
 
     # NLB target group names are "{stack_name}-https-tg" (the longest suffix).
     # AWS enforces a 32-character limit on target group names.
     _MAX_TG_SUFFIX = len("-https-tg")
     if len(stack_name) + _MAX_TG_SUFFIX > 32:
-        max_name_len = 32 - len("ee-") - _MAX_TG_SUFFIX
+        max_name_len = 32 - _MAX_TG_SUFFIX
         sys.exit(
             f"ERROR: --name '{args.name}' is too long. "
             f"Stack name '{stack_name}' would produce NLB target group names "
             f"exceeding AWS's 32-character limit. "
-            f"Shorten --name to {max_name_len} characters or fewer."
+            f"Shorten the stack name to {max_name_len} characters or fewer."
         )
 
     password = generate_password()
+
+    if args.dry_run:
+        dry_run_ssm_param_path = (
+            "" if args.marketplace else f"/neo4j-ee/test/{stack_name}/ami-id"
+        )
+        cfn_params = build_cfn_params(
+            args, password, allowed_cidr, dry_run_ssm_param_path
+        )
+        print()
+        print("=============================================")
+        print("  Neo4j EE Deployment Dry Run")
+        print("=============================================")
+        print(f"  Stack:          {stack_name}")
+        print(f"  Region:         {region}")
+        print(f"  Instance:       {instance_type}")
+        print(f"  Servers:        {args.number_of_servers}")
+        print(f"  Mode:           {args.mode}")
+        print(f"  Template:       {TEMPLATE_MAP[args.mode]}")
+        print(f"  AllowedCIDR:    {allowed_cidr}")
+        print(f"  CertificateArn: {args.cert_arn}")
+        print(f"  AdvertisedDNS:  {args.advertised_dns}")
+        print(f"  AMI source:     {'marketplace' if args.marketplace else 'local'}")
+        if not args.marketplace:
+            print("  AMI check:      skipped; actual deploy requires marketplace/ami-id.txt")
+            print(f"  ImageId param:  {dry_run_ssm_param_path}")
+        if args.alert_email:
+            print(f"  Alert email:    {args.alert_email}")
+        print("=============================================")
+        print()
+        print("CloudFormation parameters:")
+        for param in cfn_params:
+            key = param["ParameterKey"]
+            value = "<generated>" if key == "Password" else param["ParameterValue"]
+            print(f"  {key}: {value}")
+        print()
+        print("Dry run complete. No AWS API calls were made.")
+        return
 
     cleanup_state = {
         "cfn_bucket": None,
@@ -317,33 +459,7 @@ def main():
     s3.upload_file(os.path.join(SCRIPT_DIR, template_file), bucket_name, template_key)
     template_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{template_key}"
 
-    cfn_params = [
-        {"ParameterKey": "Password", "ParameterValue": password},
-        {"ParameterKey": "NumberOfServers", "ParameterValue": str(args.number_of_servers)},
-        {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
-        {"ParameterKey": "AllowedCIDR", "ParameterValue": allowed_cidr},
-        {"ParameterKey": "CertificateArn", "ParameterValue": args.cert_arn},
-        {"ParameterKey": "AdvertisedDNS", "ParameterValue": args.advertised_dns},
-        {"ParameterKey": "InstallGDS", "ParameterValue": "true"},
-    ]
-    if ssm_param_path:
-        cfn_params.append({"ParameterKey": "ImageId", "ParameterValue": ssm_param_path})
-    if args.alert_email:
-        cfn_params.append({"ParameterKey": "AlertEmail", "ParameterValue": args.alert_email})
-    if args.disk_size is not None:
-        cfn_params.append({"ParameterKey": "DataDiskSize", "ParameterValue": str(args.disk_size)})
-    if args.snapshot_id:
-        cfn_params.append({"ParameterKey": "Node1SnapshotId", "ParameterValue": args.snapshot_id})
-    if args.mode == "ExistingVpc":
-        cfn_params += [
-            {"ParameterKey": "VpcId",            "ParameterValue": args.vpc_id},
-            {"ParameterKey": "PrivateSubnet1Id", "ParameterValue": args.subnet_1},
-            {"ParameterKey": "PrivateSubnet2Id", "ParameterValue": args.subnet_2},
-            {"ParameterKey": "PrivateSubnet3Id", "ParameterValue": args.subnet_3},
-            {"ParameterKey": "CreateVpcEndpoints", "ParameterValue": args.create_vpc_endpoints},
-        ]
-        if args.existing_endpoint_sg_id:
-            cfn_params.append({"ParameterKey": "ExistingEndpointSgId", "ParameterValue": args.existing_endpoint_sg_id})
+    cfn_params = build_cfn_params(args, password, allowed_cidr, ssm_param_path)
 
     cfn = boto3.client("cloudformation", region_name=region)
     print(f"Creating stack {stack_name}...")

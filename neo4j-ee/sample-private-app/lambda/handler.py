@@ -199,7 +199,7 @@ def _resilience(driver):
     log.info("Target follower: instance=%s server=%s", target_instance, target_uuid)
 
     t0 = time.time()
-    _ssm_run(target_instance, "systemctl stop neo4j")
+    _ssm_run_document(target_instance, os.environ["SSM_DOC_STOP_NEO4J"], "stop neo4j")
     time_to_stop_issued = round(time.time() - t0, 2)
 
     t1 = time.time()
@@ -207,7 +207,7 @@ def _resilience(driver):
     time_to_unavailable = round(time.time() - t1, 2)
 
     t2 = time.time()
-    _ssm_run(target_instance, "systemctl start neo4j")
+    _ssm_run_document(target_instance, os.environ["SSM_DOC_START_NEO4J"], "start neo4j")
     time_to_start_issued = round(time.time() - t2, 2)
 
     t3 = time.time()
@@ -267,10 +267,7 @@ def _neo4j_instance_ids(ee_stack_id):
 def _read_server_ids(instance_ids):
     cmd_id = _ssm.send_command(
         InstanceIds=instance_ids,
-        DocumentName="AWS-RunShellScript",
-        Parameters={"commands": [
-            "python3 -c \"import uuid; d=open('/var/lib/neo4j/data/server_id','rb').read(); print(str(uuid.UUID(bytes=d[1:])))\""
-        ]},
+        DocumentName=os.environ["SSM_DOC_READ_SERVER_ID"],
     )["Command"]["CommandId"]
 
     mapping = {}
@@ -293,11 +290,10 @@ def _read_server_ids(instance_ids):
     return mapping
 
 
-def _ssm_run(instance_id, command):
+def _ssm_run_document(instance_id, document_name, action):
     cmd_id = _ssm.send_command(
         InstanceIds=[instance_id],
-        DocumentName="AWS-RunShellScript",
-        Parameters={"commands": [command]},
+        DocumentName=document_name,
     )["Command"]["CommandId"]
     deadline = time.time() + 60
     while time.time() < deadline:
@@ -309,8 +305,11 @@ def _ssm_run(instance_id, command):
         if inv["Status"] == "Success":
             return
         if inv["Status"] in ("Failed", "Cancelled", "TimedOut"):
-            raise RuntimeError(f"SSM '{command}' on {instance_id} ended {inv['Status']}: {inv.get('StandardErrorContent','')}")
-    raise TimeoutError(f"SSM '{command}' on {instance_id} did not complete in 60s")
+            raise RuntimeError(
+                f"SSM document for {action} on {instance_id} ended {inv['Status']}: "
+                f"{inv.get('StandardErrorContent','')}"
+            )
+    raise TimeoutError(f"SSM document for {action} on {instance_id} did not complete in 60s")
 
 
 def _wait_for_health(driver, server_uuid, wanted, timeout_s):

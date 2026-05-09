@@ -105,7 +105,7 @@ Three Lambda settings that are easy to skip and painful to diagnose without:
 
 ## Prerequisites
 
-- An existing neo4j-ee Private-mode stack (run `../deploy.py --marketplace --mode Private`)
+- An existing neo4j-ee Private or ExistingVpc stack (for example, `../deploy.py --marketplace --mode Private`)
 - Python 3 and pip installed locally
 - `AWS_PROFILE` pointing to an account with permissions for CloudFormation, Lambda, IAM, EC2, S3, SSM, and Secrets Manager
 
@@ -134,7 +134,7 @@ All scripts run from the `sample-private-app/` directory:
 
 `deploy-sample-private-app.sh` reads the EE stack's SSM parameters, packages the Lambda, uploads it to a deploy S3 bucket, runs `aws cloudformation deploy`, and writes the Function URL to `/neo4j-sample-private-app/<stack>/function-url` in SSM and `../.deploy/sample-private-app-<ee-stack>.json` locally. It also generates `invoke.sh` in the same directory. Pass `--enable-resilience` only for test deployments that should include the stop/start validation Lambda.
 
-The EE stack's SSM parameters (`/neo4j-ee/<stack>/vpc-id`, `advertised-dns`, `private-subnet-1-id`, `private-subnet-2-id`, `external-sg-id`, `password-secret-arn`) are CloudFormation resources that exist for the lifetime of the EE stack and need no manual management.
+The EE stack's SSM parameters (`/neo4j-ee/<stack>/vpc-id`, `advertised-dns`, `private-subnet-1-id`, `private-subnet-2-id`, `external-sg-id`, `password-secret-arn`, `vpc-endpoint-sg-id`) are CloudFormation resources that exist for the lifetime of the EE stack and need no manual management.
 
 ### Teardown ordering
 
@@ -148,7 +148,7 @@ Always delete this stack before tearing down the parent EE stack. `sample-privat
 {
   "bolt_scheme": "neo4j+s",
   "edition": "enterprise",
-  "nodes_created": 10,
+  "nodes_created": 12,
   "relationships_created": 9,
   "graph_sample": [
     {"customer": "Alice Chen", "account_type": "checking", "amount": 2400.0,  "merchant": "StripePayments"},
@@ -167,7 +167,7 @@ Always delete this stack before tearing down the parent EE stack. `sample-privat
 }
 ```
 
-The Function URL wraps this as `{"statusCode": 200, "headers": {...}, "body": "<json string>"}`. `invoke.sh` pipes the body through `python3 -m json.tool` for readability.
+The handler returns this through the Lambda Function URL response body. `invoke.sh` pipes that body through `python3 -m json.tool` for readability.
 
 On first invocation, nodes and relationships are created. Subsequent invocations use `MERGE`, so the graph stays idempotent. Several queries confirm distinct cluster properties: `dbms.components()` verifies Enterprise Edition, `dbms.routing.getRoutingTable({}, 'neo4j')` confirms a leader has been elected and the routing table is fully populated, `SHOW SERVERS` reports per-node health, and a `Customer → Account → Transaction → Merchant` traversal returns `graph_sample` to prove the graph is queryable end-to-end.
 
@@ -177,11 +177,11 @@ On first invocation, nodes and relationships are created. Subsequent invocations
 
 `validate.sh` is only usable when the app was deployed with `--enable-resilience`. It calls the second Lambda's Function URL. That Lambda:
 
-1. Calls `CALL dbms.cluster.overview()` over the NLB to find the LEADER and FOLLOWER server UUIDs for the `neo4j` database.
+1. Calls `SHOW DATABASE neo4j YIELD serverID, writer` over the NLB to find the LEADER and FOLLOWER server UUIDs for the `neo4j` database.
 2. Calls `ec2:DescribeInstances` filtered by `tag:StackID = <Neo4j EE stack ARN>` and `tag:Role = neo4j-cluster-node` to list the cluster EC2 instances. The EE ASG propagates its own `StackID` and `Role` tags to launched instances; `aws:cloudformation:stack-name` is only on the ASG itself, not its instances.
-3. Maps instance-ID to Neo4j server UUID by running `cat /var/lib/neo4j/data/server_id` on all three instances in parallel via SSM `send-command`.
-4. Picks a random follower, runs `systemctl stop neo4j` via SSM, polls `SHOW SERVERS` until that server's `health` is no longer `Available` (expect `Unavailable` within ~10-20s).
-5. Runs `systemctl start neo4j` via SSM, polls `SHOW SERVERS` until `health == 'Available'` again (expect ~20-60s for Raft rejoin).
+3. Maps instance-ID to Neo4j server UUID by invoking the sample stack's fixed read-server-id SSM document on all three instances in parallel.
+4. Picks a random follower, invokes the sample stack's fixed stop-Neo4j SSM document, then polls `SHOW SERVERS` until that server's `health` is no longer `Available` (expect `Unavailable` within ~10-20s).
+5. Invokes the sample stack's fixed start-Neo4j SSM document, then polls `SHOW SERVERS` until `health == 'Available'` again (expect ~20-60s for Raft rejoin).
 6. Returns a JSON report with timings.
 
 Sample output:
@@ -208,7 +208,9 @@ Sample output:
 
 ### IAM scoping
 
-The resilience Lambda is test-only and is not deployed by default. When `--enable-resilience` is used, its role has `ssm:SendCommand` on `AWS-RunShellScript` scoped to EC2 instances via `aws:ResourceTag/StackID = <full EE stack ARN>`, so it can issue the fixed stop/start commands only to instances launched by the paired EE stack. `ec2:DescribeInstances` is `*` because the service does not support resource-level authorization, but is read-only. The main invoke Lambda has none of these permissions.
+The resilience Lambda is test-only and is not deployed by default. When `--enable-resilience` is used, this stack creates three constrained SSM command documents: read the Neo4j server ID, stop Neo4j, and start Neo4j. The resilience role can run only those stack-owned documents against EC2 instances tagged with `aws:ResourceTag/StackID = <full EE stack ARN>`. It does not receive permission to run the AWS-managed `AWS-RunShellScript` document or pass arbitrary shell commands. `ec2:DescribeInstances` is `*` because the service does not support resource-level authorization, but is read-only. The main invoke Lambda has none of these permissions.
+
+Production accounts should additionally restrict who can update the resilience Lambda code, pass its role, or invoke its Function URL. Those controls belong in customer or organization IAM policy because the sample app cannot safely deny every legitimate deployment principal.
 
 This stack also provisions an `ec2` VPC interface endpoint reusing the EE stack's endpoint SG. The EE stack provides `ssm`, `ssmmessages`, `ec2messages`, `logs`, and `secretsmanager` endpoints but no `ec2` API endpoint, and the resilience Lambda has no internet egress. Without this endpoint, `DescribeInstances` hangs until timeout.
 

@@ -152,7 +152,7 @@ Single-instance:
 | Instance security group | Sources from NLB SG | Allows both forwarded client traffic and NLB health checks without hardcoding a VPC CIDR |
 | IMDSv2 | Enforced | Instance metadata requires session tokens; IMDSv1 requests are rejected |
 | JDWP (port 5005) | Disabled | Remote debug port is closed and the JVM debug flag is stripped from `neo4j.conf` at boot |
-| TLS | Required | `CertificateArn` is an ACM certificate ARN whose SAN matches `AdvertisedDNS`. The NLB presents it on 7473 and 7687, then re-encrypts to self-signed backend certs on each instance. |
+| TLS | Required | `CertificateArn` is an ACM certificate ARN whose SAN matches `AdvertisedDNS`. The NLB presents it on 7473 and 7687, then opens separate TLS connections to self-signed backend certs on each instance. |
 
 ### NLB Routing
 

@@ -5,8 +5,8 @@
 # Not needed for admin-shell, run-cypher, or validate-private — those run on
 # the bastion and connect to the NLB directly.
 #
-# After the tunnel opens (and after mapping AdvertisedDNS to 127.0.0.1 in
-# /etc/hosts), connect with: neo4j+s://<AdvertisedDNS>:7687
+# After the tunnel opens, map AdvertisedDNS to 127.0.0.1 in your laptop's
+# /etc/hosts, then connect with: neo4j+s://<AdvertisedDNS>:7687
 #
 # Usage: ./scripts/bolt-tunnel.sh [stack-name]
 # Prerequisite: AWS Session Manager Plugin (brew install --cask session-manager-plugin)
@@ -24,6 +24,7 @@ STACK_NAME=$(read_field "$OUTPUTS_FILE" "StackName")
 REGION=$(read_field "$OUTPUTS_FILE" "Region")
 BASTION_ID=$(read_field "$OUTPUTS_FILE" "Neo4jOperatorBastionId")
 NLB_DNS=$(read_field "$OUTPUTS_FILE" "Neo4jInternalDNS")
+ADVERTISED_DNS=$(read_field "$OUTPUTS_FILE" "AdvertisedDNS")
 
 echo "=== Neo4j Bolt Tunnel ==="
 echo ""
@@ -31,10 +32,14 @@ echo "  Stack:   ${STACK_NAME}"
 echo "  Region:  ${REGION}"
 echo "  Bastion: ${BASTION_ID}"
 echo ""
+echo "  AdvertisedDNS: ${ADVERTISED_DNS}"
+echo ""
 echo "  Tunnel:  localhost:7687  ->  ${NLB_DNS}:7687"
 echo ""
-echo "  Add to /etc/hosts: 127.0.0.1 <AdvertisedDNS>"
-echo "  Connect with: neo4j+s://<AdvertisedDNS>:7687"
+echo "  Add to your laptop's /etc/hosts so the ACM cert SAN validates:"
+echo "    127.0.0.1 ${ADVERTISED_DNS}"
+echo ""
+echo "  Connect with: neo4j+s://${ADVERTISED_DNS}:7687"
 echo "  (Run browser-tunnel.sh in a second terminal for Neo4j Browser access)"
 echo ""
 echo "  Press Ctrl-C to close."

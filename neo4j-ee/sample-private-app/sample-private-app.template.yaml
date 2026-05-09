@@ -57,8 +57,8 @@ Parameters:
       - neo4j+ssc
     Default: neo4j+s
     Description: >-
-      Neo4j Bolt URI scheme. Use neo4j+s for trusted ACM certificates. Use
-      neo4j+ssc only for local self-signed certificate testing.
+      Neo4j Bolt URI scheme. Use neo4j+s for publicly trusted ACM certificates.
+      Use neo4j+ssc only for local self-signed certificate testing.
 
 Conditions:
   HasObjectVersion: !Not [!Equals [!Ref LambdaS3ObjectVersion, '']]

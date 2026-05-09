@@ -4,7 +4,7 @@
 
 - **What it deploys:** a Python Lambda in the EE stack's private subnets, exposed via a Function URL with `AWS_IAM` auth
 - **What it requires:** an existing neo4j-ee Private or ExistingVpc stack
-- **What it demonstrates:** the in-VPC application connection pattern — SSM parameter lookup, Secrets Manager password retrieval, security group wiring to the NLB and VPC interface endpoints, and Bolt over `neo4j+s://`
+- **What it demonstrates:** the in-VPC application connection pattern with a publicly trusted ACM certificate: SSM parameter lookup, Secrets Manager password retrieval, security group wiring to the NLB and VPC interface endpoints, and Bolt over `neo4j+s://`
 - **Optional:** `--enable-resilience` adds a second Lambda that stops/starts a follower to validate cluster failover
 
 [`docs/PRIVATE.md`](../docs/PRIVATE.md) covers operator access from a laptop via SSM port-forwarding. This README covers application access from inside the VPC.
@@ -36,7 +36,8 @@
 
 ### Prerequisites
 
-- An existing neo4j-ee Private or ExistingVpc stack (for example, `../deploy.py --marketplace --mode Private`)
+- An existing neo4j-ee Private or ExistingVpc stack using an ACM certificate that chains to the Lambda runtime's public system trust store
+- VPC DNS resolution for the EE stack's `AdvertisedDNS` name to the internal NLB
 - Python 3 and pip installed locally
 - `AWS_PROFILE` pointing to an account with permissions for CloudFormation, Lambda, IAM, EC2, S3, SSM, and Secrets Manager
 
@@ -61,7 +62,7 @@ All scripts run from the `sample-private-app/` directory:
 ./teardown-sample-private-app.sh
 ```
 
-`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, packages the Lambda, uploads it to a deploy S3 bucket, runs `aws cloudformation deploy`, and writes the Function URL to `/neo4j-sample-private-app/<stack>/function-url` in SSM and `../.deploy/sample-private-app-<ee-stack>.json` locally. It also generates `invoke.sh` in the same directory. Pass `--enable-resilience` only for test deployments that should include the stop/start validation Lambda. Self-signed test certificates created by `certificate.py --self-signed` are detected from the EE deploy outputs.
+`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, packages the Lambda, uploads it to a deploy S3 bucket, runs `aws cloudformation deploy`, and writes the Function URL to `/neo4j-sample-private-app/<stack>/function-url` in SSM and `../.deploy/sample-private-app-<ee-stack>.json` locally. It also generates `invoke.sh` in the same directory. Pass `--enable-resilience` only for test deployments that should include the stop/start validation Lambda.
 
 ### Teardown Ordering
 
@@ -91,7 +92,7 @@ Lambda Function URL  (HTTPS, AWS_IAM auth)
   (private subnet, each AZ)
 ```
 
-The Lambda's security group has two egress rules: TCP 7687 to the Neo4j NLB SG for Bolt, and TCP 443 to the VPC interface endpoint SG for SSM, SSM Messages, EC2 Messages, Secrets Manager, and CloudWatch Logs. No traffic leaves the VPC.
+The Lambda's security group has two egress rules: TCP 7687 to the Neo4j NLB SG for Bolt, and TCP 443 to the VPC interface endpoint SG for SSM, SSM Messages, Secrets Manager, and CloudWatch Logs. No traffic leaves the VPC.
 
 ### Platform Contract
 
@@ -100,7 +101,7 @@ The EE stack publishes a stable set of SSM parameters under `/neo4j-ee/<stack-na
 | Parameter | What the app uses it for |
 |---|---|
 | `/neo4j-ee/<stack>/vpc-id` | Attach Lambda to the correct VPC |
-| `/neo4j-ee/<stack>/advertised-dns` | DNS name resolving to the NLB; Lambda connects via `neo4j+s://<advertised-dns>:7687` by default. The NLB-presented ACM cert SAN must match this name. |
+| `/neo4j-ee/<stack>/advertised-dns` | DNS name resolving to the NLB from inside the VPC; Lambda connects via `neo4j+s://<advertised-dns>:7687` by default. The NLB-presented public-trust ACM cert SAN must match this name. |
 | `/neo4j-ee/<stack>/external-sg-id` | NLB security group used as the egress target on port 7687 for Bolt |
 | `/neo4j-ee/<stack>/password-secret-arn` | Import the Neo4j password secret by ARN |
 | `/neo4j-ee/<stack>/vpc-endpoint-sg-id` | Add ingress 443 from app SG; add egress 443 to endpoint SG |
@@ -127,9 +128,10 @@ This sample establishes both wiring connections in `sample-private-app.template.
 ### Bolt TLS
 
 - **TLS is mandatory.** The NLB terminates TLS on 7687 using the customer-supplied ACM cert whose SAN matches `AdvertisedDNS`; the target group re-encrypts to a self-signed backend cert generated on each instance
-- **Driver-side validation is automatic.** The Lambda reads `AdvertisedDNS` from SSM (`<SsmPrefix>/advertised-dns`) and connects via `neo4j+s://<AdvertisedDNS>:7687`. The driver validates the NLB-presented ACM cert against the system trust store, so no certificate file or custom SSL context is needed
-- **Self-signed test certificates require `neo4j+ssc://`.** Local stacks created with `certificate.py --self-signed` are detected from the EE deploy outputs, and the sample app switches the driver scheme automatically
-- **DNS must resolve inside the VPC.** In Private mode, deploy the EE stack with `--create-private-dns`. The Lambda must be able to resolve `AdvertisedDNS` via the VPC resolver
+- **This demo assumes public trust.** The ACM certificate presented by the NLB must chain to the Lambda runtime's public system trust store. ACM Private CA or internal PKI certs require adding a trusted CA bundle to the application and are intentionally out of scope for this minimal demo
+- **Driver-side validation is automatic.** The Lambda reads `AdvertisedDNS` from SSM (`<SsmPrefix>/advertised-dns`) and connects via `neo4j+s://<AdvertisedDNS>:7687`. The driver validates the NLB-presented ACM cert against the system trust store, so no certificate file or custom SSL context is needed for the public-trust path
+- **Self-signed test certificates are local-test only.** Local stacks created with `certificate.py --self-signed` are detected from the EE deploy outputs and switch the driver scheme to `neo4j+ssc://`, which skips certificate validation. Do not use this path for the public-trust demo
+- **DNS must resolve inside the VPC.** The sample app does not create DNS. Ensure `AdvertisedDNS` resolves from the Lambda subnets to the internal NLB through your VPC resolver, private hosted zone, or enterprise DNS forwarding
 
 ---
 
@@ -282,7 +284,7 @@ curl --silent --aws-sigv4 "aws:amz:${AWS_DEFAULT_REGION}:lambda" \
 - **Driver cached across invocations with auth-rotation fallback.** The Neo4j driver is created lazily on first invocation and reused on warm starts. If the cached driver hits an `AuthError` (for example, after the password secret rotates), the handler closes it, rebuilds a fresh driver, and retries once
 - **S3 object versioning forces code updates.** `deploy-sample-private-app.sh` creates an S3 bucket named `neo4j-sample-private-app-deploy-<account>-<region>` with versioning enabled. Each `put-object` returns a new `VersionId` passed as `LambdaS3ObjectVersion`. CloudFormation sees the version change and updates the function without rotating the S3 key. `teardown-sample-private-app.sh` deletes all versions of the stack's zip key but leaves the bucket for reuse across stacks
 - **Function URL auth is `AWS_IAM`.** An unsigned Function URL accepts requests from any caller who knows the URL. Since the Lambda writes to Neo4j, that is an unauthenticated write path. `AWS_IAM` requires Sigv4 signing using existing AWS credentials, with no extra infrastructure
-- **Additional AWS API calls need their own VPC endpoints.** If the application calls AWS services beyond SSM, SSM Messages, EC2 Messages, Secrets Manager, and CloudWatch Logs, add a corresponding interface VPC endpoint. The per-endpoint cost is roughly $7/AZ/month; routing is automatic once `PrivateDnsEnabled: true` is set
+- **Additional AWS API calls need their own VPC endpoints.** If the application calls AWS services beyond SSM, SSM Messages, Secrets Manager, and CloudWatch Logs, add a corresponding interface VPC endpoint. The per-endpoint cost is roughly $7/AZ/month; routing is automatic once `PrivateDnsEnabled: true` is set
 
 ---
 

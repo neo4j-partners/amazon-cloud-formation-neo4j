@@ -53,7 +53,9 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx \
   --cert-arn <acm-cert-arn> --advertised-dns <dns>
 
-# Private DNS managed by the stack (Private or ExistingVpc)
+# Private DNS managed by the stack
+# Private mode does this by default; pass --no-create-private-dns to disable it.
+# ExistingVpc keeps it opt-in because the VPC may already have customer-managed DNS.
 ./deploy.py --cert-arn <acm-cert-arn> --advertised-dns neo4j.test.local \
   --create-private-dns --private-dns-zone test.local
 
@@ -64,7 +66,7 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ./deploy.py --alert-email you@example.com   # enable CloudWatch alarm emails
 ```
 
-TLS is mandatory. `--cert-arn` must be an ACM certificate whose SAN matches `--advertised-dns`. Private and ExistingVpc stacks can use `--create-private-dns` to create the in-VPC DNS alias that maps `--advertised-dns` to the internal NLB.
+TLS is mandatory. `--cert-arn` must be an ACM certificate whose SAN matches `--advertised-dns`. Private mode creates the in-VPC DNS alias by default so `--advertised-dns` resolves to the internal NLB. Use `--no-create-private-dns` when customer-managed DNS already provides that record. ExistingVpc mode keeps stack-managed private DNS opt-in via `--create-private-dns`.
 
 ### Look Up Connection Details
 

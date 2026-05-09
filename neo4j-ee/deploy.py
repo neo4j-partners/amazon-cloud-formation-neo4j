@@ -97,16 +97,29 @@ def parse_args():
     p.add_argument("--subnet-3", metavar="SUBNET_ID", default="")
     p.add_argument("--create-vpc-endpoints", default="true", choices=["true", "false"])
     p.add_argument("--existing-endpoint-sg-id", metavar="SG_ID", default="")
-    p.add_argument(
+    private_dns = p.add_mutually_exclusive_group()
+    private_dns.add_argument(
         "--create-private-dns",
+        dest="create_private_dns",
         action="store_true",
         help=(
             "For Private or ExistingVpc deployments, create/manage a Route 53 "
             "private DNS record that maps --advertised-dns to the internal NLB. "
+            "This is the default for Private mode. "
             "If --private-dns-hosted-zone-id is omitted, the stack creates a "
             "private hosted zone named --private-dns-zone."
         ),
     )
+    private_dns.add_argument(
+        "--no-create-private-dns",
+        dest="create_private_dns",
+        action="store_false",
+        help=(
+            "Do not create Route 53 private DNS. Use this when customer-managed "
+            "DNS already resolves --advertised-dns to the NLB."
+        ),
+    )
+    p.set_defaults(create_private_dns=None)
     p.add_argument(
         "--private-dns-zone",
         metavar="ZONE",
@@ -318,6 +331,8 @@ def main():
         sys.exit(
             "ERROR: --advertised-dns is required (or run certificate.py first to write .deploy/cert-*.json)."
         )
+    if args.create_private_dns is None:
+        args.create_private_dns = args.mode == "Private"
     if args.create_private_dns:
         if args.mode == "Public":
             sys.exit("ERROR: --create-private-dns is only valid for Private or ExistingVpc deployments.")

@@ -128,13 +128,13 @@ Identical to the Private template. See [Platform Contract in PRIVATE.md](PRIVATE
 **TL;DR**
 
 - **TLS is mandatory.** Provide both `CertificateArn` (ACM cert ARN) and `AdvertisedDNS` (DNS name matching the cert SAN) at stack create
-- **End-to-end encrypted.** NLB terminates TLS on 7473/7687 with the ACM cert; target groups re-encrypt to a self-signed backend cert generated on each instance
+- **Encrypted on both client data-plane hops.** The NLB terminates client TLS on 7473/7687 with the ACM cert, and target groups open a separate TLS connection to a self-signed backend cert generated on each instance
 - **One name everywhere.** `server.bolt.advertised_address`, the cert SAN, and the client connect URL all resolve to `AdvertisedDNS`
 
 **Customer responsibilities at deploy time**
 
 1. Provision an ACM certificate whose Subject Alternative Name matches the DNS name you will use as `AdvertisedDNS`. ACM-issued public certs and ACM Private CA certs are both accepted.
-2. Ensure DNS resolves `AdvertisedDNS` to the internal NLB from every client network. You can manage this outside the stack, or set `CreatePrivateDns=true` so the stack creates an A-record alias to the NLB.
+2. Ensure DNS resolves `AdvertisedDNS` to the internal NLB from every client network. ExistingVpc mode defaults `CreatePrivateDns=false` so customer-owned networks keep DNS ownership by default. Set `CreatePrivateDns=true` when you want the stack to create an A-record alias to the NLB.
 3. Set the `AdvertisedDNS` and `CertificateArn` CloudFormation parameters at stack create or update. If `CreatePrivateDns=true`, also pass either `PrivateDnsZoneName` so the stack creates a private hosted zone associated with the existing VPC, or `PrivateDnsHostedZoneId` so it writes the record into an existing private hosted zone.
 
 **Cert lifecycle**

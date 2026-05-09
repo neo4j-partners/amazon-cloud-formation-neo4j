@@ -5,7 +5,9 @@
 #   ./browse.sh [stack-name]
 #
 # If stack-name is omitted, uses the most recently modified file in .deploy/.
-# Forwards both port 7474 (Browser UI) and 7687 (Bolt) via SSM and prints login info.
+# Forwards both port 7473 (HTTPS Browser) and 7687 (Bolt) via SSM and prints login info.
+# Both ports are TLS; the operator must map AdvertisedDNS to 127.0.0.1 in /etc/hosts
+# so the ACM cert SAN validates against the local connection.
 
 set -euo pipefail
 
@@ -51,17 +53,22 @@ read_field() {
 REGION=$(read_field "Region")
 BASTION_ID=$(read_field "Neo4jOperatorBastionId")
 NLB_HOST=$(read_field "Neo4jInternalDNS")
+ADVERTISED_DNS=$(read_field "AdvertisedDNS")
 USERNAME=$(read_field "Username")
 PASSWORD=$(read_field "Password")
 STACK_NAME=$(read_field "StackName")
 
-echo "Stack:    ${STACK_NAME}"
-echo "Region:   ${REGION}"
-echo "Bastion:  ${BASTION_ID}"
+echo "Stack:         ${STACK_NAME}"
+echo "Region:        ${REGION}"
+echo "Bastion:       ${BASTION_ID}"
+echo "AdvertisedDNS: ${ADVERTISED_DNS}"
 echo ""
-echo "Opening SSM port-forwards → localhost:7474 (Browser) and localhost:7687 (Bolt)"
+echo "Opening SSM port-forwards → localhost:7473 (HTTPS) and localhost:7687 (Bolt)"
 echo ""
-echo "Neo4j Browser: http://localhost:7474"
+echo "Add this line to /etc/hosts so the ACM cert SAN validates:"
+echo "  127.0.0.1 ${ADVERTISED_DNS}"
+echo ""
+echo "Then open: https://${ADVERTISED_DNS}:7473"
 echo "Username: ${USERNAME}"
 echo "Password: ${PASSWORD}"
 echo ""
@@ -86,4 +93,4 @@ aws ssm start-session \
   --region "${REGION}" \
   --target "${BASTION_ID}" \
   --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters "host=${NLB_HOST},portNumber=7474,localPortNumber=7474"
+  --parameters "host=${NLB_HOST},portNumber=7473,localPortNumber=7473"

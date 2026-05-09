@@ -13,12 +13,15 @@
           - DataDiskSize
           - DataVolumeKmsKeyId
       - Label:
+          default: "TLS"
+        Parameters:
+          - CertificateArn
+          - AdvertisedDNS
+      - Label:
           default: "Security & Monitoring"
         Parameters:
           - AllowedCIDR
           - AlertEmail
-          - BoltCertificateSecretArn
-          - BoltAdvertisedDNS
     ParameterLabels:
       ImageId:
         default: Image ID
@@ -36,7 +39,7 @@
         default: Alert Email Address
       AllowedCIDR:
         default: Allowed CIDR
-      BoltCertificateSecretArn:
-        default: Bolt TLS Certificate Secret ARN
-      BoltAdvertisedDNS:
-        default: Bolt Advertised DNS Name
+      CertificateArn:
+        default: ACM Certificate ARN
+      AdvertisedDNS:
+        default: Advertised DNS Name

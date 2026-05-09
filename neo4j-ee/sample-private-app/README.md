@@ -2,7 +2,7 @@
 
 The neo4j-ee Private and ExistingVpc templates deploy a cluster in private subnets behind an internal NLB with no public IPs. [`docs/PRIVATE.md`](../docs/PRIVATE.md) covers how a laptop operator connects via SSM port-forwarding. This app shows how an application workload connects to that same cluster from inside the VPC.
 
-Connecting requires three things: attach to the correct VPC and subnets, wire the application's security group for Bolt traffic to Neo4j and for HTTPS to the VPC interface endpoints, then resolve the NLB DNS and password at runtime through those endpoints. The EE stack publishes all the resource IDs an application needs as SSM parameters under `/neo4j-ee/<stack-name>/`.
+Connecting requires three things: attach to the correct VPC and subnets, wire the application's security group for Bolt traffic to the Neo4j NLB and for HTTPS to the VPC interface endpoints, then resolve `AdvertisedDNS` and the password at runtime through those endpoints. The EE stack publishes all the resource IDs an application needs as SSM parameters under `/neo4j-ee/<stack-name>/`.
 
 The VPC contains interface endpoints for SSM, Secrets Manager, and CloudWatch Logs with `PrivateDnsEnabled: true`. Every AWS API call the application makes routes through those endpoint ENIs, and the endpoint security group gates access. An application that is not added to the endpoint security group will hang silently on every AWS API call, including the log writes that would otherwise surface the problem.
 
@@ -19,10 +19,10 @@ Internet
 Lambda Function URL  (HTTPS, AWS_IAM auth)
     │
     └─ Lambda  (private subnet, Neo4j VPC)
-           │  NEO4J_SSM_NLB_PATH → /neo4j-ee/<stack>/nlb-dns
-           │  NEO4J_SECRET_ARN   → neo4j/<stack>/password
+           │  NEO4J_SSM_ADVERTISED_DNS_PATH → /neo4j-ee/<stack>/advertised-dns
+           │  NEO4J_SECRET_ARN              → neo4j/<stack>/password
            ▼
-    Internal NLB  (neo4j[+ssc]://<nlb-dns>:7687)
+    Internal NLB  (neo4j+s://<AdvertisedDNS>:7687)
            │
     ┌──────┴──────┐
     ▼             ▼             ▼
@@ -30,7 +30,7 @@ Lambda Function URL  (HTTPS, AWS_IAM auth)
   (private subnet, each AZ)
 ```
 
-The Lambda's security group has two egress rules: TCP 7687 to the Neo4j external SG for Bolt, and TCP 443 to the VPC interface endpoint SG for SSM, Secrets Manager, and CloudWatch Logs. No traffic leaves the VPC.
+The Lambda's security group has two egress rules: TCP 7687 to the Neo4j NLB SG for Bolt, and TCP 443 to the VPC interface endpoint SG for SSM, Secrets Manager, and CloudWatch Logs. No traffic leaves the VPC.
 
 ---
 
@@ -41,8 +41,8 @@ The EE stack publishes a stable set of SSM parameters under `/neo4j-ee/<stack-na
 | Parameter | What the app uses it for |
 |---|---|
 | `/neo4j-ee/<stack>/vpc-id` | Attach Lambda to the correct VPC |
-| `/neo4j-ee/<stack>/nlb-dns` | Bolt connection string: `neo4j://<nlb-dns>:7687` |
-| `/neo4j-ee/<stack>/external-sg-id` | Egress target on port 7687 for Bolt |
+| `/neo4j-ee/<stack>/advertised-dns` | DNS name resolving to the NLB; Lambda connects via `neo4j+s://<advertised-dns>:7687`. The NLB-presented ACM cert SAN must match this name. |
+| `/neo4j-ee/<stack>/external-sg-id` | NLB security group used as the egress target on port 7687 for Bolt |
 | `/neo4j-ee/<stack>/password-secret-arn` | Import the Neo4j password secret by ARN |
 | `/neo4j-ee/<stack>/vpc-endpoint-sg-id` | Add ingress 443 from app SG; add egress 443 to endpoint SG |
 | `/neo4j-ee/<stack>/private-subnet-1-id` | Place Lambda in the first private subnet |
@@ -56,7 +56,7 @@ The platform owns the infrastructure and publishes IDs; the application looks th
 
 Each application creates its own security group and establishes two connections.
 
-**Bolt to Neo4j.** The application's security group adds egress TCP 7687 to `Neo4jExternalSecurityGroup` (from `/external-sg-id`). That security group already has ingress 7687 from the NLB and from `AllowedCIDR`; no change to the Neo4j side is needed.
+**Bolt to Neo4j.** The application's security group adds egress TCP 7687 to the NLB security group from `/external-sg-id`. The sample also adds an ingress rule on that NLB security group allowing 7687 from the application security group.
 
 **HTTPS to VPC endpoints.** The application's security group adds egress TCP 443 to `VpcEndpointSecurityGroup` (from `/vpc-endpoint-sg-id`). The application also adds an ingress rule on `VpcEndpointSecurityGroup` allowing 443 from its own security group.
 
@@ -68,7 +68,7 @@ This sample establishes both wiring connections in `sample-private-app.template.
 
 ## Lambda Connection Pattern
 
-At cold start the Lambda resolves two values from the platform contract: the NLB DNS from SSM and the Neo4j password from Secrets Manager. Both calls route through private VPC endpoints.
+At cold start the Lambda resolves two values from the platform contract: `AdvertisedDNS` from SSM and the Neo4j password from Secrets Manager. Both calls route through private VPC endpoints.
 
 ```python
 import os
@@ -80,13 +80,12 @@ sm  = boto3.client("secretsmanager")
 _driver = None
 
 def _init_driver():
-    nlb_dns  = ssm.get_parameter(Name=os.environ["NEO4J_SSM_NLB_PATH"])["Parameter"]["Value"]
+    advertised_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_ADVERTISED_DNS_PATH"])["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
-    scheme = "neo4j+ssc" if os.environ.get("NEO4J_BOLT_TLS") == "true" else "neo4j"
-    return GraphDatabase.driver(f"{scheme}://{nlb_dns}:7687", auth=("neo4j", password))
+    return GraphDatabase.driver(f"neo4j+s://{advertised_dns}:7687", auth=("neo4j", password))
 ```
 
-Using `neo4j://` fetches a routing table from Neo4j on first connect. The routing table lists the NLB DNS as the single endpoint for both writes and reads, because each node sets `server.bolt.advertised_address` to the NLB DNS. The driver sends all subsequent requests through the NLB, which distributes connections across cluster nodes and lets Neo4j's server-side routing direct writes to the current leader.
+Using `neo4j+s://` fetches a routing table from Neo4j on first connect and validates the NLB-presented ACM certificate against `AdvertisedDNS`. The routing table lists `AdvertisedDNS` as the single endpoint for both writes and reads, because each node sets `server.bolt.advertised_address` to that name. The driver sends all subsequent requests through the NLB, which distributes connections across cluster nodes and lets Neo4j's server-side routing direct writes to the current leader.
 
 The driver is created lazily on first invocation and cached across warm starts. If the cached driver hits an `AuthError` (for example, after a password rotation), the handler closes it, rebuilds a fresh driver, and retries once.
 
@@ -126,20 +125,20 @@ All scripts run from the `sample-private-app/` directory:
 # Invoke the Lambda
 ./invoke.sh
 
-# Run the resilience test (stops a follower, waits for recovery; ~60-120s end-to-end)
+# Optional: deploy with --enable-resilience, then run the stop/start resilience test
 ./validate.sh
 
 # Tear down (always do this BEFORE tearing down the parent EE stack)
 ./teardown-sample-private-app.sh
 ```
 
-`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, packages the Lambda, uploads it to a deploy S3 bucket, runs `aws cloudformation deploy`, and writes the Function URL to `/neo4j-sample-private-app/<stack>/function-url` in SSM and `../.deploy/sample-private-app-<ee-stack>.json` locally. It also generates `invoke.sh` in the same directory.
+`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, packages the Lambda, uploads it to a deploy S3 bucket, runs `aws cloudformation deploy`, and writes the Function URL to `/neo4j-sample-private-app/<stack>/function-url` in SSM and `../.deploy/sample-private-app-<ee-stack>.json` locally. It also generates `invoke.sh` in the same directory. Pass `--enable-resilience` only for test deployments that should include the stop/start validation Lambda.
 
-The EE stack's SSM parameters (`/neo4j-ee/<stack>/vpc-id`, `nlb-dns`, `private-subnet-1-id`, `private-subnet-2-id`, `external-sg-id`, `password-secret-arn`) are CloudFormation resources that exist for the lifetime of the EE stack and need no manual management.
+The EE stack's SSM parameters (`/neo4j-ee/<stack>/vpc-id`, `advertised-dns`, `private-subnet-1-id`, `private-subnet-2-id`, `external-sg-id`, `password-secret-arn`) are CloudFormation resources that exist for the lifetime of the EE stack and need no manual management.
 
 ### Teardown ordering
 
-Always delete this stack before tearing down the parent EE stack. `sample-private-app.template.yaml` owns two `AWS::EC2::SecurityGroupIngress` resources on the EE stack's security groups: Bolt ingress on the external SG and HTTPS ingress on the VPC endpoint SG. If the EE stack is deleted first, those SG rules become orphaned and `DELETE_IN_PROGRESS` stalls.
+Always delete this stack before tearing down the parent EE stack. `sample-private-app.template.yaml` owns two `AWS::EC2::SecurityGroupIngress` resources on the EE stack's security groups: Bolt ingress on the NLB SG and HTTPS ingress on the VPC endpoint SG. If the EE stack is deleted first, those SG rules become orphaned and `DELETE_IN_PROGRESS` stalls.
 
 ---
 
@@ -147,8 +146,7 @@ Always delete this stack before tearing down the parent EE stack. `sample-privat
 
 ```json
 {
-  "tls_enabled": true,
-  "bolt_scheme": "neo4j+ssc",
+  "bolt_scheme": "neo4j+s",
   "edition": "enterprise",
   "nodes_created": 10,
   "relationships_created": 9,
@@ -177,7 +175,7 @@ On first invocation, nodes and relationships are created. Subsequent invocations
 
 ## Resilience Test
 
-`validate.sh` calls the second Lambda's Function URL. That Lambda:
+`validate.sh` is only usable when the app was deployed with `--enable-resilience`. It calls the second Lambda's Function URL. That Lambda:
 
 1. Calls `CALL dbms.cluster.overview()` over the NLB to find the LEADER and FOLLOWER server UUIDs for the `neo4j` database.
 2. Calls `ec2:DescribeInstances` filtered by `tag:StackID = <Neo4j EE stack ARN>` and `tag:Role = neo4j-cluster-node` to list the cluster EC2 instances. The EE ASG propagates its own `StackID` and `Role` tags to launched instances; `aws:cloudformation:stack-name` is only on the ASG itself, not its instances.
@@ -210,7 +208,7 @@ Sample output:
 
 ### IAM scoping
 
-The resilience Lambda's role has `ssm:SendCommand` on `AWS-RunShellScript` scoped to EC2 instances via `aws:ResourceTag/StackID = <full EE stack ARN>`, so it can only issue shell commands to instances launched by the paired EE stack. `ec2:DescribeInstances` is `*` because the service does not support resource-level authorization, but is read-only. The main invoke Lambda has none of these permissions.
+The resilience Lambda is test-only and is not deployed by default. When `--enable-resilience` is used, its role has `ssm:SendCommand` on `AWS-RunShellScript` scoped to EC2 instances via `aws:ResourceTag/StackID = <full EE stack ARN>`, so it can issue the fixed stop/start commands only to instances launched by the paired EE stack. `ec2:DescribeInstances` is `*` because the service does not support resource-level authorization, but is read-only. The main invoke Lambda has none of these permissions.
 
 This stack also provisions an `ec2` VPC interface endpoint reusing the EE stack's endpoint SG. The EE stack provides `ssm`, `ssmmessages`, `logs`, and `secretsmanager` endpoints but no `ec2` endpoint, and the resilience Lambda has no internet egress. Without this endpoint, `DescribeInstances` hangs until timeout.
 
@@ -252,11 +250,11 @@ curl --silent --aws-sigv4 "aws:amz:${AWS_DEFAULT_REGION}:lambda" \
 
 ```
 sample-private-app/
-├── deploy-sample-private-app.sh      # Package Lambdas, deploy CFN stack, generate invoke.sh + validate.sh
+├── deploy-sample-private-app.sh      # Package Lambda, deploy CFN stack, generate invoke.sh + optional validate.sh
 ├── teardown-sample-private-app.sh    # Delete CFN stack, S3 zip versions, local files
 ├── invoke.sh                         # Generated at deploy time (calls the main Lambda)
-├── validate.sh                       # Generated at deploy time (calls the resilience Lambda)
-├── sample-private-app.template.yaml  # CloudFormation template (both Lambdas, SGs, IAM, Function URLs)
+├── validate.sh                       # Generated at deploy time; requires --enable-resilience
+├── sample-private-app.template.yaml  # CloudFormation template (main Lambda plus opt-in resilience Lambda)
 └── lambda/
     ├── handler.py                    # lambda_handler (main) + resilience_handler (stop/start a follower)
     └── requirements.txt              # neo4j>=6,<7
@@ -266,14 +264,11 @@ sample-private-app/
 
 ## Bolt TLS
 
-When the EE stack is deployed with `--tls`, the NLB listener requires TLS on port 7687 using a self-signed certificate whose SAN matches the NLB DNS name. `deploy-sample-private-app.sh` detects the `BoltTlsSecretArn` output from the EE stack and passes `BoltTlsEnabled=true` to CloudFormation, which sets `NEO4J_BOLT_TLS=true` in the Lambda environment.
+TLS is mandatory in the EE stack. The NLB terminates TLS on 7687 using the customer-supplied ACM cert whose SAN matches AdvertisedDNS, and the target group re-encrypts to a self-signed backend cert generated on each instance.
 
-The Lambda then uses the `neo4j+ssc://` URI scheme: server-side TLS with self-signed cert accepted. This is the correct scheme for internal VPC connections where the certificate is self-signed but the channel must be encrypted. No certificate file or custom SSL context is needed.
+The Lambda reads AdvertisedDNS from SSM (`<SsmPrefix>/advertised-dns`) and connects via `neo4j+s://<AdvertisedDNS>:7687`. The driver validates the NLB-presented ACM cert against the system trust store, so no certificate file or custom SSL context is needed.
 
-| `NEO4J_BOLT_TLS` | URI scheme | Encryption |
-|---|---|---|
-| unset / `false` | `neo4j://` | None |
-| `true` | `neo4j+ssc://` | TLS, self-signed cert accepted |
+For this to work inside the VPC, AdvertisedDNS must resolve to the NLB. In Private mode, set up a Route 53 private hosted zone with an A or CNAME record pointing AdvertisedDNS at the NLB (or use a public Route 53 record if the operator prefers). The Lambda must be able to resolve AdvertisedDNS via the VPC resolver.
 
 ---
 

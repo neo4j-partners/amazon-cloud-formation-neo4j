@@ -25,7 +25,6 @@ ITERATIONS="${2:-20}"
 STACK_NAME=$(read_field "$OUTPUTS_FILE" "StackName")
 REGION=$(read_field "$OUTPUTS_FILE" "Region")
 BASTION_ID=$(read_field "$OUTPUTS_FILE" "Neo4jOperatorBastionId")
-BOLT_TLS_ARN=$(read_field "$OUTPUTS_FILE" "BoltTlsSecretArn")
 
 echo "=== Smoke Write Test ==="
 echo ""
@@ -47,11 +46,9 @@ sm = boto3.client("secretsmanager", region_name=region)
 password = sm.get_secret_value(SecretId=f"neo4j/{stack}/password")["SecretString"]
 
 ssm_client = boto3.client("ssm", region_name=region)
-nlb = ssm_client.get_parameter(Name=f"/neo4j-ee/{stack}/nlb-dns")["Parameter"]["Value"]
+advertised_dns = ssm_client.get_parameter(Name=f"/neo4j-ee/{stack}/advertised-dns")["Parameter"]["Value"]
 
-tls = sys.argv[4] if len(sys.argv) > 4 else ""
-scheme = "neo4j+ssc" if tls else "neo4j"
-driver = GraphDatabase.driver(f"{scheme}://{nlb}:7687", auth=("neo4j", password))
+driver = GraphDatabase.driver(f"neo4j+s://{advertised_dns}:7687", auth=("neo4j", password))
 successes = 0
 failures = 0
 try:
@@ -75,7 +72,7 @@ SCRIPT_EOF
 B64_SCRIPT=$(printf '%s' "${BASTION_SCRIPT}" | base64 | tr -d '\n')
 
 CMD_1="echo ${B64_SCRIPT} | base64 -d > /tmp/vpsmoke.py"
-CMD_2="python3.11 /tmp/vpsmoke.py ${STACK_NAME} ${REGION} ${ITERATIONS} ${BOLT_TLS_ARN}"
+CMD_2="python3.11 /tmp/vpsmoke.py ${STACK_NAME} ${REGION} ${ITERATIONS}"
 
 CMD_ID=$(aws ssm send-command \
   --instance-ids "${BASTION_ID}" \

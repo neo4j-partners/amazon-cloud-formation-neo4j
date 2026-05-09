@@ -57,13 +57,6 @@
                   - logs:PutLogEvents
                   - logs:DescribeLogStreams
                 Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/neo4j/${AWS::StackName}/application:*'
-              - !If
-                - BoltTLSEnabled
-                - Effect: Allow
-                  Action:
-                    - secretsmanager:GetSecretValue
-                  Resource: !Ref BoltCertificateSecretArn
-                - !Ref AWS::NoValue
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue

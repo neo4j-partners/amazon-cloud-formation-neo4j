@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-_REQUIRED_FIELDS = ("StackName", "Region", "Neo4jOperatorBastionId", "Neo4jInternalDNS")
+_REQUIRED_FIELDS = ("StackName", "Region", "Neo4jOperatorBastionId", "Neo4jInternalDNS", "AdvertisedDNS")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -17,10 +17,10 @@ class StackConfig:
     region: str
     bastion_id: str
     nlb_dns: str
+    advertised_dns: str
     password: str
     install_apoc: bool
     install_gds: bool
-    bolt_tls_secret_arn: str = ""
 
 
 def _parse_outputs(path: Path) -> dict[str, str]:
@@ -95,8 +95,8 @@ def load_config(
         region=region,
         bastion_id=fields["Neo4jOperatorBastionId"],
         nlb_dns=fields["Neo4jInternalDNS"],
+        advertised_dns=fields["AdvertisedDNS"],
         password=password,
         install_apoc=fields.get("InstallAPOC", "no").lower() == "yes",
         install_gds=fields.get("InstallGDS", "false").lower() == "true",
-        bolt_tls_secret_arn=fields.get("BoltTlsSecretArn", ""),
     )

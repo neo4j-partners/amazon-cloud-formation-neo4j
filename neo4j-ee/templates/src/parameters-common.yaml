@@ -3,12 +3,12 @@
     Default: /aws/service/marketplace/prod-vwigx4rbvvb5s/2026.03.1
   Password:
     Description: >
-      Password for the neo4j admin user. Must be at least 8 characters
+      Password for the neo4j admin user. Must be at least 24 characters
       and contain only letters and numbers.
     Type: String
-    MinLength: 8
-    AllowedPattern: ^[a-zA-Z0-9]{8,}$
-    ConstraintDescription: Must be at least 8 characters and contain only letters and numbers (no special characters).
+    MinLength: 24
+    AllowedPattern: ^[a-zA-Z0-9]{24,}$
+    ConstraintDescription: Must be at least 24 characters and contain only letters and numbers (no special characters).
     NoEcho: true
   NumberOfServers:
     Description: Number of EC2 instances to deploy

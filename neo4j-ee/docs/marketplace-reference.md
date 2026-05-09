@@ -14,7 +14,7 @@ AWS Marketplace AMI policy pages distinguish mandatory product requirements from
 
 The same best-practices page also tells sellers to document the minimum required ports and recommended source IP ranges for administrative access. Those controls are necessary, but they are not substitutes for encryption in transit. A security group `AllowedCIDR` restriction controls which source IPs can initiate a connection at the AWS network layer; it does not encrypt traffic. An attacker controlling a permitted client, a routed network segment, a traffic mirror, or a compromised workload in the same reachable private network can read Neo4j credentials, Cypher queries, and query results in plaintext.
 
-The practical consequence for this listing: plain HTTP on port 7474 and unencrypted `neo4j://` Bolt on port 7687 are Marketplace best-practice risks. Treat plaintext client traffic as acceptable only for explicit dev/test use. For production-oriented Marketplace templates, TLS should be the default: Bolt should require a certificate-backed TLS configuration, Browser should use HTTPS, and documentation should call out any remaining plaintext path as non-production.
+The practical consequence for this listing: TLS is mandatory. The NLB terminates TLS on 7473 (HTTPS Browser) and 7687 (Bolt) using a customer-supplied ACM cert that matches the AdvertisedDNS SAN, and the target groups re-encrypt to a self-signed backend cert generated on each instance, so the wire is encrypted from client to NLB and from NLB to instance.
 
 Related Marketplace policy points:
 
@@ -33,7 +33,7 @@ References:
 
 ### TLS availability
 
-TLS parameters (`BoltCertificateSecretArn`, `BoltAdvertisedDNS`) are present in all three templates as optional fields that default to empty. Both private templates highlight TLS in their operator guides because production and regulated workloads commonly require it. The public template includes the same parameters for buyers who choose to enable TLS on an evaluation deployment.
+TLS parameters (`CertificateArn`, `AdvertisedDNS`) are required in all three templates. Buyers must provide an ACM certificate whose SAN matches `AdvertisedDNS`; the NLB uses that certificate on 7473 and 7687 and re-encrypts to each instance.
 
 ### AllowedCIDR default
 
@@ -68,7 +68,7 @@ AllowedCIDR:
   ConstraintDescription: The value 0.0.0.0/0 is not permitted.
 ```
 
-The external security group applies this CIDR to Neo4j ports 7474 (HTTP) and 7687 (Bolt). Intra-cluster ports (5000, 6000, 7000, 7688, 2003, 2004, 3637) are restricted to the internal security group using a self-referential ingress rule. No port 22 ingress is created; operator access goes through SSM Session Manager.
+The NLB security group applies this CIDR to Neo4j ports 7473 (HTTPS) and 7687 (Bolt). The instance-facing external security group accepts those ports only from the NLB security group. Intra-cluster ports (5000, 6000, 7000, 7688, 2003, 2004, 3637) are restricted to the internal security group using a self-referential ingress rule. No port 22 ingress is created; operator access goes through SSM Session Manager.
 
 ### IAM least privilege
 
@@ -77,7 +77,7 @@ EC2 instances must use an IAM role, not long-term access keys. Each permission m
 - CloudFormation signaling: restrict to the current stack ARN using `!Sub`.
 - EBS operations (`ec2:AttachVolume`, `ec2:DescribeVolumes`, `ec2:DescribeInstances`): resource `*` is acceptable because EBS volumes lack ARN-level scoping on all relevant APIs.
 - Auto Scaling discovery (`autoscaling:DescribeAutoScalingGroups`): required for cluster node discovery; resource `*` is unavoidable.
-- Secrets Manager (`secretsmanager:GetSecretValue`): always scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`); additionally scoped to the Bolt TLS cert ARN when TLS is enabled using `!If [BoltTLSEnabled, !Ref BoltCertificateSecretArn, !Ref AWS::NoValue]`.
+- Secrets Manager (`secretsmanager:GetSecretValue`): scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`). The TLS backend cert is generated on the instance at boot, not stored in Secrets Manager, so no additional secret read permission is required.
 
 ### Auto Scaling groups for all topologies
 
@@ -161,10 +161,10 @@ Metadata:
         Parameters:
           - AllowedCIDR
       - Label:
-          default: "TLS (optional)"
+          default: "TLS"
         Parameters:
-          - BoltCertificateSecretArn
-          - BoltAdvertisedDNS
+          - CertificateArn
+          - AdvertisedDNS
 ```
 
 ### Architectural diagrams

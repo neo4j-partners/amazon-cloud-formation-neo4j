@@ -3,7 +3,7 @@
 SSM port-forward tunnel diagnostic script.
 
 Tests whether an SSM port-forward tunnel started as a Python subprocess actually
-forwards HTTP traffic, and surfaces exactly which subprocess flags cause failures.
+forwards HTTPS traffic, and surfaces exactly which subprocess flags cause failures.
 
 Usage:
     # Prerequisites: deploy a Private-mode stack and note instance ID and NLB DNS.
@@ -35,15 +35,16 @@ from pathlib import Path
 
 try:
     import requests
+    requests.packages.urllib3.disable_warnings()
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
-    print("Note: 'requests' not installed — HTTP check will be skipped (TCP only).")
+    print("Note: 'requests' not installed — HTTPS check will be skipped (TCP only).")
 
 
 LOCAL_PORT = 17474   # use a non-standard port to avoid conflicts
 CONNECT_TIMEOUT = 60  # seconds to wait for the port to bind
-HTTP_ATTEMPTS = 20    # how many HTTP attempts to make after port is open
+HTTP_ATTEMPTS = 20    # how many HTTPS attempts to make after port is open
 HTTP_TIMEOUT = 5      # per-request timeout
 
 
@@ -150,18 +151,19 @@ def probe_tunnel(
         except Exception as e:
             print(f"  TCP data exchange: {type(e).__name__}: {e}")
 
-        # Step 3: HTTP check (if requests is available)
+        # Step 3: HTTPS check (if requests is available). Certificate validation
+        # is intentionally disabled because this diagnostic connects to localhost.
         if HAS_REQUESTS:
             for attempt in range(HTTP_ATTEMPTS):
                 try:
-                    resp = requests.get(f"http://localhost:{local_port}", timeout=HTTP_TIMEOUT)
+                    resp = requests.get(f"https://localhost:{local_port}", timeout=HTTP_TIMEOUT, verify=False)
                     if resp.status_code == 200:
                         result["http_ok"] = True
                         result["http_attempts_before_ok"] = attempt
-                        print(f"  HTTP 200 after {attempt} extra attempts ({attempt * HTTP_TIMEOUT}s)")
+                        print(f"  HTTPS 200 after {attempt} extra attempts ({attempt * HTTP_TIMEOUT}s)")
                         break
                     else:
-                        print(f"  Attempt {attempt}: HTTP {resp.status_code}")
+                        print(f"  Attempt {attempt}: HTTPS {resp.status_code}")
                         break
                 except requests.Timeout:
                     print(f"  Attempt {attempt}: ReadTimeout")
@@ -169,9 +171,9 @@ def probe_tunnel(
                     print(f"  Attempt {attempt}: ConnectionError: {e}")
                 time.sleep(1)
             else:
-                print(f"  HTTP never returned 200 after {HTTP_ATTEMPTS} attempts")
+                print(f"  HTTPS never returned 200 after {HTTP_ATTEMPTS} attempts")
         else:
-            print("  Skipping HTTP check (requests not installed)")
+            print("  Skipping HTTPS check (requests not installed)")
 
     finally:
         # Terminate the tunnel process (and its entire process group if new_session)
@@ -216,7 +218,7 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="SSM port-forward tunnel diagnostic")
     p.add_argument("--instance", help="EC2 instance ID (SSM target)")
     p.add_argument("--host", help="Remote host to forward to (NLB DNS or IP)")
-    p.add_argument("--remote-port", type=int, default=7474, help="Remote port (default: 7474)")
+    p.add_argument("--remote-port", type=int, default=7473, help="Remote port (default: 7473)")
     p.add_argument("--local-port", type=int, default=LOCAL_PORT, help=f"Local port (default: {LOCAL_PORT})")
     p.add_argument("--region", default="us-east-1")
     p.add_argument("--stack-file", type=Path,

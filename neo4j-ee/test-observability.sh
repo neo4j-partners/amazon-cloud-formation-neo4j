@@ -106,8 +106,8 @@ if [ -z "${ALARM_NAME}" ]; then
   echo "  (FailedAuthAlarmName not in deploy file — derived from stack name)"
 fi
 
-# Extract hostname from the browser URL (http://hostname:7474)
-NEO4J_HOST=$(echo "${BROWSER_URL}" | sed 's|http://||; s|:.*||')
+# Extract hostname from the browser URL (https://hostname:7473)
+NEO4J_HOST=$(echo "${BROWSER_URL}" | sed 's|https://||; s|:.*||')
 
 echo ""
 echo "============================================="
@@ -268,13 +268,13 @@ fi
 
 # Send 12 authentication requests with the wrong password to trigger the metric filter.
 # The Neo4j HTTP transactional API returns 401 and writes "Failed to log in" to security.log.
-info "Sending 12 failed authentication requests to ${NEO4J_HOST}:7474..."
+info "Sending 12 failed authentication requests to ${NEO4J_HOST}:7473..."
 for i in $(seq 1 12); do
   curl -s -o /dev/null \
     -u "obstest_${i}_${RANDOM}:WrongPassword" \
     -H "Content-Type: application/json" \
     -d '{"statements":[{"statement":"RETURN 1"}]}' \
-    "http://${NEO4J_HOST}:7474/db/neo4j/tx" \
+    "https://${NEO4J_HOST}:7473/db/neo4j/tx" \
     --connect-timeout 5 \
     --max-time 10 \
     2>/dev/null || true

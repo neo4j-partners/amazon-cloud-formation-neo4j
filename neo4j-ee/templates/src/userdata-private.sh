@@ -177,11 +177,13 @@ build_neo4j_conf_file() {
   local -r privateIP="$(hostname -i | awk '{print $NF}')"
   echo "Configuring network in neo4j.conf..."
   set_neo4j_conf server.default_listen_address 0.0.0.0
-  set_neo4j_conf server.default_advertised_address "${loadBalancerDNSName}"
+  set_neo4j_conf server.default_advertised_address "${advertisedDNS}"
   set_neo4j_conf server.bolt.listen_address 0.0.0.0:7687
-  set_neo4j_conf server.bolt.advertised_address "${boltAdvertisedDNS:-${loadBalancerDNSName}}:7687"
-  set_neo4j_conf server.http.listen_address 0.0.0.0:7474
-  set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
+  set_neo4j_conf server.bolt.advertised_address "${advertisedDNS}:7687"
+  set_neo4j_conf server.http.enabled false
+  set_neo4j_conf server.https.enabled true
+  set_neo4j_conf server.https.listen_address 0.0.0.0:7473
+  set_neo4j_conf server.https.advertised_address "${advertisedDNS}:7473"
   set_neo4j_conf server.metrics.enabled true
   set_neo4j_conf server.metrics.jmx.enabled true
   set_neo4j_conf server.metrics.prefix neo4j
@@ -235,34 +237,43 @@ build_neo4j_conf_file() {
     set_neo4j_conf dbms.cluster.discovery.resolver_type LIST
     set_neo4j_conf dbms.cluster.endpoints "${coreMembers}"
   fi
-  if [ -n "${boltCertArn}" ]; then
-    command -v jq >/dev/null || dnf install -y jq
-    mkdir -p /var/lib/neo4j/certificates/bolt
-    local _secret_json
-    _secret_json=$(aws secretsmanager get-secret-value --region "${region}" \
-      --secret-id "${boltCertArn}" --query SecretString --output text)
-    if ! echo "${_secret_json}" | jq -e 'has("certificate") and has("private_key")' >/dev/null; then
-      echo "ERROR: Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM). Exiting." >&2
-      exit 1
-    fi
-    umask 077
-    echo "${_secret_json}" | jq -r '.private_key' > /var/lib/neo4j/certificates/bolt/private.key
-    echo "${_secret_json}" | jq -r '.certificate' > /var/lib/neo4j/certificates/bolt/public.crt
-    umask 022
-    unset _secret_json
-    chown -R neo4j:neo4j /var/lib/neo4j/certificates
-    chmod 600 /var/lib/neo4j/certificates/bolt/private.key
-    chmod 644 /var/lib/neo4j/certificates/bolt/public.crt
-    set_neo4j_conf dbms.ssl.policy.bolt.enabled true
-    set_neo4j_conf dbms.ssl.policy.bolt.base_directory /var/lib/neo4j/certificates/bolt
-    set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key
-    set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt
-    set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE
-    set_neo4j_conf server.bolt.tls_level REQUIRED
-  fi
 }
 add_cypher_ip_blocklist() {
   set_neo4j_conf internal.dbms.cypher_ip_blocklist "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8"
+}
+configure_neo4j_tls() {
+  echo "Configuring TLS for Bolt and HTTPS..."
+  command -v openssl >/dev/null 2>&1 || dnf install -y openssl
+  for _proto in bolt https; do
+    local _dir="/var/lib/neo4j/certificates/${_proto}"
+    local _key="${_dir}/private.key"
+    local _crt="${_dir}/public.crt"
+    if [[ -f "${_key}" && -f "${_crt}" ]]; then
+      echo "  Reusing existing self-signed cert in ${_dir}"
+    else
+      echo "  Generating self-signed cert in ${_dir}..."
+      mkdir -p "${_dir}"
+      umask 077
+      openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout "${_key}" -out "${_crt}" -days 3650 \
+        -subj "/CN=neo4j-${_proto}" >/dev/null 2>&1
+      umask 022
+    fi
+    chown -R neo4j:neo4j "${_dir}"
+    chmod 600 "${_key}"
+    chmod 644 "${_crt}"
+  done
+  set_neo4j_conf dbms.ssl.policy.bolt.enabled true
+  set_neo4j_conf dbms.ssl.policy.bolt.base_directory /var/lib/neo4j/certificates/bolt
+  set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key
+  set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt
+  set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE
+  set_neo4j_conf server.bolt.tls_level REQUIRED
+  set_neo4j_conf dbms.ssl.policy.https.enabled true
+  set_neo4j_conf dbms.ssl.policy.https.base_directory /var/lib/neo4j/certificates/https
+  set_neo4j_conf dbms.ssl.policy.https.private_key private.key
+  set_neo4j_conf dbms.ssl.policy.https.public_certificate public.crt
+  set_neo4j_conf dbms.ssl.policy.https.client_auth NONE
 }
 start_neo4j() {
   echo "Starting Neo4j..."
@@ -327,6 +338,7 @@ fi
 extension_config
 build_neo4j_conf_file
 add_cypher_ip_blocklist
+configure_neo4j_tls
 start_neo4j
 # cfn-signal shebang (#!/usr/bin/python3 -s) requires cfnbootstrap under python3.9;
 # switch the default only after signaling so cfn-signal can find its dependencies.

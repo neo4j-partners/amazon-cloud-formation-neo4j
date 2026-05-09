@@ -163,15 +163,18 @@
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       Type: network
 
-  Neo4jHTTPListener:
+  Neo4jHTTPSListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
-        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
+        - TargetGroupArn: !Ref Neo4jHTTPSTargetGroup
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
-      Port: 7474
-      Protocol: TCP
+      Port: 7473
+      Protocol: TLS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
 
   Neo4jBoltListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -181,23 +184,23 @@
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
       Port: 7687
-      Protocol: TCP
+      Protocol: TLS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
 
-  Neo4jHTTPTargetGroup:
+  Neo4jHTTPSTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: !Join
         - '-'
         - - !Ref 'AWS::StackName'
-          - 'http'
+          - 'https'
           - 'tg'
-      Port: 7474
-      Protocol: TCP
-      HealthCheckProtocol: HTTP
-      HealthCheckPath: /
+      Port: 7473
+      Protocol: TLS
+      HealthCheckProtocol: TCP
       HealthCheckIntervalSeconds: 10
-      Matcher:
-        HttpCode: '200'
       TargetGroupAttributes:
         - Key: preserve_client_ip.enabled
           Value: "false"
@@ -219,7 +222,8 @@
           - 'bolt'
           - 'tg'
       Port: 7687
-      Protocol: TCP
+      Protocol: TLS
+      HealthCheckProtocol: TCP
       HealthCheckIntervalSeconds: 10
       TargetGroupAttributes:
         - Key: preserve_client_ip.enabled

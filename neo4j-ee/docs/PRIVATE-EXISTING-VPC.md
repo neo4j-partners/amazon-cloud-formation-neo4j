@@ -14,7 +14,7 @@
   - [VPC Interface Endpoint Design](#vpc-interface-endpoint-design)
   - [What the Caller's VPC Must Provide](#what-the-callers-vpc-must-provide)
   - [Platform Contract](#platform-contract)
-  - [Production DNS Alias (BoltAdvertisedDNS)](#production-dns-alias-boltadvertiseddns)
+  - [Production DNS Alias (AdvertisedDNS)](#production-dns-alias-advertiseddns)
 - [Local Deployment and Testing](#local-deployment-and-testing)
   - [Build](#build)
   - [Deploy](#deploy)
@@ -63,13 +63,13 @@ The template creates the following inside your VPC. It does **not** create: VPC,
 
 | AWS Resource | What it creates |
 |---|---|
-| Internal NLB | Listeners on port 7474 (HTTP) and 7687 (Bolt); deployed into the subnets you supply |
+| Internal NLB | Listeners on port 7473 (HTTPS) and 7687 (Bolt); deployed into the subnets you supply |
 | EC2 instances | 1 or 3 Neo4j nodes in your private subnets; no public IPs |
 | ASG per node | One Auto Scaling Group per Neo4j node, fixed at `MinSize=MaxSize=DesiredCapacity=1`, for self-healing |
 | EBS data volumes | One GP3 volume per node with `DeletionPolicy: Retain`; survives stack deletion |
 | Operator bastion | `t4g.nano` in your private subnet, not registered as an NLB target; receives SSM sessions for operator access |
 | VPC interface endpoints | `ssm`, `ssmmessages`, `logs`, `secretsmanager` with `PrivateDnsEnabled: true`; created when `CreateVpcEndpoints=true` (the default), skipped when `CreateVpcEndpoints=false` |
-| Security groups | External SG (AllowedCIDR on 7474/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
+| Security groups | NLB SG (AllowedCIDR on 7473/7687 to the NLB); External SG (NLB SG as source on 7473/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
 | SSM parameters | `/neo4j-ee/<stack>/` prefix; publishes VPC ID, NLB DNS, security group IDs, and secret ARN |
 | Secrets Manager | Neo4j admin password at `neo4j/<stack>/password` |
 | CloudWatch | Log group, VPC flow logs, failed-auth alarm, CloudTrail trail |
@@ -114,16 +114,15 @@ The instance and bastion SGs are wired into the endpoint SG at deploy time. In P
 
 Identical to the Private template. See [Platform Contract in PRIVATE.md](PRIVATE.md#platform-contract) for the full SSM parameter reference.
 
-### Production DNS Alias (BoltAdvertisedDNS)
+### Production DNS Alias (AdvertisedDNS)
 
-In production, use a stable customer-owned DNS name in front of the NLB so that certificates are not pinned to the AWS-generated NLB DNS:
+TLS is mandatory; the operator must provide both `CertificateArn` (an ACM cert ARN) and `AdvertisedDNS` (a DNS name whose value matches the cert SAN) at stack create:
 
-1. Create a Route 53 private hosted zone with an A-record alias pointing to the internal NLB, or configure external DNS pointing to the NLB.
-2. Obtain a certificate for that name.
-3. Push the cert and key to Secrets Manager in the JSON format described in [Bolt TLS in PRIVATE.md](PRIVATE.md#bolt-tls).
-4. Set the `BoltAdvertisedDNS` and `BoltCertificateSecretArn` CloudFormation parameters when creating or updating the stack. Pass them via the AWS CloudFormation console or `aws cloudformation create-stack --parameters`.
+1. Provision an ACM certificate whose Subject Alternative Name matches the DNS name you will use as `AdvertisedDNS`. ACM-issued public certs and ACM Private CA certs are both accepted.
+2. Create a Route 53 record that resolves `AdvertisedDNS` to the internal NLB. A private hosted zone with an A-record alias pointing to the NLB is the typical pattern; an external DNS record works too.
+3. Set the `AdvertisedDNS` and `CertificateArn` CloudFormation parameters when creating or updating the stack. Pass them via the AWS CloudFormation console or `aws cloudformation create-stack --parameters`.
 
-`server.bolt.advertised_address`, the cert SAN, and the client connect URL will all resolve to the custom DNS name. Certificate rotation does not require reissuing against a changing NLB DNS: update the Secrets Manager secret value and trigger an ASG instance refresh.
+`server.bolt.advertised_address`, the cert SAN, and the client connect URL all resolve to `AdvertisedDNS`. The NLB terminates TLS on 7473 and 7687 with the ACM cert and re-encrypts to a self-signed backend cert generated on each instance, so the wire is encrypted from client to instance. ACM handles cert renewal automatically; to swap to a different cert, update `CertificateArn` on the stack — no instance refresh required.
 
 ---
 
@@ -151,25 +150,29 @@ cd neo4j-ee
 ./deploy.py --mode ExistingVpc \
   --number-of-servers 1 \
   --vpc-id vpc-xxxx \
-  --subnet-1 subnet-xxxx
+  --subnet-1 subnet-xxxx \
+  --cert-arn <arn> --advertised-dns <dns>
 
 # 3-node (three subnets required, one per AZ)
 ./deploy.py --mode ExistingVpc \
   --vpc-id vpc-xxxx \
   --subnet-1 subnet-a \
   --subnet-2 subnet-b \
-  --subnet-3 subnet-c
+  --subnet-3 subnet-c \
+  --cert-arn <arn> --advertised-dns <dns>
 
 # With Marketplace AMI
 ./deploy.py --marketplace --mode ExistingVpc \
   --vpc-id vpc-xxxx \
-  --subnet-1 subnet-xxxx
+  --subnet-1 subnet-xxxx \
+  --cert-arn <arn> --advertised-dns <dns>
 
 # VPC already has interface endpoints; skip endpoint creation
 ./deploy.py --mode ExistingVpc \
   --vpc-id vpc-xxxx --subnet-1 subnet-xxxx \
   --create-vpc-endpoints false \
-  --existing-endpoint-sg-id sg-xxxx
+  --existing-endpoint-sg-id sg-xxxx \
+  --cert-arn <arn> --advertised-dns <dns>
 ```
 
 The deploy script writes outputs to `.deploy/<stack-name>.txt`. Stack creation takes 10-20 minutes (includes AMI copy if the region differs from the source AMI region; pin `--region` to the source region to skip the copy).

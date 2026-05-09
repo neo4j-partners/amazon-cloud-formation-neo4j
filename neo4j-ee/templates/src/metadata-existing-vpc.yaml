@@ -25,8 +25,8 @@
       - Label:
           default: "TLS"
         Parameters:
-          - BoltCertificateSecretArn
-          - BoltAdvertisedDNS
+          - CertificateArn
+          - AdvertisedDNS
       - Label:
           default: "Monitoring"
         Parameters:
@@ -60,7 +60,7 @@
         default: Allowed CIDR
       AlertEmail:
         default: Alert Email Address
-      BoltCertificateSecretArn:
-        default: Bolt TLS Certificate Secret ARN
-      BoltAdvertisedDNS:
-        default: Bolt Advertised DNS Name
+      CertificateArn:
+        default: ACM Certificate ARN
+      AdvertisedDNS:
+        default: Advertised DNS Name

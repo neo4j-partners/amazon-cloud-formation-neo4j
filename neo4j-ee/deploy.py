@@ -1,13 +1,11 @@
 #!/usr/bin/env -S uv run
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["boto3", "cryptography"]
+# dependencies = ["boto3"]
 # ///
 
 import argparse
 import atexit
-import datetime
-import json
 import os
 from pathlib import Path
 import random
@@ -18,10 +16,6 @@ import time
 import urllib.request
 
 import boto3
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SOURCE_REGION = "us-east-1"
@@ -72,7 +66,10 @@ def parse_args():
     p.add_argument("--region", dest="region_override", metavar="REGION")
     p.add_argument("--number-of-servers", type=int, default=3, choices=[1, 3])
     p.add_argument("--marketplace", action="store_true")
-    p.add_argument("--tls", action="store_true")
+    p.add_argument("--cert-arn", metavar="ARN", required=True,
+                   help="ACM certificate ARN for the NLB TLS listeners on 7473 and 7687.")
+    p.add_argument("--advertised-dns", metavar="DNS", required=True,
+                   help="DNS name that resolves to the NLB and matches the ACM cert SAN.")
     p.add_argument("--alert-email", metavar="EMAIL")
     p.add_argument("--mode", default="Private", choices=["Public", "Private", "ExistingVpc"])
     p.add_argument("--name", metavar="NAME", help="Stack name suffix (default: timestamp). Stack becomes ee-{NAME}.")
@@ -117,7 +114,7 @@ def _parse_vpc_file(path: str) -> dict[str, str]:
 
 def generate_password():
     alphabet = string.ascii_letters + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(16))
+    return "".join(secrets.choice(alphabet) for _ in range(32))
 
 
 def detect_public_ip():
@@ -126,33 +123,6 @@ def detect_public_ip():
             return r.read().decode().strip()
     except Exception:
         return None
-
-
-def generate_tls_cert(nlb_dns):
-    key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
-    now = datetime.datetime.now(datetime.timezone.utc)
-    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "neo4j-bolt")])
-    cert = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(subject)
-        .public_key(key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(now)
-        .not_valid_after(now + datetime.timedelta(days=365))
-        .add_extension(
-            x509.SubjectAlternativeName([x509.DNSName(nlb_dns)]),
-            critical=False,
-        )
-        .sign(key, hashes.SHA256())
-    )
-    cert_pem = cert.public_bytes(serialization.Encoding.PEM).decode()
-    key_pem = key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.TraditionalOpenSSL,
-        serialization.NoEncryption(),
-    ).decode()
-    return cert_pem, key_pem
 
 
 def main():
@@ -207,9 +177,9 @@ def main():
     ts = int(time.time())
     stack_name = f"ee-{args.name}" if args.name else f"ee-{ts}"
 
-    # NLB target group names are "{stack_name}-http-tg" (the longest suffix).
+    # NLB target group names are "{stack_name}-https-tg" (the longest suffix).
     # AWS enforces a 32-character limit on target group names.
-    _MAX_TG_SUFFIX = len("-http-tg")
+    _MAX_TG_SUFFIX = len("-https-tg")
     if len(stack_name) + _MAX_TG_SUFFIX > 32:
         max_name_len = 32 - len("ee-") - _MAX_TG_SUFFIX
         sys.exit(
@@ -224,7 +194,6 @@ def main():
     cleanup_state = {
         "cfn_bucket": None,
         "copied_ami_id": None,
-        "tls_secret_arn": None,
     }
 
     def cleanup():
@@ -240,15 +209,6 @@ def main():
                 s3.delete_bucket(Bucket=bucket)
             except Exception as e:
                 print(f"  Warning: could not fully clean up S3 bucket {bucket}: {e}")
-        if cleanup_state["tls_secret_arn"]:
-            arn = cleanup_state["tls_secret_arn"]
-            print(f"\nCleaning up TLS secret {arn}...")
-            try:
-                boto3.client("secretsmanager", region_name=region).delete_secret(
-                    SecretId=arn, ForceDeleteWithoutRecovery=True
-                )
-            except Exception as e:
-                print(f"  Warning: could not delete TLS secret: {e}")
 
     atexit.register(cleanup)
 
@@ -327,7 +287,8 @@ def main():
     print(f"  Servers:        {args.number_of_servers}")
     print(f"  Mode:           {args.mode}")
     print(f"  AllowedCIDR:    {allowed_cidr}")
-    print(f"  TLS:            {args.tls}")
+    print(f"  CertificateArn: {args.cert_arn}")
+    print(f"  AdvertisedDNS:  {args.advertised_dns}")
     print(f"  AMI source:     {ami_source}")
     if not args.marketplace:
         print(f"  AMI:            {ami_id}")
@@ -361,6 +322,8 @@ def main():
         {"ParameterKey": "NumberOfServers", "ParameterValue": str(args.number_of_servers)},
         {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
         {"ParameterKey": "AllowedCIDR", "ParameterValue": allowed_cidr},
+        {"ParameterKey": "CertificateArn", "ParameterValue": args.cert_arn},
+        {"ParameterKey": "AdvertisedDNS", "ParameterValue": args.advertised_dns},
         {"ParameterKey": "InstallGDS", "ParameterValue": "true"},
     ]
     if ssm_param_path:
@@ -397,93 +360,6 @@ def main():
         WaiterConfig={"Delay": 15, "MaxAttempts": 120},
     )
 
-    bolt_tls_secret_arn = ""
-    if args.tls:
-        print()
-        print("--- TLS Phase: generating self-signed cert and updating stack ---")
-
-        nlb_dns = boto3.client("ssm", region_name=region).get_parameter(
-            Name=f"/neo4j-ee/{stack_name}/nlb-dns"
-        )["Parameter"]["Value"]
-        print(f"NLB DNS: {nlb_dns}")
-
-        cert_pem, key_pem = generate_tls_cert(nlb_dns)
-        print(f"Self-signed cert generated (SAN: DNS:{nlb_dns})")
-
-        bolt_tls_secret_arn = boto3.client("secretsmanager", region_name=region).create_secret(
-            Name=f"neo4j-bolt-tls-{stack_name}",
-            SecretString=json.dumps({"certificate": cert_pem, "private_key": key_pem}),
-        )["ARN"]
-        cleanup_state["tls_secret_arn"] = bolt_tls_secret_arn
-        print(f"Secrets Manager secret created: {bolt_tls_secret_arn}")
-
-        lambda_dir = os.path.join(SCRIPT_DIR, "sample-private-app", "lambda")
-        ca_path = os.path.join(lambda_dir, "neo4j-ca.crt")
-        with open(ca_path, "w") as f:
-            f.write(cert_pem)
-        print(f"CA bundle staged at {ca_path}")
-
-        print("Updating stack with BoltCertificateSecretArn...")
-        existing_params = cfn.describe_stacks(StackName=stack_name)["Stacks"][0]["Parameters"]
-        update_params = [
-            {"ParameterKey": p["ParameterKey"], "UsePreviousValue": True}
-            for p in existing_params
-            if p["ParameterKey"] != "BoltCertificateSecretArn"
-        ]
-        update_params.append({
-            "ParameterKey": "BoltCertificateSecretArn",
-            "ParameterValue": bolt_tls_secret_arn,
-        })
-        cfn.update_stack(
-            StackName=stack_name,
-            TemplateURL=template_url,
-            Capabilities=["CAPABILITY_IAM"],
-            Parameters=update_params,
-        )
-        print("Waiting for stack update to complete...")
-        cfn.get_waiter("stack_update_complete").wait(
-            StackName=stack_name,
-            WaiterConfig={"Delay": 15, "MaxAttempts": 120},
-        )
-        print("Stack updated.")
-
-        asg = boto3.client("autoscaling", region_name=region)
-        refresh_ids = {}
-        for i in range(1, args.number_of_servers + 1):
-            asg_name = cfn.describe_stack_resource(
-                StackName=stack_name,
-                LogicalResourceId=f"Neo4jNode{i}ASG",
-            )["StackResourceDetail"]["PhysicalResourceId"]
-            print(f"Starting instance refresh on ASG: {asg_name}")
-            refresh_id = asg.start_instance_refresh(
-                AutoScalingGroupName=asg_name,
-                Preferences={"MinHealthyPercentage": 0, "InstanceWarmup": 300},
-            )["InstanceRefreshId"]
-            print(f"Instance refresh started: {refresh_id}")
-            refresh_ids[asg_name] = refresh_id
-        print("Waiting for instance refresh to complete (EE 3-node: ~5-10 min)...")
-        _REFRESH_TERMINAL_FAIL = {"Failed", "Cancelled", "RollbackSuccessful", "RollbackFailed"}
-        while refresh_ids:
-            time.sleep(60)
-            for asg_name, refresh_id in list(refresh_ids.items()):
-                status = asg.describe_instance_refreshes(
-                    AutoScalingGroupName=asg_name,
-                    InstanceRefreshIds=[refresh_id],
-                )["InstanceRefreshes"][0]["Status"]
-                print(f"  {asg_name}: {status}")
-                if status == "Successful":
-                    print(f"Instance refresh complete for {asg_name}.")
-                    del refresh_ids[asg_name]
-                elif status in _REFRESH_TERMINAL_FAIL:
-                    sys.exit(f"ERROR: Instance refresh {status} for {asg_name}.")
-
-        cleanup_state["tls_secret_arn"] = None  # persist for teardown.sh
-
-        print()
-        print("TLS enabled on Bolt. To activate on the Lambda:")
-        print(f"  cd {SCRIPT_DIR}/sample-private-app && cdk deploy")
-        print("(neo4j-ca.crt is already staged in the lambda/ directory)")
-
     deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
     os.makedirs(deploy_dir, exist_ok=True)
     outputs_file = os.path.join(deploy_dir, f"{stack_name}.txt")
@@ -517,8 +393,8 @@ def main():
         extra.extend([("SSMParamPath", ssm_param_path), ("AmiId", ami_id)])
     if cleanup_state["copied_ami_id"]:
         extra.extend([("CopiedAmiId", cleanup_state["copied_ami_id"]), ("SourceRegion", SOURCE_REGION)])
-    if bolt_tls_secret_arn:
-        extra.append(("BoltTlsSecretArn", bolt_tls_secret_arn))
+    extra.append(("CertificateArn", args.cert_arn))
+    extra.append(("AdvertisedDNS", args.advertised_dns))
     extra.append(("StackID", stack_data["StackId"]))
 
     lines += [f"{k:<20} = {v}" for k, v in extra]

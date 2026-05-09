@@ -1,6 +1,6 @@
 # Neo4j Enterprise Edition: AWS CloudFormation
 
-CloudFormation templates and operator tooling for the Neo4j Enterprise Edition AWS Marketplace listing. Each template deploys a one or three-node Neo4j cluster fronted by a Network Load Balancer. Every node runs in a dedicated Auto Scaling group for self-healing, with a GP3 EBS data volume that is retained across stack deletion. Bolt TLS is optional on all three templates. Three topologies are available to match different infrastructure requirements: a public new-VPC deployment for evaluation, a private new-VPC deployment for production, and a private deployment into an existing VPC for environments with pre-existing network infrastructure.
+CloudFormation templates and operator tooling for the Neo4j Enterprise Edition AWS Marketplace listing. Each template deploys a one or three-node Neo4j cluster fronted by a Network Load Balancer. Every node runs in a dedicated Auto Scaling group for self-healing, with a GP3 EBS data volume that is retained across stack deletion. TLS is mandatory on Browser and Bolt paths. Three topologies are available to match different infrastructure requirements: a public new-VPC deployment for evaluation, a private new-VPC deployment for production, and a private deployment into an existing VPC for environments with pre-existing network infrastructure.
 
 ---
 
@@ -44,13 +44,14 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 
 ```bash
 # Private (default): 3-node cluster, t3.medium
-./deploy.py --region us-east-1
+./deploy.py --region us-east-1 --cert-arn <acm-cert-arn> --advertised-dns <dns>
 
 # Public
-./deploy.py --mode Public --region us-east-1
+./deploy.py --mode Public --region us-east-1 --cert-arn <acm-cert-arn> --advertised-dns <dns>
 
 # Existing VPC
-./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx
+./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx \
+  --cert-arn <acm-cert-arn> --advertised-dns <dns>
 
 # Common flags (apply to all modes)
 ./deploy.py --number-of-servers 1           # single instance instead of 3-node
@@ -58,6 +59,8 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ./deploy.py --marketplace                   # use the published Marketplace AMI
 ./deploy.py --alert-email you@example.com   # enable CloudWatch alarm emails
 ```
+
+TLS is mandatory. `--cert-arn` must be an ACM certificate whose SAN matches `--advertised-dns`.
 
 ### Look Up Connection Details
 

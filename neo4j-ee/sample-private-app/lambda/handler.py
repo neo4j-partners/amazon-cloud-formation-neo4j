@@ -14,14 +14,12 @@ ssm = boto3.client("ssm")
 sm = boto3.client("secretsmanager")
 
 _driver = None
-_BOLT_TLS = os.environ.get("NEO4J_BOLT_TLS") == "true"
-_BOLT_SCHEME = "neo4j+ssc" if _BOLT_TLS else "neo4j"
 
 
 def _init_driver():
-    nlb_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_NLB_PATH"])["Parameter"]["Value"]
+    advertised_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_ADVERTISED_DNS_PATH"])["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
-    return GraphDatabase.driver(f"{_BOLT_SCHEME}://{nlb_dns}:7687", auth=("neo4j", password))
+    return GraphDatabase.driver(f"neo4j+s://{advertised_dns}:7687", auth=("neo4j", password))
 
 
 def _get_driver():
@@ -117,8 +115,7 @@ def _run(driver):
                 readers += len(server.get("addresses", []))
 
     body = {
-        "tls_enabled": _BOLT_TLS,
-        "bolt_scheme": _BOLT_SCHEME,
+        "bolt_scheme": "neo4j+s",
         "edition": edition,
         "nodes_created": nodes_created,
         "relationships_created": rels_created,

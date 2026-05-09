@@ -49,14 +49,11 @@ _PREAMBLE_COMMON = [
     '"\\n"',
 ]
 
-# Present in all three templates — Bolt over an internet-facing NLB must be
-# encryptable, so the public template carries TLS parameters too.
+# Present in all three templates. The ACM cert ARN is consumed by the
+# NLB listener directly, not by userdata, so it is not part of the preamble.
 _PREAMBLE_TLS = [
-    '"boltCertArn="',
-    "Ref: BoltCertificateSecretArn",
-    '"\\n"',
-    '"boltAdvertisedDNS="',
-    "Ref: BoltAdvertisedDNS",
+    '"advertisedDNS="',
+    "Ref: AdvertisedDNS",
     '"\\n"',
 ]
 

@@ -18,18 +18,13 @@ Parameters:
     Description: Private subnets for the Lambda ENIs.
   ExternalSgId:
     Type: AWS::EC2::SecurityGroup::Id
-    Description: Neo4j external SG (fronting NLB on 7687).
+    Description: Neo4j NLB SG that accepts client traffic on 7687.
   VpcEndpointSgId:
     Type: AWS::EC2::SecurityGroup::Id
     Description: SG attached to the VPC interface endpoints the Lambda calls on 443.
   PasswordSecretArn:
     Type: String
     Description: ARN of the Neo4j password secret.
-  BoltTlsEnabled:
-    Type: String
-    Default: 'false'
-    AllowedValues: ['true', 'false']
-    Description: When true, Lambda uses neo4j+ssc scheme.
   Neo4jStackName:
     Type: String
     Description: CloudFormation stack name of the parent Neo4j EE stack (used for logging/env).
@@ -46,10 +41,19 @@ Parameters:
     Type: String
     Default: ''
     Description: Optional S3 object version for the Lambda zip (forces redeploy on change).
+  EnableResilienceTestFunction:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+    Description: >-
+      Test-only. When true, deploys a resilience Function URL whose role can run
+      fixed SSM shell commands to stop/start Neo4j on parent stack instances.
 
 Conditions:
   HasObjectVersion: !Not [!Equals [!Ref LambdaS3ObjectVersion, '']]
-  BoltTlsEnabledCond: !Equals [!Ref BoltTlsEnabled, 'true']
+  EnableResilience: !Equals [!Ref EnableResilienceTestFunction, 'true']
 
 Resources:
   LambdaSecurityGroup:
@@ -136,7 +140,6 @@ Resources:
   # stack names to the neo4j-sample-private-app-<ee-stack> pattern to stay within both.
   Function:
     Type: AWS::Lambda::Function
-    DependsOn: FunctionLogGroup
     Properties:
       FunctionName: !Ref AWS::StackName
       Runtime: python3.13
@@ -156,9 +159,8 @@ Resources:
           - !Ref LambdaSecurityGroup
       Environment:
         Variables:
-          NEO4J_SSM_NLB_PATH: !Sub '${SsmPrefix}/nlb-dns'
+          NEO4J_SSM_ADVERTISED_DNS_PATH: !Sub '${SsmPrefix}/advertised-dns'
           NEO4J_SECRET_ARN: !Ref PasswordSecretArn
-          NEO4J_BOLT_TLS: !If [BoltTlsEnabledCond, 'true', !Ref 'AWS::NoValue']
       Code:
         S3Bucket: !Ref LambdaS3Bucket
         S3Key: !Ref LambdaS3Key
@@ -183,6 +185,7 @@ Resources:
   # this stack adds that endpoint, reusing the EE stack's endpoint SG.
   Ec2VpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Condition: EnableResilience
     Properties:
       VpcId: !Ref VpcId
       VpcEndpointType: Interface
@@ -194,6 +197,7 @@ Resources:
 
   ResilienceFunctionRole:
     Type: AWS::IAM::Role
+    Condition: EnableResilience
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -235,6 +239,7 @@ Resources:
 
   ResilienceFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+    Condition: EnableResilience
     DeletionPolicy: Delete
     UpdateReplacePolicy: Delete
     Properties:
@@ -243,7 +248,7 @@ Resources:
 
   ResilienceFunction:
     Type: AWS::Lambda::Function
-    DependsOn: ResilienceFunctionLogGroup
+    Condition: EnableResilience
     Properties:
       FunctionName: !Sub '${AWS::StackName}-resilience'
       Runtime: python3.13
@@ -263,9 +268,8 @@ Resources:
           - !Ref LambdaSecurityGroup
       Environment:
         Variables:
-          NEO4J_SSM_NLB_PATH: !Sub '${SsmPrefix}/nlb-dns'
+          NEO4J_SSM_ADVERTISED_DNS_PATH: !Sub '${SsmPrefix}/advertised-dns'
           NEO4J_SECRET_ARN: !Ref PasswordSecretArn
-          NEO4J_BOLT_TLS: !If [BoltTlsEnabledCond, 'true', !Ref 'AWS::NoValue']
           NEO4J_STACK_NAME: !Ref Neo4jStackName
           NEO4J_STACK_ID: !Ref Neo4jStackId
       Code:
@@ -275,12 +279,14 @@ Resources:
 
   ResilienceFunctionUrl:
     Type: AWS::Lambda::Url
+    Condition: EnableResilience
     Properties:
       TargetFunctionArn: !GetAtt ResilienceFunction.Arn
       AuthType: AWS_IAM
 
   ResilienceFunctionUrlSsmParameter:
     Type: AWS::SSM::Parameter
+    Condition: EnableResilience
     Properties:
       Name: !Sub '/neo4j-sample-private-app/${AWS::StackName}/validate-url'
       Type: String
@@ -293,6 +299,8 @@ Outputs:
   FunctionArn:
     Value: !GetAtt Function.Arn
   ResilienceFunctionUrl:
+    Condition: EnableResilience
     Value: !GetAtt ResilienceFunctionUrl.FunctionUrl
   ResilienceFunctionArn:
+    Condition: EnableResilience
     Value: !GetAtt ResilienceFunction.Arn

@@ -6,7 +6,6 @@
     - !Equals
       - !Ref AlertEmail
       - ''
-  BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
   HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
   HasNode1Snapshot: !Not [!Equals [!Ref Node1SnapshotId, '']]
   CreateVpcEndpoints: !Equals [!Ref CreateVpcEndpoints, 'true']

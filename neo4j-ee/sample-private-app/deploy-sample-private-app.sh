@@ -3,11 +3,12 @@
 # an existing EE stack, using plain CloudFormation (no CDK).
 #
 # Usage:
-#   ./deploy-sample-private-app.sh [stack-name] [--suffix <suffix>]
+#   ./deploy-sample-private-app.sh [stack-name] [--suffix <suffix>] [--enable-resilience]
 #
 # If stack-name is omitted, uses the most recently modified file in .deploy/.
 # --suffix appends a string to the app stack name, allowing parallel deployments
 # against the same EE stack (e.g. while a previous app stack is being torn down).
+# --enable-resilience deploys the test-only Lambda that can stop/start Neo4j via SSM.
 # Reads /neo4j-ee/<stack-name>/ SSM parameters written by the EE CloudFormation
 # stack, packages the Lambda, uploads it, deploys the template, then writes the
 # Function URL to SSM and .deploy/.
@@ -54,12 +55,17 @@ require_ssm() {
 # Parse arguments: optional positional stack-name and optional --suffix
 # ---------------------------------------------------------------------------
 SUFFIX=""
+ENABLE_RESILIENCE="false"
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --suffix)
       SUFFIX="-${2:?--suffix requires a value}"
       shift 2
+      ;;
+    --enable-resilience)
+      ENABLE_RESILIENCE="true"
+      shift
       ;;
     *)
       POSITIONAL_ARGS+=("$1")
@@ -89,7 +95,6 @@ fi
 NEO4J_STACK=$(read_field "${OUTPUTS_FILE}" "StackName")
 REGION=$(read_field "${OUTPUTS_FILE}" "Region")
 DEPLOYMENT_MODE=$(read_field "${OUTPUTS_FILE}" "DeploymentMode")
-BOLT_TLS_ARN=$(read_field "${OUTPUTS_FILE}" "BoltTlsSecretArn" || true)
 
 if [ -z "${NEO4J_STACK}" ] || [ -z "${REGION}" ]; then
   echo "ERROR: Could not read StackName or Region from ${OUTPUTS_FILE}." >&2
@@ -120,6 +125,7 @@ echo "  EE Stack:       ${NEO4J_STACK}"
 echo "  App Stack:      ${APP_STACK_NAME}"
 echo "  Region:         ${REGION}"
 echo "  SSM Prefix:     ${SSM_PREFIX}"
+echo "  Resilience:     ${ENABLE_RESILIENCE}"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -139,7 +145,6 @@ echo "  password-secret-arn: ${PASSWORD_SECRET_ARN}"
 echo "  vpc-endpoint-sg-id:  ${VPC_ENDPOINT_SG_ID}"
 echo "  private-subnet-1-id: ${PRIVATE_SUBNET_1_ID}"
 echo "  private-subnet-2-id: ${PRIVATE_SUBNET_2_ID}"
-echo "  bolt-tls:            ${BOLT_TLS_ARN:-disabled}"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -196,9 +201,6 @@ rm -f "${LAMBDA_ZIP}"
 # ---------------------------------------------------------------------------
 # Deploy the CloudFormation stack
 # ---------------------------------------------------------------------------
-BOLT_TLS_ENABLED="false"
-[ -n "${BOLT_TLS_ARN}" ] && BOLT_TLS_ENABLED="true"
-
 echo "Deploying CloudFormation stack ${APP_STACK_NAME}..."
 aws cloudformation deploy \
   --region "${REGION}" \
@@ -215,12 +217,12 @@ aws cloudformation deploy \
     "ExternalSgId=${EXTERNAL_SG_ID}" \
     "VpcEndpointSgId=${VPC_ENDPOINT_SG_ID}" \
     "PasswordSecretArn=${PASSWORD_SECRET_ARN}" \
-    "BoltTlsEnabled=${BOLT_TLS_ENABLED}" \
     "Neo4jStackName=${NEO4J_STACK}" \
     "Neo4jStackId=${NEO4J_STACK_ID}" \
     "LambdaS3Bucket=${DEPLOY_BUCKET}" \
     "LambdaS3Key=${LAMBDA_KEY}" \
-    "LambdaS3ObjectVersion=${LAMBDA_VERSION_ID}"
+    "LambdaS3ObjectVersion=${LAMBDA_VERSION_ID}" \
+    "EnableResilienceTestFunction=${ENABLE_RESILIENCE}"
 
 # ---------------------------------------------------------------------------
 # Read stack outputs
@@ -231,16 +233,32 @@ OUTPUTS_JSON=$(aws cloudformation describe-stacks \
   --query 'Stacks[0].Outputs' \
   --output json)
 
-read -r FUNCTION_URL FUNCTION_ARN VALIDATE_URL VALIDATE_ARN < <(echo "${OUTPUTS_JSON}" | python3 -c "
+FUNCTION_URL=$(echo "${OUTPUTS_JSON}" | python3 -c "
 import json, sys
 outs = {o['OutputKey']: o['OutputValue'] for o in json.load(sys.stdin)}
-print(outs['FunctionUrl'], outs['FunctionArn'], outs['ResilienceFunctionUrl'], outs['ResilienceFunctionArn'])")
+print(outs['FunctionUrl'])")
+FUNCTION_ARN=$(echo "${OUTPUTS_JSON}" | python3 -c "
+import json, sys
+outs = {o['OutputKey']: o['OutputValue'] for o in json.load(sys.stdin)}
+print(outs['FunctionArn'])")
+VALIDATE_URL=$(echo "${OUTPUTS_JSON}" | python3 -c "
+import json, sys
+outs = {o['OutputKey']: o['OutputValue'] for o in json.load(sys.stdin)}
+print(outs.get('ResilienceFunctionUrl', ''))")
+VALIDATE_ARN=$(echo "${OUTPUTS_JSON}" | python3 -c "
+import json, sys
+outs = {o['OutputKey']: o['OutputValue'] for o in json.load(sys.stdin)}
+print(outs.get('ResilienceFunctionArn', ''))")
 
 echo ""
 echo "  Function URL:  ${FUNCTION_URL}"
 echo "  Function ARN:  ${FUNCTION_ARN}"
-echo "  Validate URL:  ${VALIDATE_URL}"
-echo "  Validate ARN:  ${VALIDATE_ARN}"
+if [ "${ENABLE_RESILIENCE}" = "true" ]; then
+  echo "  Validate URL:  ${VALIDATE_URL}"
+  echo "  Validate ARN:  ${VALIDATE_ARN}"
+else
+  echo "  Validate URL:  disabled (rerun with --enable-resilience)"
+fi
 
 # ---------------------------------------------------------------------------
 # Write local convenience file (invoke.sh reads the newest match)
@@ -305,6 +323,11 @@ fi
 
 VALIDATE_URL=$(python3 -c "import json; d=json.load(open('${APP_FILE}')); print(d['validate_url'])")
 REGION=$(python3 -c "import json; d=json.load(open('${APP_FILE}')); print(d['region'])")
+if [ -z "${VALIDATE_URL}" ]; then
+  echo "ERROR: This sample app was deployed without --enable-resilience." >&2
+  echo "Redeploy with ./deploy-sample-private-app.sh --enable-resilience to create the test-only stop/start Lambda." >&2
+  exit 1
+fi
 
 eval "$(aws configure export-credentials --format env 2>/dev/null)"
 
@@ -321,7 +344,11 @@ echo ""
 echo "============================================="
 echo "  Deploy complete."
 echo "  To invoke:    ./invoke.sh"
-echo "  To validate:  ./validate.sh  (stops a follower, waits for recovery; ~60-120s)"
+if [ "${ENABLE_RESILIENCE}" = "true" ]; then
+  echo "  To validate:  ./validate.sh  (stops a follower, waits for recovery; ~60-120s)"
+else
+  echo "  Validation Lambda disabled. Redeploy with --enable-resilience for stop/start testing."
+fi
 echo "  To tear down: ./teardown-sample-private-app.sh"
 echo "  (Always tear down the sample app BEFORE the parent EE stack —"
 echo "   this stack owns ingress rules on the EE security groups.)"

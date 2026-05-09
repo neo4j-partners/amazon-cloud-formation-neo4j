@@ -7,8 +7,8 @@
 #   3.  neo4j Python driver installed on bastion  (python3.11 -c "import neo4j")
 #   4.  cypher-shell installed on bastion
 #   5.  Secrets Manager secret exists
-#   6.  Contract SSM params (5 named: vpc-id, nlb-dns, external-sg-id,
-#         password-secret-arn, vpc-endpoint-sg-id)
+#   6.  Contract SSM params (6 named: vpc-id, nlb-dns, advertised-dns,
+#         external-sg-id, password-secret-arn, vpc-endpoint-sg-id)
 #   7.  Operational SSM params (4 named: region, stack-name,
 #         private-subnet-1-id, private-subnet-2-id) [informational — WARN, not FAIL]
 #   8.  VPC interface endpoints exist (secretsmanager, logs, ssm, ssmmessages)
@@ -126,6 +126,7 @@ _contract_params_exist() {
   local params=(
     "vpc-id"
     "nlb-dns"
+    "advertised-dns"
     "external-sg-id"
     "password-secret-arn"
     "vpc-endpoint-sg-id"
@@ -196,7 +197,7 @@ _check "Bastion SSM PingStatus = Online"                    _ssm_online
 _check "neo4j Python driver installed on bastion"           _neo4j_driver_installed
 _check "cypher-shell installed on bastion"                  _cypher_shell_installed
 _check "Secret 'neo4j/${STACK_NAME}/password' exists"       _secret_exists
-_check "Contract SSM params: vpc-id, nlb-dns, external-sg-id, password-secret-arn, vpc-endpoint-sg-id" \
+_check "Contract SSM params: vpc-id, nlb-dns, advertised-dns, external-sg-id, password-secret-arn, vpc-endpoint-sg-id" \
   _contract_params_exist
 _info_check "Operational SSM params: region, stack-name, private-subnet-1-id, private-subnet-2-id" \
   _operational_params_exist

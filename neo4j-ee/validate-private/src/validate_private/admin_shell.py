@@ -24,10 +24,10 @@ set -euo pipefail
 export NEO4J_PASSWORD=$(aws secretsmanager get-secret-value \\
   --secret-id 'neo4j/__STACK__/password' \\
   --query SecretString --output text --region '__REGION__')
-NLB=$(aws ssm get-parameter \\
-  --name '/neo4j-ee/__STACK__/nlb-dns' \\
+ADVERTISED_DNS=$(aws ssm get-parameter \\
+  --name '/neo4j-ee/__STACK__/advertised-dns' \\
   --query Parameter.Value --output text --region '__REGION__')
-exec cypher-shell -a "__SCHEME__://${NLB}:7687" -u neo4j -p "${NEO4J_PASSWORD}"
+exec cypher-shell -a "neo4j+s://${ADVERTISED_DNS}:7687" -u neo4j -p "${NEO4J_PASSWORD}"
 """
 
 
@@ -73,12 +73,10 @@ def main() -> None:
 
     import boto3
 
-    scheme = "neo4j+ssc" if config.bolt_tls_secret_arn else "neo4j"
     launcher = (
         _LAUNCHER_TEMPLATE
         .replace("__STACK__", config.stack_name)
         .replace("__REGION__", config.region)
-        .replace("__SCHEME__", scheme)
     )
     b64_launcher = base64.b64encode(launcher.encode()).decode()
 

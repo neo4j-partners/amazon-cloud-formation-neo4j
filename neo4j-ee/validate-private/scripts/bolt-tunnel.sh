@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # bolt-tunnel.sh — Open an SSM port-forward tunnel to Neo4j Bolt (port 7687)
 #
-# Required when using Neo4j Browser alongside browser-tunnel.sh (port 7474).
+# Required when using Neo4j Browser alongside browser-tunnel.sh (port 7473).
 # Not needed for admin-shell, run-cypher, or validate-private — those run on
 # the bastion and connect to the NLB directly.
 #
-# After the tunnel opens, connect with: bolt://localhost:7687
+# After the tunnel opens (and after mapping AdvertisedDNS to 127.0.0.1 in
+# /etc/hosts), connect with: neo4j+s://<AdvertisedDNS>:7687
 #
 # Usage: ./scripts/bolt-tunnel.sh [stack-name]
 # Prerequisite: AWS Session Manager Plugin (brew install --cask session-manager-plugin)
@@ -32,7 +33,8 @@ echo "  Bastion: ${BASTION_ID}"
 echo ""
 echo "  Tunnel:  localhost:7687  ->  ${NLB_DNS}:7687"
 echo ""
-echo "  Connect with: bolt://localhost:7687"
+echo "  Add to /etc/hosts: 127.0.0.1 <AdvertisedDNS>"
+echo "  Connect with: neo4j+s://<AdvertisedDNS>:7687"
 echo "  (Run browser-tunnel.sh in a second terminal for Neo4j Browser access)"
 echo ""
 echo "  Press Ctrl-C to close."

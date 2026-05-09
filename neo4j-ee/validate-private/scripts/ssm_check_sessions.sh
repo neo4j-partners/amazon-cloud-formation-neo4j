@@ -54,4 +54,4 @@ done
 
 echo ""
 echo "=== Local ports in use ==="
-lsof -i :7474 -i :7687 2>/dev/null || echo "  Ports 7474 and 7687 are free"
+lsof -i :7473 -i :7687 2>/dev/null || echo "  Ports 7473 and 7687 are free"

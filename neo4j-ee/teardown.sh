@@ -156,18 +156,7 @@ force_delete_secret "${PASSWORD_SECRET_NAME}"
 echo "Password secret cleanup done."
 
 # ---------------------------------------------------------------------------
-# Step 2c: Force-delete the Bolt TLS cert secret (--tls deploys only)
-# ---------------------------------------------------------------------------
-BOLT_TLS_SECRET_ARN=$(read_field "${OUTPUTS_FILE}" "BoltTlsSecretArn" 2>/dev/null || true)
-if [ -n "${BOLT_TLS_SECRET_ARN}" ]; then
-  echo ""
-  echo "Force-deleting Bolt TLS cert secret ${BOLT_TLS_SECRET_ARN}..."
-  force_delete_secret "${BOLT_TLS_SECRET_ARN}"
-  echo "Bolt TLS cert secret cleanup done."
-fi
-
-# ---------------------------------------------------------------------------
-# Step 2d: Handle retained EBS data volumes
+# Step 2c: Handle retained EBS data volumes
 #
 # Volumes have DeletionPolicy: Retain so they survive stack deletion by design.
 # Default: enumerate them and print a rerun hint so the operator can decide.

@@ -45,9 +45,9 @@
 ### Prerequisites
 
 - An existing neo4j-ee Private or ExistingVpc stack
-- VPC DNS resolution for the EE stack's `AdvertisedDNS` name to the internal NLB
+- VPC DNS resolution for the EE stack's `AdvertisedDNS` name to the internal NLB. Private-mode stacks deployed by `deploy.py` create this private alias by default with `CreatePrivateDns=true`; ExistingVpc stacks must either opt in with `--create-private-dns` or provide customer-managed DNS.
 - `uv` installed locally
-- `AWS_PROFILE` pointing to an account with permissions for CloudFormation, Lambda, IAM, EC2, S3, SSM, Secrets Manager, and ACM read APIs
+- AWS credentials available through the normal AWS SDK/CLI credential chain, such as `AWS_PROFILE`, with permissions for CloudFormation, Lambda, IAM, EC2, S3, SSM, Secrets Manager, and ACM read APIs
 - For imported or private ACM certificates, permission to call `acm:DescribeCertificate` and `acm:GetCertificate` so the deployer can package the trust bundle
 
 ### Workflow
@@ -154,7 +154,7 @@ For non-Lambda clients, keep the same pattern:
 - **Trust is selected at deploy time.** Public ACM certificates use the Lambda runtime's system CA store. ACM `IMPORTED` and `PRIVATE` certificates are fetched from ACM and packaged as `neo4j-ca.pem`; the Lambda then configures the Neo4j driver with `TrustCustomCAs`
 - **Driver mode follows topology.** Single-server stacks use direct Bolt (`bolt+s://` for system trust, `bolt://` with a custom CA bundle). Multi-server stacks use routed Neo4j (`neo4j+s://` for system trust, `neo4j://` with a custom CA bundle)
 - **Self-signed test certificates are local-test only.** Local stacks created with `certificate.py --self-signed` are detected from the EE deploy outputs and use `+ssc` schemes only when the cert is not handled as an ACM imported/private certificate
-- **DNS must resolve inside the VPC.** The sample app does not create DNS. Ensure `AdvertisedDNS` resolves from the Lambda subnets to the internal NLB through your VPC resolver, private hosted zone, or enterprise DNS forwarding
+- **DNS must resolve inside the VPC.** The sample app consumes the EE stack's `AdvertisedDNS`; it does not create or repair DNS. Private-mode stacks deployed by `deploy.py` create the private DNS alias by default. For ExistingVpc or customer-managed DNS, ensure `AdvertisedDNS` resolves from the Lambda subnets to the internal NLB through your VPC resolver, private hosted zone, or enterprise DNS forwarding
 - **Do not connect to the raw NLB DNS name from application code.** The certificate is issued for `AdvertisedDNS`, not the generated NLB hostname. Use the NLB DNS only as the target of the private DNS record.
 
 ---

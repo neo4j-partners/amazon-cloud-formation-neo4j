@@ -409,3 +409,12 @@ find sample-private-app -maxdepth 2 \( -name lambda.zip -o -name neo4j-ca.pem -o
 ```
 
 Summary: Invocation succeeded against `final-validate`. Response included `"bolt_scheme": "bolt"`, `"trusted_ca": true`, `"edition": "enterprise"`, 12 nodes and 9 relationships created, one `Available` server, and no routing table entries because the sample correctly used direct Bolt mode. CloudFormation reported `UPDATE_COMPLETE`, and no generated packaging artifacts remained.
+
+Command:
+
+```bash
+uv run scripts/preflight.py final-validate
+uv run validate-private --stack final-validate
+```
+
+Summary: The direct `uv` preflight script passed all 11 checks, including stack status, bastion SSM, Python driver, cypher-shell, secret, contract SSM parameters, VPC endpoints, and endpoint reachability. The `validate-private` suite passed all 8 tests: Bolt connectivity, Enterprise edition, listen address, memory config, data directory, APOC, GDS, and one-server cluster role validation.

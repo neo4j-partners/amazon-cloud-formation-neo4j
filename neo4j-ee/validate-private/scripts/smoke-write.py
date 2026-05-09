@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import os
 import shlex
 import sys
 import time
@@ -120,7 +119,6 @@ def wait_for_command(ssm, command_id: str, instance_id: str, timeout_s: int) -> 
 
 
 def main() -> None:
-    os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
     outputs_file = resolve_outputs_file(args.stack_name)
     fields = read_outputs(outputs_file)

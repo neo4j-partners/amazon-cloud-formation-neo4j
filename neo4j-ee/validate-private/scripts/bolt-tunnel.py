@@ -29,7 +29,6 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
     outputs_file = resolve_outputs_file(args.stack_name)
     fields = read_outputs(outputs_file)

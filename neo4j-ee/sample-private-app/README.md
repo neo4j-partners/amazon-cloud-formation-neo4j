@@ -51,6 +51,9 @@ All scripts run from the `sample-private-app/` directory:
 # Or target a specific EE stack
 ./deploy-sample-private-app.sh test-ee-1776575131
 
+# For manually supplied self-signed certs not created by certificate.py
+./deploy-sample-private-app.sh test-ee-1776575131 --insecure-skip-verify
+
 # Invoke the Lambda
 ./invoke.sh
 
@@ -61,7 +64,7 @@ All scripts run from the `sample-private-app/` directory:
 ./teardown-sample-private-app.sh
 ```
 
-`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, packages the Lambda, uploads it to a deploy S3 bucket, runs `aws cloudformation deploy`, and writes the Function URL to `/neo4j-sample-private-app/<stack>/function-url` in SSM and `../.deploy/sample-private-app-<ee-stack>.json` locally. It also generates `invoke.sh` in the same directory. Pass `--enable-resilience` only for test deployments that should include the stop/start validation Lambda.
+`deploy-sample-private-app.sh` reads the EE stack's SSM parameters, packages the Lambda, uploads it to a deploy S3 bucket, runs `aws cloudformation deploy`, and writes the Function URL to `/neo4j-sample-private-app/<stack>/function-url` in SSM and `../.deploy/sample-private-app-<ee-stack>.json` locally. It also generates `invoke.sh` in the same directory. Pass `--enable-resilience` only for test deployments that should include the stop/start validation Lambda. Stacks created from `certificate.py --self-signed` are detected automatically; pass `--insecure-skip-verify` only for manually supplied self-signed ACM certificates.
 
 ### Teardown Ordering
 
@@ -100,12 +103,12 @@ The EE stack publishes a stable set of SSM parameters under `/neo4j-ee/<stack-na
 | Parameter | What the app uses it for |
 |---|---|
 | `/neo4j-ee/<stack>/vpc-id` | Attach Lambda to the correct VPC |
-| `/neo4j-ee/<stack>/advertised-dns` | DNS name resolving to the NLB; Lambda connects via `neo4j+s://<advertised-dns>:7687`. The NLB-presented ACM cert SAN must match this name. |
+| `/neo4j-ee/<stack>/advertised-dns` | DNS name resolving to the NLB; Lambda connects via `neo4j+s://<advertised-dns>:7687` by default. The NLB-presented ACM cert SAN must match this name. |
 | `/neo4j-ee/<stack>/external-sg-id` | NLB security group used as the egress target on port 7687 for Bolt |
 | `/neo4j-ee/<stack>/password-secret-arn` | Import the Neo4j password secret by ARN |
 | `/neo4j-ee/<stack>/vpc-endpoint-sg-id` | Add ingress 443 from app SG; add egress 443 to endpoint SG |
 | `/neo4j-ee/<stack>/private-subnet-1-id` | Place Lambda in the first private subnet |
-| `/neo4j-ee/<stack>/private-subnet-2-id` | Place Lambda in the second private subnet |
+| `/neo4j-ee/<stack>/private-subnet-2-id` | Place Lambda in the second private subnet for clustered EE stacks; omitted when `NumberOfServers=1` |
 
 The platform owns the infrastructure and publishes IDs; the application looks them up and attaches itself. The platform never needs to know about specific applications.
 
@@ -128,7 +131,8 @@ This sample establishes both wiring connections in `sample-private-app.template.
 
 - **TLS is mandatory.** The NLB terminates TLS on 7687 using the customer-supplied ACM cert whose SAN matches `AdvertisedDNS`; the target group re-encrypts to a self-signed backend cert generated on each instance
 - **Driver-side validation is automatic.** The Lambda reads `AdvertisedDNS` from SSM (`<SsmPrefix>/advertised-dns`) and connects via `neo4j+s://<AdvertisedDNS>:7687`. The driver validates the NLB-presented ACM cert against the system trust store, so no certificate file or custom SSL context is needed
-- **DNS must resolve inside the VPC.** In Private mode, set up a Route 53 private hosted zone with an A or CNAME record pointing `AdvertisedDNS` at the NLB (or use a public Route 53 record if preferred). The Lambda must be able to resolve `AdvertisedDNS` via the VPC resolver
+- **Self-signed test certificates require `neo4j+ssc://`.** Local stacks created with `certificate.py --self-signed` are detected from the EE deploy outputs. For manually supplied self-signed ACM certificates, deploy this app with `--insecure-skip-verify`
+- **DNS must resolve inside the VPC.** In Private mode, deploy the EE stack with `--create-private-dns`, or set up equivalent Route 53 private DNS yourself. The Lambda must be able to resolve `AdvertisedDNS` via the VPC resolver
 
 ---
 
@@ -148,7 +152,8 @@ _driver = None
 def _init_driver():
     advertised_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_ADVERTISED_DNS_PATH"])["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
-    return GraphDatabase.driver(f"neo4j+s://{advertised_dns}:7687", auth=("neo4j", password))
+    bolt_scheme = os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s")
+    return GraphDatabase.driver(f"{bolt_scheme}://{advertised_dns}:7687", auth=("neo4j", password))
 ```
 
 Using `neo4j+s://` fetches a routing table from Neo4j on first connect and validates the NLB-presented ACM certificate against `AdvertisedDNS`. The routing table lists `AdvertisedDNS` as the single endpoint for both writes and reads, because each node sets `server.bolt.advertised_address` to that name. The driver sends all subsequent requests through the NLB, which distributes connections across cluster nodes and lets Neo4j's server-side routing direct writes to the current leader.
@@ -298,4 +303,4 @@ sample-private-app/
     └── requirements.txt              # neo4j>=6,<7
 ```
 
-The EE stack's SSM parameters (`/neo4j-ee/<stack>/vpc-id`, `advertised-dns`, `private-subnet-1-id`, `private-subnet-2-id`, `external-sg-id`, `password-secret-arn`, `vpc-endpoint-sg-id`) are CloudFormation resources that exist for the lifetime of the EE stack and need no manual management.
+The EE stack's SSM parameters (`/neo4j-ee/<stack>/vpc-id`, `advertised-dns`, `private-subnet-1-id`, `external-sg-id`, `password-secret-arn`, `vpc-endpoint-sg-id`, plus `private-subnet-2-id` for clustered stacks) are CloudFormation resources that exist for the lifetime of the EE stack and need no manual management.

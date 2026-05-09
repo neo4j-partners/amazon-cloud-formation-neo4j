@@ -7,9 +7,16 @@
 - **Operator access:** direct from your machine — no bastion, no SSM tunneling
 - **When to use:** proof-of-concept, demos, evaluation. Production and regulated workloads should use the [Private template](PRIVATE.md)
 
+> **Marketplace operator** (deployed from AWS Marketplace, running stack):
+> Start with [Prerequisites](#prerequisites) and the [Operator Guide](#operator-guide) below.
+>
+> **Template developer** (working on the templates, deploying from source):
+> Start with [Local Deployment and Testing](#local-deployment-and-testing).
+> The [Operator Guide](#operator-guide) applies once your stack is running.
+
 ## Contents
 
-- [General Operator Guide](#general-operator-guide)
+- [Operator Guide](#operator-guide)
   - [Prerequisites](#prerequisites)
   - [Access](#access)
   - [Retrieve the Password](#retrieve-the-password)
@@ -29,7 +36,9 @@
 
 ---
 
-## General Operator Guide
+## Operator Guide
+
+Applies to any running public stack, whether deployed from the Marketplace or from source.
 
 ### Prerequisites
 
@@ -163,6 +172,8 @@ dbms.routing.default_router    = SERVER
 |---|---|---|
 | Direct from internet | `neo4j+s://<AdvertisedDNS>:7687` | ACM cert validates against AdvertisedDNS; Route 53 must point AdvertisedDNS at the NLB. |
 | Direct node IP (same subnet) | `neo4j+ssc://<node-ip>:7687` | Bypasses NLB; single node, no failover. `+ssc` skips cert validation since the self-signed backend cert is not bound to an IP. |
+
+Public stacks do not support `CreatePrivateDns`. `AdvertisedDNS` must resolve through public DNS, or through customer-managed DNS reachable from the clients that connect to the public NLB.
 
 ### EBS Persistence
 

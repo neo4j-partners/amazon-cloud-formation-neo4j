@@ -10,3 +10,8 @@
   HasNode1Snapshot: !Not [!Equals [!Ref Node1SnapshotId, '']]
   CreateVpcEndpoints: !Equals [!Ref CreateVpcEndpoints, 'true']
   UseExistingVpcEndpoints: !Equals [!Ref CreateVpcEndpoints, 'false']
+  CreatePrivateDns: !Equals [!Ref CreatePrivateDns, 'true']
+  UseExistingPrivateDnsHostedZone: !Not [!Equals [!Ref PrivateDnsHostedZoneId, '']]
+  CreatePrivateDnsHostedZone: !And
+    - !Equals [!Ref CreatePrivateDns, 'true']
+    - !Equals [!Ref PrivateDnsHostedZoneId, '']

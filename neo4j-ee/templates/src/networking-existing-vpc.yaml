@@ -190,6 +190,39 @@
         - CertificateArn: !Ref CertificateArn
       SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
 
+  Neo4jPrivateDnsHostedZone:
+    Type: AWS::Route53::HostedZone
+    Condition: CreatePrivateDnsHostedZone
+    Properties:
+      Name: !Ref PrivateDnsZoneName
+      HostedZoneConfig:
+        Comment: !Sub 'Private DNS for Neo4j stack ${AWS::StackName}'
+      VPCs:
+        - VPCId: !Ref VpcId
+          VPCRegion: !Ref 'AWS::Region'
+      HostedZoneTags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jAdvertisedDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreatePrivateDns
+    Properties:
+      HostedZoneId: !If
+        - UseExistingPrivateDnsHostedZone
+        - !Ref PrivateDnsHostedZoneId
+        - !Ref Neo4jPrivateDnsHostedZone
+      Name: !Ref AdvertisedDNS
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+        HostedZoneId: !GetAtt Neo4jNetworkLoadBalancer.CanonicalHostedZoneID
+        EvaluateTargetHealth: false
+
   Neo4jHTTPSTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:

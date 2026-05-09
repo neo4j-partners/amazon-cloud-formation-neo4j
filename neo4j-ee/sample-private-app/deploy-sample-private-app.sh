@@ -3,7 +3,7 @@
 # an existing EE stack, using plain CloudFormation (no CDK).
 #
 # Usage:
-#   ./deploy-sample-private-app.sh [stack-name] [--suffix <suffix>] [--enable-resilience]
+#   ./deploy-sample-private-app.sh [stack-name] [--suffix <suffix>] [--enable-resilience] [--insecure-skip-verify]
 #
 # If stack-name is omitted, uses the most recently modified file in .deploy/.
 # --suffix appends a string to the app stack name, allowing parallel deployments
@@ -29,7 +29,7 @@ TEMPLATE_FILE="${SCRIPT_DIR}/sample-private-app.template.yaml"
 read_field() {
   local file="$1"
   local key="$2"
-  grep "^${key}" "$file" | sed 's/^[^=]*= *//' | tr -d '\r'
+  grep "^${key}" "$file" 2>/dev/null | sed 's/^[^=]*= *//' | tr -d '\r' || true
 }
 
 # ---------------------------------------------------------------------------
@@ -102,6 +102,7 @@ NEO4J_STACK=$(read_field "${OUTPUTS_FILE}" "StackName")
 REGION=$(read_field "${OUTPUTS_FILE}" "Region")
 DEPLOYMENT_MODE=$(read_field "${OUTPUTS_FILE}" "DeploymentMode")
 NUMBER_OF_SERVERS=$(read_field "${OUTPUTS_FILE}" "NumberOfServers")
+SELF_SIGNED_CERTIFICATE=$(read_field "${OUTPUTS_FILE}" "SelfSignedCertificate")
 
 if [ -z "${NEO4J_STACK}" ] || [ -z "${REGION}" ]; then
   echo "ERROR: Could not read StackName or Region from ${OUTPUTS_FILE}." >&2
@@ -111,6 +112,10 @@ fi
 if [ "${DEPLOYMENT_MODE}" != "Private" ] && [ "${DEPLOYMENT_MODE}" != "ExistingVpc" ]; then
   echo "ERROR: Sample private app requires DeploymentMode=Private or ExistingVpc (got '${DEPLOYMENT_MODE}')." >&2
   exit 1
+fi
+
+if [ "${SELF_SIGNED_CERTIFICATE}" = "true" ] && [ "${BOLT_SCHEME}" = "neo4j+s" ]; then
+  BOLT_SCHEME="neo4j+ssc"
 fi
 
 SSM_PREFIX="/neo4j-ee/${NEO4J_STACK}"

@@ -1,6 +1,17 @@
   Neo4jInternalDNS:
     Description: Internal NLB DNS name (not internet-reachable; use SSM port-forwarding to connect)
     Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+  Neo4jPrivateDnsHostedZoneId:
+    Condition: CreatePrivateDns
+    Description: Route 53 private hosted zone ID containing AdvertisedDNS.
+    Value: !If
+      - UseExistingPrivateDnsHostedZone
+      - !Ref PrivateDnsHostedZoneId
+      - !Ref Neo4jPrivateDnsHostedZone
+  Neo4jPrivateDnsRecord:
+    Condition: CreatePrivateDns
+    Description: Private DNS record mapped to the internal NLB.
+    Value: !Ref AdvertisedDNS
   Neo4jOperatorBastionId:
     Description: >-
       Operator bastion instance ID. Use this as the SSM --target for port-forwarding

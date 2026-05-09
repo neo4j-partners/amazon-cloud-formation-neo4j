@@ -33,6 +33,12 @@ Metadata:
           - CertificateArn
           - AdvertisedDNS
       - Label:
+          default: "Private DNS"
+        Parameters:
+          - CreatePrivateDns
+          - PrivateDnsZoneName
+          - PrivateDnsHostedZoneId
+      - Label:
           default: "Monitoring"
         Parameters:
           - AlertEmail
@@ -69,6 +75,12 @@ Metadata:
         default: ACM Certificate ARN
       AdvertisedDNS:
         default: Advertised DNS Name
+      CreatePrivateDns:
+        default: Create Private DNS
+      PrivateDnsZoneName:
+        default: Private DNS Zone Name
+      PrivateDnsHostedZoneId:
+        default: Private DNS Hosted Zone ID
 
 Parameters:
   ImageId:
@@ -214,6 +226,32 @@ Parameters:
     Type: String
     AllowedPattern: ^(?!0\.0\.0\.0\/0)(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR range. 0.0.0.0/0 is not accepted.
+  CreatePrivateDns:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+    Description: >-
+      Create or manage a Route 53 private DNS record that maps AdvertisedDNS to
+      the internal NLB. Use for repeatable private test stacks or when you want
+      this stack to own the in-VPC service DNS record.
+  PrivateDnsZoneName:
+    Type: String
+    Default: ''
+    Description: >-
+      Private hosted zone name to create when CreatePrivateDns is true and
+      PrivateDnsHostedZoneId is blank, for example test.local or
+      internal.example.com. AdvertisedDNS must be inside this zone.
+  PrivateDnsHostedZoneId:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^Z[A-Z0-9]+$
+    ConstraintDescription: Must be blank or a Route 53 hosted zone ID beginning with Z.
+    Description: >-
+      Existing Route 53 private hosted zone ID to receive the AdvertisedDNS
+      alias record. Leave blank to let this stack create a private hosted zone
+      named PrivateDnsZoneName.
 
 Rules:
   ExistingEndpointSgIdRequired:
@@ -222,6 +260,15 @@ Rules:
       - Assert: !Not [!Equals [!Ref ExistingEndpointSgId, '']]
         AssertDescription: >-
           ExistingEndpointSgId must be provided when CreateVpcEndpoints is false.
+  PrivateDnsZoneRequired:
+    RuleCondition: !And
+      - !Equals [!Ref CreatePrivateDns, 'true']
+      - !Equals [!Ref PrivateDnsHostedZoneId, '']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref PrivateDnsZoneName, '']]
+        AssertDescription: >-
+          PrivateDnsZoneName must be provided when CreatePrivateDns is true and
+          PrivateDnsHostedZoneId is blank.
 
 Conditions:
   CreateCluster: !Not
@@ -236,6 +283,11 @@ Conditions:
   HasNode1Snapshot: !Not [!Equals [!Ref Node1SnapshotId, '']]
   CreateVpcEndpoints: !Equals [!Ref CreateVpcEndpoints, 'true']
   UseExistingVpcEndpoints: !Equals [!Ref CreateVpcEndpoints, 'false']
+  CreatePrivateDns: !Equals [!Ref CreatePrivateDns, 'true']
+  UseExistingPrivateDnsHostedZone: !Not [!Equals [!Ref PrivateDnsHostedZoneId, '']]
+  CreatePrivateDnsHostedZone: !And
+    - !Equals [!Ref CreatePrivateDns, 'true']
+    - !Equals [!Ref PrivateDnsHostedZoneId, '']
 
 Resources:
   Neo4jInstanceProfile:
@@ -1315,6 +1367,39 @@ Resources:
         - CertificateArn: !Ref CertificateArn
       SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
 
+  Neo4jPrivateDnsHostedZone:
+    Type: AWS::Route53::HostedZone
+    Condition: CreatePrivateDnsHostedZone
+    Properties:
+      Name: !Ref PrivateDnsZoneName
+      HostedZoneConfig:
+        Comment: !Sub 'Private DNS for Neo4j stack ${AWS::StackName}'
+      VPCs:
+        - VPCId: !Ref VpcId
+          VPCRegion: !Ref 'AWS::Region'
+      HostedZoneTags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jAdvertisedDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreatePrivateDns
+    Properties:
+      HostedZoneId: !If
+        - UseExistingPrivateDnsHostedZone
+        - !Ref PrivateDnsHostedZoneId
+        - !Ref Neo4jPrivateDnsHostedZone
+      Name: !Ref AdvertisedDNS
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+        HostedZoneId: !GetAtt Neo4jNetworkLoadBalancer.CanonicalHostedZoneID
+        EvaluateTargetHealth: false
+
   Neo4jHTTPSTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
@@ -1401,6 +1486,27 @@ Resources:
       Type: String
       Value: !Ref AdvertisedDNS
       Description: Public DNS name that resolves to the NLB and matches the ACM cert SAN. In-VPC clients connect via neo4j+s://<advertised-dns>:7687 and https://<advertised-dns>:7473.
+
+  Neo4jConfigPrivateDnsHostedZoneIdParameter:
+    Type: AWS::SSM::Parameter
+    Condition: CreatePrivateDns
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-dns-hosted-zone-id'
+      Type: String
+      Value: !If
+        - UseExistingPrivateDnsHostedZone
+        - !Ref PrivateDnsHostedZoneId
+        - !Ref Neo4jPrivateDnsHostedZone
+      Description: Route 53 private hosted zone ID containing the AdvertisedDNS record.
+
+  Neo4jConfigPrivateDnsRecordParameter:
+    Type: AWS::SSM::Parameter
+    Condition: CreatePrivateDns
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-dns-record'
+      Type: String
+      Value: !Ref AdvertisedDNS
+      Description: Route 53 private DNS record mapped to the internal NLB.
 
   Neo4jConfigRegionParameter:
     Type: AWS::SSM::Parameter
@@ -1562,6 +1668,17 @@ Outputs:
   Neo4jInternalDNS:
     Description: Internal NLB DNS name (not internet-reachable; use SSM port-forwarding to connect)
     Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+  Neo4jPrivateDnsHostedZoneId:
+    Condition: CreatePrivateDns
+    Description: Route 53 private hosted zone ID containing AdvertisedDNS.
+    Value: !If
+      - UseExistingPrivateDnsHostedZone
+      - !Ref PrivateDnsHostedZoneId
+      - !Ref Neo4jPrivateDnsHostedZone
+  Neo4jPrivateDnsRecord:
+    Condition: CreatePrivateDns
+    Description: Private DNS record mapped to the internal NLB.
+    Value: !Ref AdvertisedDNS
   Neo4jOperatorBastionId:
     Description: >-
       Operator bastion instance ID. Use this as the SSM --target for port-forwarding

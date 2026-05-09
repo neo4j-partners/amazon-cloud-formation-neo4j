@@ -8,3 +8,8 @@
       - ''
   HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
   HasNode1Snapshot: !Not [!Equals [!Ref Node1SnapshotId, '']]
+  CreatePrivateDns: !Equals [!Ref CreatePrivateDns, 'true']
+  UseExistingPrivateDnsHostedZone: !Not [!Equals [!Ref PrivateDnsHostedZoneId, '']]
+  CreatePrivateDnsHostedZone: !And
+    - !Equals [!Ref CreatePrivateDns, 'true']
+    - !Equals [!Ref PrivateDnsHostedZoneId, '']

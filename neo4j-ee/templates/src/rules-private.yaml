@@ -1,9 +1,3 @@
-  ExistingEndpointSgIdRequired:
-    RuleCondition: !Equals [!Ref CreateVpcEndpoints, 'false']
-    Assertions:
-      - Assert: !Not [!Equals [!Ref ExistingEndpointSgId, '']]
-        AssertDescription: >-
-          ExistingEndpointSgId must be provided when CreateVpcEndpoints is false.
   PrivateDnsZoneRequired:
     RuleCondition: !And
       - !Equals [!Ref CreatePrivateDns, 'true']

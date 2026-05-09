@@ -34,6 +34,27 @@
       Value: !Ref AdvertisedDNS
       Description: Public DNS name that resolves to the NLB and matches the ACM cert SAN. In-VPC clients connect via neo4j+s://<advertised-dns>:7687 and https://<advertised-dns>:7473.
 
+  Neo4jConfigPrivateDnsHostedZoneIdParameter:
+    Type: AWS::SSM::Parameter
+    Condition: CreatePrivateDns
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-dns-hosted-zone-id'
+      Type: String
+      Value: !If
+        - UseExistingPrivateDnsHostedZone
+        - !Ref PrivateDnsHostedZoneId
+        - !Ref Neo4jPrivateDnsHostedZone
+      Description: Route 53 private hosted zone ID containing the AdvertisedDNS record.
+
+  Neo4jConfigPrivateDnsRecordParameter:
+    Type: AWS::SSM::Parameter
+    Condition: CreatePrivateDns
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-dns-record'
+      Type: String
+      Value: !Ref AdvertisedDNS
+      Description: Route 53 private DNS record mapped to the internal NLB.
+
   Neo4jConfigRegionParameter:
     Type: AWS::SSM::Parameter
     Properties:

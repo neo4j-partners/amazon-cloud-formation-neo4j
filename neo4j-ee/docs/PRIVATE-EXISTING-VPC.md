@@ -7,9 +7,16 @@
 - **You provide:** `VpcId` and `PrivateSubnet1Id/2Id/3Id` (one subnet per AZ for a 3-node cluster)
 - **When to use:** the cluster must live inside an existing network — peered VPC, Transit Gateway, shared services account, or a VPC managed by a separate infrastructure team
 
+> **Marketplace operator** (deployed from AWS Marketplace, running stack):
+> Start with [Prerequisites](#prerequisites) and the [Operator Guide](#operator-guide) below.
+>
+> **Template developer** (working on the templates, deploying from source):
+> Start with [Local Deployment and Testing](#local-deployment-and-testing).
+> The [Operator Guide](#operator-guide) applies once your stack is running.
+
 ## Contents
 
-- [General Operator Guide](#general-operator-guide)
+- [Operator Guide](#operator-guide)
   - [Prerequisites](#prerequisites)
   - [Access, Admin Tools, and Password](#access-admin-tools-and-password)
   - [Observability Checks](#observability-checks)
@@ -31,7 +38,9 @@
 
 ---
 
-## General Operator Guide
+## Operator Guide
+
+Applies to any running ExistingVpc stack, whether deployed from the Marketplace or from source.
 
 ### Prerequisites
 
@@ -46,7 +55,7 @@
 
 ### Access, Admin Tools, and Password
 
-Access via bastion and all operator tools (`preflight.sh`, `validate-private`, `admin-shell`, `run-cypher`, `smoke-write.sh`, `browser-tunnel.sh`, `bolt-tunnel.sh`) are identical to the Private template. See [the Operator Guide in PRIVATE.md](PRIVATE.md#general-operator-guide) from "Access via Bastion" onward.
+Access via bastion and all operator tools (`preflight.sh`, `validate-private`, `admin-shell`, `run-cypher`, `smoke-write.sh`, `browser-tunnel.sh`, `bolt-tunnel.sh`) are identical to the Private template. See [the Operator Guide in PRIVATE.md](PRIVATE.md#operator-guide) from "Access via Bastion" onward.
 
 ### Observability Checks
 
@@ -125,8 +134,8 @@ Identical to the Private template. See [Platform Contract in PRIVATE.md](PRIVATE
 **Customer responsibilities at deploy time**
 
 1. Provision an ACM certificate whose Subject Alternative Name matches the DNS name you will use as `AdvertisedDNS`. ACM-issued public certs and ACM Private CA certs are both accepted.
-2. Create a Route 53 record that resolves `AdvertisedDNS` to the internal NLB. A private hosted zone with an A-record alias pointing to the NLB is the typical pattern; an external DNS record works too.
-3. Set the `AdvertisedDNS` and `CertificateArn` CloudFormation parameters at stack create or update. Pass them via the AWS CloudFormation console or `aws cloudformation create-stack --parameters`.
+2. Ensure DNS resolves `AdvertisedDNS` to the internal NLB from every client network. You can manage this outside the stack, or set `CreatePrivateDns=true` so the stack creates an A-record alias to the NLB.
+3. Set the `AdvertisedDNS` and `CertificateArn` CloudFormation parameters at stack create or update. If `CreatePrivateDns=true`, also pass either `PrivateDnsZoneName` so the stack creates a private hosted zone associated with the existing VPC, or `PrivateDnsHostedZoneId` so it writes the record into an existing private hosted zone.
 
 **Cert lifecycle**
 
@@ -184,6 +193,18 @@ cd neo4j-ee
   --create-vpc-endpoints false \
   --existing-endpoint-sg-id sg-0123456789abcdef0 \
   --cert-arn <arn> --advertised-dns <dns>
+
+# Stack-managed private DNS in a new private hosted zone
+./deploy.py --mode ExistingVpc \
+  --vpc-id vpc-0123456789abcdef0 --subnet-1 subnet-0123456789abcdef0 \
+  --cert-arn <arn> --advertised-dns neo4j.test.local \
+  --create-private-dns --private-dns-zone test.local
+
+# Stack-managed private DNS in an existing private hosted zone
+./deploy.py --mode ExistingVpc \
+  --vpc-id vpc-0123456789abcdef0 --subnet-1 subnet-0123456789abcdef0 \
+  --cert-arn <arn> --advertised-dns neo4j.internal.example.com \
+  --create-private-dns --private-dns-hosted-zone-id Z1234567890ABC
 ```
 
 The deploy script writes outputs to `.deploy/<stack-name>.txt`. Stack creation takes 10-20 minutes (includes AMI copy if the region differs from the source AMI region; pin `--region` to the source region to skip the copy).

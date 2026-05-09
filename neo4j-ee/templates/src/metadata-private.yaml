@@ -18,6 +18,12 @@
           - CertificateArn
           - AdvertisedDNS
       - Label:
+          default: "Private DNS"
+        Parameters:
+          - CreatePrivateDns
+          - PrivateDnsZoneName
+          - PrivateDnsHostedZoneId
+      - Label:
           default: "Security & Monitoring"
         Parameters:
           - AllowedCIDR
@@ -43,3 +49,9 @@
         default: ACM Certificate ARN
       AdvertisedDNS:
         default: Advertised DNS Name
+      CreatePrivateDns:
+        default: Create Private DNS
+      PrivateDnsZoneName:
+        default: Private DNS Zone Name
+      PrivateDnsHostedZoneId:
+        default: Private DNS Hosted Zone ID

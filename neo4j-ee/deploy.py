@@ -97,6 +97,35 @@ def parse_args():
     p.add_argument("--subnet-3", metavar="SUBNET_ID", default="")
     p.add_argument("--create-vpc-endpoints", default="true", choices=["true", "false"])
     p.add_argument("--existing-endpoint-sg-id", metavar="SG_ID", default="")
+    p.add_argument(
+        "--create-private-dns",
+        action="store_true",
+        help=(
+            "For Private or ExistingVpc deployments, create/manage a Route 53 "
+            "private DNS record that maps --advertised-dns to the internal NLB. "
+            "If --private-dns-hosted-zone-id is omitted, the stack creates a "
+            "private hosted zone named --private-dns-zone."
+        ),
+    )
+    p.add_argument(
+        "--private-dns-zone",
+        metavar="ZONE",
+        default="",
+        help=(
+            "Private hosted zone name to create when --create-private-dns is set "
+            "and --private-dns-hosted-zone-id is omitted. Defaults to the parent "
+            "domain of --advertised-dns, e.g. neo4j.test.local -> test.local."
+        ),
+    )
+    p.add_argument(
+        "--private-dns-hosted-zone-id",
+        metavar="ZONE_ID",
+        default="",
+        help=(
+            "Existing Route 53 private hosted zone ID to receive the "
+            "--advertised-dns alias record when --create-private-dns is set."
+        ),
+    )
     p.add_argument("--disk-size", type=int, metavar="GB", help="Data volume size in GB (default: 100, min: 100, max: 65536)")
     p.add_argument("--snapshot-id", metavar="SNAPSHOT_ID", help="Snapshot ID to restore Node 1 data volume from (must match --disk-size)")
     p.add_argument(
@@ -157,6 +186,16 @@ def detect_public_ip():
         return None
 
 
+def derive_private_dns_zone(advertised_dns: str) -> str:
+    labels = advertised_dns.rstrip(".").split(".")
+    if len(labels) < 2:
+        raise ValueError(
+            "--create-private-dns requires --private-dns-zone when "
+            "--advertised-dns is not a subdomain."
+        )
+    return ".".join(labels[1:])
+
+
 def build_cfn_params(
     args: argparse.Namespace,
     password: str,
@@ -175,6 +214,18 @@ def build_cfn_params(
         {"ParameterKey": "AdvertisedDNS", "ParameterValue": args.advertised_dns},
         {"ParameterKey": "InstallGDS", "ParameterValue": "true"},
     ]
+    if args.mode in ("Private", "ExistingVpc"):
+        params += [
+            {
+                "ParameterKey": "CreatePrivateDns",
+                "ParameterValue": "true" if args.create_private_dns else "false",
+            },
+            {"ParameterKey": "PrivateDnsZoneName", "ParameterValue": args.private_dns_zone},
+            {
+                "ParameterKey": "PrivateDnsHostedZoneId",
+                "ParameterValue": args.private_dns_hosted_zone_id,
+            },
+        ]
     if ssm_param_path:
         params.append({"ParameterKey": "ImageId", "ParameterValue": ssm_param_path})
     if args.alert_email:
@@ -211,6 +262,7 @@ def build_cfn_params(
 def main():
     os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
+    cert_self_signed = False
 
     if args.mode == "ExistingVpc" and not args.vpc_id:
         deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
@@ -254,6 +306,7 @@ def main():
                 args.cert_arn = cert_fields.get("cert_arn", "")
             if not args.advertised_dns:
                 args.advertised_dns = cert_fields.get("domain_name", "")
+            cert_self_signed = bool(cert_fields.get("self_signed", False))
             if not args.region_override:
                 args.region_override = cert_fields.get("region", "")
 
@@ -265,6 +318,21 @@ def main():
         sys.exit(
             "ERROR: --advertised-dns is required (or run certificate.py first to write .deploy/cert-*.json)."
         )
+    if args.create_private_dns:
+        if args.mode == "Public":
+            sys.exit("ERROR: --create-private-dns is only valid for Private or ExistingVpc deployments.")
+        if args.private_dns_hosted_zone_id.startswith("/hostedzone/"):
+            args.private_dns_hosted_zone_id = args.private_dns_hosted_zone_id.split("/", 2)[-1]
+        if not args.private_dns_zone and not args.private_dns_hosted_zone_id:
+            try:
+                args.private_dns_zone = derive_private_dns_zone(args.advertised_dns)
+            except ValueError as exc:
+                sys.exit(f"ERROR: {exc}")
+        if args.private_dns_zone and not args.advertised_dns.rstrip(".").endswith(args.private_dns_zone.rstrip(".")):
+            sys.exit(
+                "ERROR: --advertised-dns must be inside --private-dns-zone "
+                "when --create-private-dns creates a hosted zone."
+            )
 
     instance_type = args.instance_type
 
@@ -316,6 +384,15 @@ def main():
         print(f"  AllowedCIDR:    {allowed_cidr}")
         print(f"  CertificateArn: {args.cert_arn}")
         print(f"  AdvertisedDNS:  {args.advertised_dns}")
+        if cert_self_signed:
+            print("  CertTrust:      self-signed test certificate")
+        if args.mode in ("Private", "ExistingVpc"):
+            print(f"  PrivateDNS:     {'create/manage' if args.create_private_dns else 'disabled'}")
+            if args.create_private_dns:
+                if args.private_dns_hosted_zone_id:
+                    print(f"  PrivateDNSZone: {args.private_dns_hosted_zone_id} (existing)")
+                else:
+                    print(f"  PrivateDNSZone: {args.private_dns_zone} (new)")
         print(f"  AMI source:     {'marketplace' if args.marketplace else 'local'}")
         if not args.marketplace:
             print("  AMI check:      skipped; actual deploy requires marketplace/ami-id.txt")
@@ -431,6 +508,15 @@ def main():
     print(f"  AllowedCIDR:    {allowed_cidr}")
     print(f"  CertificateArn: {args.cert_arn}")
     print(f"  AdvertisedDNS:  {args.advertised_dns}")
+    if cert_self_signed:
+        print("  CertTrust:      self-signed test certificate")
+    if args.mode in ("Private", "ExistingVpc"):
+        print(f"  PrivateDNS:     {'create/manage' if args.create_private_dns else 'disabled'}")
+        if args.create_private_dns:
+            if args.private_dns_hosted_zone_id:
+                print(f"  PrivateDNSZone: {args.private_dns_hosted_zone_id} (existing)")
+            else:
+                print(f"  PrivateDNSZone: {args.private_dns_zone} (new)")
     print(f"  AMI source:     {ami_source}")
     if not args.marketplace:
         print(f"  AMI:            {ami_id}")
@@ -505,12 +591,21 @@ def main():
         extra.append(("CreateVpcEndpoints", args.create_vpc_endpoints))
         if args.existing_endpoint_sg_id:
             extra.append(("ExistingEndpointSgId", args.existing_endpoint_sg_id))
+    if args.mode in ("Private", "ExistingVpc"):
+        extra.append(("CreatePrivateDns", "true" if args.create_private_dns else "false"))
+        if args.create_private_dns:
+            if args.private_dns_zone:
+                extra.append(("PrivateDnsZoneName", args.private_dns_zone))
+            if args.private_dns_hosted_zone_id:
+                extra.append(("PrivateDnsHostedZoneId", args.private_dns_hosted_zone_id))
     if ssm_param_path:
         extra.extend([("SSMParamPath", ssm_param_path), ("AmiId", ami_id)])
     if cleanup_state["copied_ami_id"]:
         extra.extend([("CopiedAmiId", cleanup_state["copied_ami_id"]), ("SourceRegion", SOURCE_REGION)])
     extra.append(("CertificateArn", args.cert_arn))
     extra.append(("AdvertisedDNS", args.advertised_dns))
+    if cert_self_signed:
+        extra.append(("SelfSignedCertificate", "true"))
     extra.append(("StackID", stack_data["StackId"]))
 
     lines += [f"{k:<20} = {v}" for k, v in extra]

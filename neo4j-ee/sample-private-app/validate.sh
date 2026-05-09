@@ -19,8 +19,21 @@ fi
 
 eval "$(aws configure export-credentials --format env 2>/dev/null)"
 
-curl --silent --max-time 310 --aws-sigv4 "aws:amz:${REGION}:lambda" \
+BODY_FILE=$(mktemp)
+STATUS=$(curl --silent --show-error --output "${BODY_FILE}" --write-out "%{http_code}" \
+  --max-time 310 --aws-sigv4 "aws:amz:${REGION}:lambda" \
   --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
-  -H "x-amz-security-token: ${AWS_SESSION_TOKEN}" \
+  -H "x-amz-security-token: ${AWS_SESSION_TOKEN:-}" \
   -H "Content-Type: application/json" \
-  "${VALIDATE_URL}" | python3 -m json.tool
+  "${VALIDATE_URL}")
+
+if [ "${STATUS}" -lt 200 ] || [ "${STATUS}" -ge 300 ]; then
+  echo "ERROR: Function URL returned HTTP ${STATUS}" >&2
+  cat "${BODY_FILE}" >&2
+  echo >&2
+  rm -f "${BODY_FILE}"
+  exit 1
+fi
+
+python3 -m json.tool <"${BODY_FILE}"
+rm -f "${BODY_FILE}"

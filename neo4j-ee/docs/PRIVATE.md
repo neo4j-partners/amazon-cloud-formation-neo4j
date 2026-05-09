@@ -364,8 +364,8 @@ See [`sample-private-app/README.md`](../sample-private-app/README.md) for the fu
 **Customer responsibilities at deploy time**
 
 1. Provision or import an ACM certificate in the same Region as the stack. The certificate SAN must match the DNS name you will pass as `AdvertisedDNS`.
-2. Create private DNS that resolves `AdvertisedDNS` to the internal NLB. A Route 53 private hosted zone with an A-record alias to the NLB is the typical pattern.
-3. Pass `CertificateArn` and `AdvertisedDNS` as CloudFormation parameters at stack create or update.
+2. Ensure private DNS resolves `AdvertisedDNS` to the internal NLB for every in-VPC client. You can manage this outside the stack, or set `CreatePrivateDns=true` so the stack creates an A-record alias to the NLB.
+3. Pass `CertificateArn` and `AdvertisedDNS` as CloudFormation parameters at stack create or update. If `CreatePrivateDns=true`, also pass either `PrivateDnsZoneName` so the stack creates a private hosted zone, or `PrivateDnsHostedZoneId` so it writes the record into an existing private hosted zone.
 
 **Cert lifecycle**
 
@@ -393,6 +393,8 @@ The last option often causes confusion: the validation CNAME can be public, but 
 
 **Recommended private workflow.** Keep the base Neo4j stack internal. Use a private DNS name for `AdvertisedDNS`, use an ACM Private CA or imported internal certificate when the customer has private PKI, and let customer application stacks handle any user-facing access. That preserves encryption in transit and avoids requiring the Neo4j Marketplace stack itself to create public DNS or public ingress.
 
+**Stack-managed private DNS.** For repeatable tests and simple private deployments, set `CreatePrivateDns=true`. With `PrivateDnsZoneName`, the stack creates a Route 53 private hosted zone associated with the stack VPC and creates an alias record for `AdvertisedDNS`. With `PrivateDnsHostedZoneId`, the stack creates only the alias record in an existing private hosted zone. Do not enable this if another stack already owns the same `AdvertisedDNS` record in the same hosted zone.
+
 **Residual risk.** Cluster-internal ports (5000, 6000, 7000, 7688) remain plaintext between cluster members, protected by the cluster security group. An actor with `ec2:RunInstances` permission to launch into the cluster subnet with the cluster security group, `ec2:CreateTrafficMirrorSession` targeting a cluster ENI, or root on any cluster node can observe replication traffic on the wire. For regulated workloads or shared-tenancy accounts where IAM blast radius extends beyond the cluster operator team, request cluster TLS before deploying.
 
 ---
@@ -407,14 +409,14 @@ The private stack requires an ACM certificate before deployment. `certificate.py
 
 **Option A — No domain (local testing only)**
 
-Generate a self-signed cert and import it directly into ACM. No DNS ownership or validation required:
+Generate a self-signed cert and import it directly into ACM. No public DNS ownership or ACM validation is required:
 
 ```bash
 cd neo4j-ee
 ./certificate.py --region us-east-2 --domain-name neo4j.test.local --self-signed
 ```
 
-This is instant. The trade-off: clients must connect with `neo4j+ssc://` (skip cert validation) instead of `neo4j+s://`. The `validate-private` suite and all SSM-based tools are unaffected.
+This is instant. The trade-off: clients must connect with `neo4j+ssc://` (skip cert validation) instead of `neo4j+s://`. The `validate-private` suite and all SSM-based tools are unaffected. In-VPC applications still need `AdvertisedDNS` to resolve, so local sample-app tests should deploy the EE stack with `--create-private-dns`. The sample app detects `certificate.py --self-signed` deployments from the EE output file and switches to `neo4j+ssc://` automatically.
 
 **Option B — Real domain with Route 53**
 
@@ -434,7 +436,7 @@ If your DNS is at another provider (Cloudflare, Namecheap, etc.), omit `--auto-r
 
 **After any option:** `deploy.py` reads the cert ARN and domain from `.deploy/cert-*.json` automatically — no flags needed.
 
-**Choosing a domain name.** The string is just a label used for the cert SAN and Neo4j's advertised address. It has no intrinsic meaning. For Options B and C, two DNS records are needed: the ACM validation CNAME (created by `certificate.py`) and a service record pointing the name to the NLB (a Route 53 alias or CNAME you add after `deploy.py` finishes — the NLB DNS name is in `.deploy/<stack>.txt`). For Option A, no DNS records are needed at all.
+**Choosing a domain name.** The string is the cert SAN and Neo4j's advertised address. For Options B and C, two DNS records are needed: the ACM validation CNAME (created by `certificate.py`) and a service record pointing the name to the NLB. `deploy.py --create-private-dns` can create the service record for Private and ExistingVpc stacks. For Option A, no public DNS records are needed, but in-VPC application clients still need private DNS.
 
 `certificate.py` reuses an existing `ISSUED` or `PENDING_VALIDATION` cert for the same domain and region rather than requesting a new one. Pass `--no-wait` to print the CNAME and exit without polling.
 
@@ -467,6 +469,14 @@ cd neo4j-ee
 
 # Pass cert explicitly if you have multiple cert files or want to be precise:
 ./deploy.py --cert-arn <arn> --advertised-dns <dns> --region us-east-2
+
+# Let the stack create a private hosted zone and AdvertisedDNS alias:
+./deploy.py --cert-arn <arn> --advertised-dns neo4j.test.local \
+  --create-private-dns --private-dns-zone test.local
+
+# Or write the AdvertisedDNS alias into an existing private hosted zone:
+./deploy.py --cert-arn <arn> --advertised-dns neo4j.internal.example.com \
+  --create-private-dns --private-dns-hosted-zone-id Z1234567890ABC
 
 # Use the published Marketplace AMI:
 ./deploy.py --marketplace

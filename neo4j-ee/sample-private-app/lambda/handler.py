@@ -76,6 +76,13 @@ def lambda_handler(event, context):
     except AuthError:
         driver = _reset_driver()
         return _run(driver)
+    except Exception as exc:
+        log.exception("lambda_handler failed")
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": type(exc).__name__, "message": str(exc)}),
+        }
 
 
 def _run(driver):

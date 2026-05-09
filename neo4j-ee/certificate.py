@@ -189,13 +189,27 @@ def _create_route53_cname(route53, zone_id, cname_name, cname_value):
     )
 
 
-def _write_cert_file(cert_arn: str, domain_name: str, region: str) -> str:
+def _write_cert_file(
+    cert_arn: str,
+    domain_name: str,
+    region: str,
+    self_signed: bool = False,
+) -> str:
     deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
     os.makedirs(deploy_dir, exist_ok=True)
     slug = domain_name.replace(".", "-").replace("_", "-")
     path = os.path.join(deploy_dir, f"cert-{slug}.json")
     with open(path, "w") as f:
-        json.dump({"cert_arn": cert_arn, "domain_name": domain_name, "region": region}, f, indent=2)
+        json.dump(
+            {
+                "cert_arn": cert_arn,
+                "domain_name": domain_name,
+                "region": region,
+                "self_signed": self_signed,
+            },
+            f,
+            indent=2,
+        )
     return path
 
 
@@ -232,14 +246,17 @@ def main():
         print(f"Generating self-signed certificate for {domain_name} in {args.region}...")
         cert_arn = _import_self_signed(acm, domain_name)
         print(f"  Certificate ARN: {cert_arn}")
-        cert_file = _write_cert_file(cert_arn, domain_name, args.region)
+        cert_file = _write_cert_file(cert_arn, domain_name, args.region, self_signed=True)
         print(f"  Cert file:       {os.path.relpath(cert_file)}")
         print()
         print("WARNING: self-signed cert — clients must use neo4j+ssc:// not neo4j+s://")
         print()
         print("To deploy:")
-        print(f"  ./deploy.py --cert-arn {cert_arn} --advertised-dns {domain_name}")
-        print("  ./deploy.py  # cert file is auto-detected")
+        print(
+            f"  ./deploy.py --cert-arn {cert_arn} --advertised-dns {domain_name} "
+            "--create-private-dns"
+        )
+        print("  ./deploy.py --create-private-dns  # cert file is auto-detected")
         return
 
     existing_arn = _find_existing_cert(acm, domain_name)

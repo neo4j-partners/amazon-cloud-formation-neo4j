@@ -24,9 +24,9 @@ CloudFormation templates and operator tooling for the Neo4j Enterprise Edition A
 
 Deploy from the AWS Marketplace listing. Once the stack is complete, the guide for your topology covers prerequisites, accessing the cluster, retrieving the password, observability checks, and tear down:
 
-- **Public:** [docs/PUBLIC.md — General Operator Guide](docs/PUBLIC.md#general-operator-guide)
-- **Private:** [docs/PRIVATE.md — General Operator Guide](docs/PRIVATE.md#general-operator-guide)
-- **Private, Existing VPC:** [docs/PRIVATE-EXISTING-VPC.md — General Operator Guide](docs/PRIVATE-EXISTING-VPC.md#general-operator-guide)
+- **Public:** [docs/PUBLIC.md — Operator Guide](docs/PUBLIC.md#operator-guide)
+- **Private:** [docs/PRIVATE.md — Operator Guide](docs/PRIVATE.md#operator-guide)
+- **Private, Existing VPC:** [docs/PRIVATE-EXISTING-VPC.md — Operator Guide](docs/PRIVATE-EXISTING-VPC.md#operator-guide)
 
 ---
 
@@ -53,6 +53,10 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx \
   --cert-arn <acm-cert-arn> --advertised-dns <dns>
 
+# Private DNS managed by the stack (Private or ExistingVpc)
+./deploy.py --cert-arn <acm-cert-arn> --advertised-dns neo4j.test.local \
+  --create-private-dns --private-dns-zone test.local
+
 # Common flags (apply to all modes)
 ./deploy.py --number-of-servers 1           # single instance instead of 3-node
 ./deploy.py r8i.xlarge                      # memory-optimized instance type
@@ -60,7 +64,7 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ./deploy.py --alert-email you@example.com   # enable CloudWatch alarm emails
 ```
 
-TLS is mandatory. `--cert-arn` must be an ACM certificate whose SAN matches `--advertised-dns`.
+TLS is mandatory. `--cert-arn` must be an ACM certificate whose SAN matches `--advertised-dns`. Private and ExistingVpc stacks can use `--create-private-dns` to create the in-VPC DNS alias that maps `--advertised-dns` to the internal NLB.
 
 ### Look Up Connection Details
 

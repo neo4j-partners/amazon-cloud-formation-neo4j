@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # common.sh - shared helpers sourced by Bash-only validate-private scripts.
 
-export AWS_PROFILE="${AWS_PROFILE:-default}"
-
 SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_DIR="${SCRIPTS_DIR}/../../.deploy"
 

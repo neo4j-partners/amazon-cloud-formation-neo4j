@@ -296,3 +296,116 @@ find sample-private-app/lambda -maxdepth 1 -name '.lock' -o -name 'neo4j-ca.pem'
 ```
 
 Summary: Confirmed the canonical app stack is `CREATE_COMPLETE`, the local deploy JSON points to `neo4j-sample-private-app-tls-validate`, and no generated packaging artifacts remained in `sample-private-app/lambda`.
+
+### Convert operator helpers to uv Python
+
+Command:
+
+```bash
+git status --short --untracked-files=all
+rg -n "browse\.sh|browser-tunnel\.sh|bolt-tunnel\.sh|smoke-write\.sh|scripts/browser-tunnel|scripts/bolt-tunnel|scripts/smoke-write|ssm_check_sessions\.sh" docs validate-private . -g '!**/.git/**'
+```
+
+Summary: Reviewed the current tree and found the tunnel/smoke helper set had Python entry points, but docs still referenced shell entry points in several places and `scripts/ssm_check_sessions.sh` remained as a thin compatibility wrapper.
+
+Command:
+
+```bash
+sed -n '1,220p' validate-private/scripts/smoke-write.py
+sed -n '1,130p' validate-private/scripts/private_tools.py
+sed -n '1,120p' browse.py
+sed -n '1,220p' validate-private/src/validate_private/ssm_sessions.py
+```
+
+Summary: Reviewed the Python helper implementations. The direct `uv` scripts choose direct `bolt` mode for single-server stacks, routed `neo4j` mode for clusters, and `+ssc` for self-signed/imported/private certificates where the operator tools do not install a custom CA bundle.
+
+Command:
+
+```bash
+python3 -m py_compile deploy.py browse.py validate-private/scripts/ssm_check_sessions.py validate-private/scripts/private_tools.py validate-private/scripts/bolt-tunnel.py validate-private/scripts/browser-tunnel.py validate-private/scripts/smoke-write.py validate-private/src/validate_private/config.py validate-private/src/validate_private/ssm_sessions.py
+uv run browse.py --help
+uv run scripts/bolt-tunnel.py --help
+uv run scripts/browser-tunnel.py --help
+uv run scripts/smoke-write.py --help
+uv run scripts/ssm_check_sessions.py --help
+uv run deploy.py --dry-run --region us-east-2 --name dry-run --cert-arn arn:aws:acm:us-east-2:123456789012:certificate/test --advertised-dns neo4j.test.local --number-of-servers 1 r8i.xlarge
+git diff --check
+```
+
+Summary: Verified the updated Python scripts compile, their help paths run without opening SSM sessions, `deploy.py --dry-run` still works without AWS API calls, and the diff has no whitespace errors.
+
+Fixes made:
+
+- Removed `validate-private/scripts/ssm_check_sessions.sh` so no thin shell wrapper remains for that helper.
+- Made `validate-private/scripts/ssm_check_sessions.py` a standalone `uv` script rather than a pass-through shim.
+- Updated `validate-private/README.md`, `docs/PRIVATE.md`, and `docs/PRIVATE-EXISTING-VPC.md` to call the `uv run ...py` scripts directly.
+- Updated `browse.py` to use narrow ACM `ClientError` handling.
+- Updated `deploy.py` to write `CertificateType` to future deploy output files, allowing client helpers to choose the right trust mode without rediscovering ACM type each time.
+
+### Live retest after uv Python helper cleanup
+
+Command:
+
+```bash
+./invoke.sh
+uv run scripts/ssm_check_sessions.py tls-validate
+uv run scripts/smoke-write.py tls-validate 1
+```
+
+Summary: These initial checks could not run because the local `tls-validate` deploy output file and generated sample `invoke.sh` were no longer present. AWS reported the parent `tls-validate` stack as `DELETE_FAILED`, and the canonical sample app stack no longer existed.
+
+Command:
+
+```bash
+cat .deploy/final-validate.txt
+aws cloudformation describe-stacks --region us-east-2 --stack-name final-validate --query 'Stacks[0].{Status:StackStatus,Name:StackName}' --output json
+```
+
+Summary: Switched testing to the active `final-validate` stack. It is `CREATE_COMPLETE`, single-server, Private mode, uses `neo4j.test.local`, and records `SelfSignedCertificate=true`.
+
+Command:
+
+```bash
+uv run scripts/ssm_check_sessions.py final-validate
+```
+
+Summary: The direct `uv` SSM session checker succeeded. It listed the Neo4j instance and bastion, found no active SSM sessions, and confirmed local ports 7473 and 7687 were free.
+
+Command:
+
+```bash
+uv run scripts/smoke-write.py final-validate 1
+```
+
+Summary: The direct `uv` smoke write succeeded. It selected `bolt+ssc://neo4j.test.local:7687` for the single-server self-signed stack and completed 1/1 transient write iterations through the bastion.
+
+Command:
+
+```bash
+uv run deploy-sample-private-app.py final-validate
+```
+
+Summary: The first sample app deploy attempt packaged and uploaded Lambda but failed because `neo4j-sample-private-app-final-validate` was already in `CREATE_IN_PROGRESS`; the deployer tried to update it before waiting for creation to finish.
+
+Fix made:
+
+- Updated `sample-private-app/deploy-sample-private-app.py` so `deploy_stack()` waits for `CREATE_IN_PROGRESS` and update-in-progress states before deciding whether to create or update.
+
+Command:
+
+```bash
+python3 -m py_compile sample-private-app/deploy-sample-private-app.py
+uv run deploy-sample-private-app.py final-validate
+```
+
+Summary: The deployer patch compiled. The redeploy waited for `CREATE_IN_PROGRESS`, then updated the stack with the new Lambda object version. The stack reached `UPDATE_COMPLETE`, wrote `.deploy/sample-private-app-final-validate.json`, and regenerated `sample-private-app/invoke.sh` and `sample-private-app/validate.sh`.
+
+Command:
+
+```bash
+./invoke.sh
+aws cloudformation describe-stacks --region us-east-2 --stack-name neo4j-sample-private-app-final-validate --query 'Stacks[0].StackStatus' --output text
+find sample-private-app -maxdepth 2 \( -name lambda.zip -o -name neo4j-ca.pem -o -name .lock \) -print
+```
+
+Summary: Invocation succeeded against `final-validate`. Response included `"bolt_scheme": "bolt"`, `"trusted_ca": true`, `"edition": "enterprise"`, 12 nodes and 9 relationships created, one `Available` server, and no routing table entries because the sample correctly used direct Bolt mode. CloudFormation reported `UPDATE_COMPLETE`, and no generated packaging artifacts remained.

@@ -1,9 +1,10 @@
-"""CLI entry point: uv run ssm-check-sessions"""
+"""CLI entry point for scripts/ssm_check_sessions.py."""
 
 from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -148,6 +149,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def main() -> None:
+    os.environ.setdefault("AWS_PROFILE", "default")
     args = _parse_args(sys.argv[1:])
 
     try:

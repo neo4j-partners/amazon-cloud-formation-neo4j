@@ -17,6 +17,7 @@ import time
 import urllib.request
 
 import boto3
+from botocore.exceptions import ClientError
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SOURCE_REGION = "us-east-1"
@@ -183,6 +184,17 @@ def _detect_self_signed_cert(
         if cert_fields.get("domain_name") == advertised_dns:
             return True
     return False
+
+
+def _certificate_type(cert_arn: str, region: str) -> str:
+    if not cert_arn:
+        return ""
+    try:
+        acm = boto3.client("acm", region_name=region)
+        cert = acm.describe_certificate(CertificateArn=cert_arn)["Certificate"]
+    except ClientError:
+        return ""
+    return cert.get("Type", "")
 
 
 def _resolve_vpc_file(explicit: str | None, deploy_dir: str) -> str | None:
@@ -390,6 +402,7 @@ def main():
     region = args.region_override or random.choice(SUPPORTED_REGIONS)
     ts = int(time.time())
     stack_name = args.name if args.name else f"ee-{ts}"
+    cert_type = "" if args.dry_run else _certificate_type(args.cert_arn, region)
 
     # NLB target group names are "{stack_name}-https-tg" (the longest suffix).
     # AWS enforces a 32-character limit on target group names.
@@ -548,6 +561,8 @@ def main():
     print(f"  Mode:           {args.mode}")
     print(f"  AllowedCIDR:    {allowed_cidr}")
     print(f"  CertificateArn: {args.cert_arn}")
+    if cert_type:
+        print(f"  CertificateType: {cert_type}")
     print(f"  AdvertisedDNS:  {args.advertised_dns}")
     if cert_self_signed:
         print("  CertTrust:      self-signed test certificate")
@@ -644,6 +659,8 @@ def main():
     if cleanup_state["copied_ami_id"]:
         extra.extend([("CopiedAmiId", cleanup_state["copied_ami_id"]), ("SourceRegion", SOURCE_REGION)])
     extra.append(("CertificateArn", args.cert_arn))
+    if cert_type:
+        extra.append(("CertificateType", cert_type))
     extra.append(("AdvertisedDNS", args.advertised_dns))
     if cert_self_signed:
         extra.append(("SelfSignedCertificate", "true"))

@@ -307,6 +307,23 @@ def deploy_stack(
             WaiterConfig={"Delay": 10, "MaxAttempts": 120},
         )
         status = None
+    elif status == "CREATE_IN_PROGRESS":
+        print(f"Stack {app_stack_name} is CREATE_IN_PROGRESS; waiting for creation...")
+        cfn.get_waiter("stack_create_complete").wait(
+            StackName=app_stack_name,
+            WaiterConfig={"Delay": 10, "MaxAttempts": 120},
+        )
+        status = stack_status(cfn, app_stack_name)
+    elif status in {
+        "UPDATE_IN_PROGRESS",
+        "UPDATE_COMPLETE_CLEANUP_IN_PROGRESS",
+    }:
+        print(f"Stack {app_stack_name} is {status}; waiting for update...")
+        cfn.get_waiter("stack_update_complete").wait(
+            StackName=app_stack_name,
+            WaiterConfig={"Delay": 10, "MaxAttempts": 120},
+        )
+        status = stack_status(cfn, app_stack_name)
 
     exists = status is not None and status != "DELETE_COMPLETE"
     print(f"Deploying CloudFormation stack {app_stack_name}...")

@@ -151,7 +151,7 @@ def run_cypher_on_bastion(
         if code == "InvalidInstanceId":
             raise BastionCommandError(
                 f"Bastion {config.bastion_id} is not SSM-registered. "
-                "Run neo4j-ee/validate-private/scripts/preflight.sh to diagnose."
+                "Run uv run preflight from neo4j-ee/validate-private to diagnose."
             ) from exc
         raise
 

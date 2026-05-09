@@ -14,6 +14,9 @@ from pathlib import Path
 import subprocess
 import time
 
+import boto3
+from botocore.exceptions import ClientError
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEPLOY_DIR = SCRIPT_DIR / ".deploy"
@@ -75,11 +78,9 @@ def certificate_type(fields: dict[str, str]) -> str:
         return ""
 
     try:
-        import boto3
-
         acm = boto3.client("acm", region_name=region)
         cert = acm.describe_certificate(CertificateArn=cert_arn)["Certificate"]
-    except Exception:
+    except ClientError:
         return ""
     return cert.get("Type", "")
 
@@ -93,7 +94,12 @@ def resolve_bolt_scheme(fields: dict[str, str]) -> str:
     return f"{base}+s"
 
 
-def start_tunnel(region: str, bastion_id: str, nlb_host: str, port: int) -> subprocess.Popen:
+def start_tunnel(
+    region: str,
+    bastion_id: str,
+    nlb_host: str,
+    port: int,
+) -> subprocess.Popen:
     return subprocess.Popen(
         [
             "aws",

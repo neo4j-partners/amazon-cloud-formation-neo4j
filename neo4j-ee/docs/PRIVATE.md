@@ -77,10 +77,10 @@ These are the minimum permissions the operator's local IAM principal (user or as
 
 | Permission | Resource | Used by |
 |---|---|---|
-| `cloudformation:DescribeStacks`, `cloudformation:DescribeStackResources` | The stack ARN | `preflight.sh`, `deploy.py` (reads stack outputs) |
-| `ssm:SendCommand`, `ssm:GetCommandInvocation`, `ssm:StartSession`, `ssm:DescribeInstanceInformation` | The bastion instance | `uv run scripts/browser-tunnel.py`, `uv run scripts/bolt-tunnel.py`, `admin-shell`, `run-cypher`, `validate-private`, `preflight.sh` (bastion ping check) |
+| `cloudformation:DescribeStacks`, `cloudformation:DescribeStackResources` | The stack ARN | `uv run preflight`, `deploy.py` (reads stack outputs) |
+| `ssm:SendCommand`, `ssm:GetCommandInvocation`, `ssm:StartSession`, `ssm:DescribeInstanceInformation` | The bastion instance | `uv run scripts/browser-tunnel.py`, `uv run scripts/bolt-tunnel.py`, `admin-shell`, `run-cypher`, `validate-private`, `uv run preflight` (bastion ping check) |
 | `ssm:GetParameter`, `ssm:GetParametersByPath` | `/neo4j-ee/<stack-name>/*` | Any tool that resolves the NLB DNS or security group IDs from the platform contract |
-| `secretsmanager:GetSecretValue`, `secretsmanager:DescribeSecret` | `neo4j/<stack-name>/password` | `get-password.sh`, `preflight.sh` (secret existence check) |
+| `secretsmanager:GetSecretValue`, `secretsmanager:DescribeSecret` | `neo4j/<stack-name>/password` | `get-password.sh`, `uv run preflight` (secret existence check) |
 
 ### Preflight Check
 
@@ -88,8 +88,8 @@ Before running any other tool, confirm the stack and bastion are ready:
 
 ```bash
 cd neo4j-ee/validate-private
-./scripts/preflight.sh                     # most recent deployment
-./scripts/preflight.sh <stack-name>        # specific deployment
+uv run preflight                     # most recent deployment
+uv run preflight <stack-name>        # specific deployment
 ```
 
 Expected output on a healthy stack:
@@ -318,7 +318,7 @@ Either mitigation alone closes the observed failure. Both ship together so the t
 
 ### Platform Contract
 
-The stack publishes resource IDs via SSM under `/neo4j-ee/<stack-name>/` so that applications and operator tooling can wire themselves up without knowing stack internals. `preflight.sh` validates both groups on every run.
+The stack publishes resource IDs via SSM under `/neo4j-ee/<stack-name>/` so that applications and operator tooling can wire themselves up without knowing stack internals. `uv run preflight` validates both groups on every run.
 
 **Contract parameters** — required; all six must exist:
 
@@ -521,7 +521,7 @@ cfn-lint templates/neo4j-private.template.yaml
 ```bash
 cd neo4j-ee/validate-private
 
-./scripts/preflight.sh <stack-name>            # 11 checks: stack, bastion, endpoints
+uv run preflight <stack-name>                  # 11 checks: stack, bastion, endpoints
 
 uv run validate-private                        # most recent deployment
 uv run validate-private --stack <stack-name>   # specific deployment

@@ -843,6 +843,11 @@ Resources:
                   cp /var/lib/neo4j/labs/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || \
                   cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true
                 }
+                install_bloom() {
+                  echo "Installing Bloom plugin..."
+                  cp /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins/
+                  chown neo4j:neo4j /var/lib/neo4j/plugins/bloom-plugin-*.jar
+                }
                 install_gds() {
                   echo "Installing Graph Data Science plugin..."
                   cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins/
@@ -850,6 +855,15 @@ Resources:
                 extension_config() {
                   echo Configuring extensions and security in neo4j.conf...
                   set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
+                  # Bloom and GDS Enterprise do not auto-discover their licence files.
+                  # Without these settings, bloom.checkLicenseCompliance() returns "missing"
+                  # and gds.isLicensed() returns false even when the licence files are on disk.
+                  # Matches the canonical config keys used by neo4j/docker-neo4j and
+                  # neo4j/helm-charts (examples/bloom-gds-license/gds-bloom-with-license.yaml).
+                  set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
+                  if [[ "${installGDS}" == "true" ]]; then
+                    set_neo4j_conf gds.enterprise.license_file /var/lib/neo4j/licenses/neo4j-gds.license
+                  fi
                   set_neo4j_conf dbms.security.procedures.unrestricted "gds.*,apoc.*,bloom.*"
                   set_neo4j_conf dbms.security.http_auth_allowlist "/,/browser.*,/bloom.*"
                   set_neo4j_conf dbms.security.procedures.allowlist "apoc.*,gds.*,bloom.*"
@@ -1004,6 +1018,7 @@ Resources:
                 attach_and_mount_data_volume
                 install_neo4j_from_yum
                 install_apoc
+                install_bloom
                 if [[ "${installGDS}" == "true" ]]; then
                   install_gds
                 fi

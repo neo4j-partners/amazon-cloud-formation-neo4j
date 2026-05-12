@@ -699,12 +699,6 @@ Resources:
                     echo "$1=$2" >> "$conf"
                   fi
                 }
-
-                pin_neo4j_user() {
-                  getent group neo4j >/dev/null || groupadd -g 500 neo4j
-                  getent passwd neo4j >/dev/null || useradd -u 500 -g 500 -r -s /sbin/nologin -d /var/lib/neo4j neo4j
-                }
-
                 attach_and_mount_data_volume() {
                   echo "Attaching and mounting data volume..."
                   local _token
@@ -824,16 +818,8 @@ Resources:
                     chown neo4j:neo4j /var/lib/neo4j/data
                   fi
                 }
-
                 install_neo4j_from_yum() {
                   echo "Installing Graph Database..."
-                  rpm --import https://debian.neo4j.com/neotechnology.gpg.key
-                  echo "[neo4j]
-                name=Neo4j RPM Repository
-                baseurl=https://yum.neo4j.com/stable/latest
-                enabled=1
-                gpgcheck=1
-                " > /etc/yum.repos.d/neo4j.repo
                   export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
                   yum -y install neo4j-enterprise
                   systemctl enable neo4j
@@ -945,7 +931,6 @@ Resources:
                     set_neo4j_conf dbms.cluster.endpoints "${coreMembers}"
                   fi
                   if [ -n "${boltCertArn}" ]; then
-                    command -v jq >/dev/null || dnf install -y jq
                     mkdir -p /var/lib/neo4j/certificates/bolt
                     local _secret_json
                     _secret_json=$(aws secretsmanager get-secret-value --region "${region}" \
@@ -984,8 +969,7 @@ Resources:
                   fi
                 }
                 install_cloudwatch_agent() {
-                  echo "Installing CloudWatch agent..."
-                  yum install -y amazon-cloudwatch-agent
+                  echo "Configuring CloudWatch agent..."
                   cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << CWCONFIG
                 {
                   "logs": {
@@ -1019,14 +1003,6 @@ Resources:
                   /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
                 }
                 install_cloudwatch_agent
-                dnf install -y python3.11 unzip
-                dnf remove -y awscli 2>/dev/null || true
-                ARCH=$(uname -m)
-                curl -s "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o /tmp/awscliv2.zip
-                unzip -q /tmp/awscliv2.zip -d /tmp/
-                /tmp/aws/install
-                rm -rf /tmp/awscliv2.zip /tmp/aws
-                pin_neo4j_user
                 attach_and_mount_data_volume
                 install_neo4j_from_yum
                 install_apoc

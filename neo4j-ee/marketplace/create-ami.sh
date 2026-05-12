@@ -197,6 +197,7 @@ rm -f /root/.ssh/authorized_keys /home/*/.ssh/authorized_keys
 
 # --- Clean up ---
 dnf clean all
+cloud-init clean --logs
 rm -rf /var/cache/dnf /tmp/* /var/tmp/*
 shred -u /root/.bash_history 2>/dev/null || rm -f /root/.bash_history
 

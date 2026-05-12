@@ -710,6 +710,10 @@ def main():
         ("AmiSource", ami_source),
         ("InstallAPOC", "yes"),
         ("InstallGDS", "true"),
+        # All three EE userdata variants install the Bloom plugin unconditionally
+        # when its JAR is present on the AMI; the test runner uses this flag to
+        # gate check_bloom_plugin_loaded and check_neo4j_conf_keys.
+        ("BloomExpected", "yes"),
     ]
     if args.alert_email:
         extra.append(("AlertEmail", args.alert_email))

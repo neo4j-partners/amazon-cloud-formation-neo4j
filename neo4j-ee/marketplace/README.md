@@ -6,7 +6,7 @@ Internal instructions for Neo4j employees managing the EE Marketplace listing.
 
 | Script | Purpose |
 |---|---|
-| `create-ami.sh` | Builds the base AMI: resolves the latest AL2023 AMI, patches OS, hardens SSH, creates AMI, writes ID to `ami-id.txt` |
+| `create-ami.sh` | Builds the base AMI: resolves the latest AL2023 AMI, patches OS, installs static deployment tooling, hardens SSH, creates AMI, writes ID to `ami-id.txt` |
 | `test-ami.sh` | Verifies the AMI via SSM Run Command (no SSH required): checks SSH hardening and OS identity |
 
 ## Updating the AMI
@@ -18,8 +18,19 @@ AWS_PROFILE=marketplace ./marketplace/create-ami.sh
 ```
 
 The script resolves the latest Amazon Linux 2023 AMI from SSM, patches it with
-`dnf update -y`, hardens SSH, creates the AMI in `us-east-1`, enforces IMDSv2,
-and writes the new AMI ID to `marketplace/ami-id.txt`.
+`dnf update -y`, installs static deployment tooling, hardens SSH, creates the
+AMI in `us-east-1`, enforces IMDSv2, and writes the new AMI ID to
+`marketplace/ami-id.txt`.
+
+For default-account iteration before Marketplace submission, run the explicit
+guarded mode:
+
+```bash
+AMI_BUILD_MODE=iteration AWS_PROFILE=default ./marketplace/create-ami.sh
+```
+
+Marketplace mode refuses to run outside account `385155106615`; iteration mode
+refuses to run in that Marketplace account.
 
 Then test it:
 

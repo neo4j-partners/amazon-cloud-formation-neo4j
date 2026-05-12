@@ -38,7 +38,7 @@ All scripts read `AWS_PROFILE` from the environment and fall back to the `defaul
 export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ```
 
-> **Marketplace publishing scripts only** (`marketplace/create-ami.sh`, `marketplace/test-ami.sh`): these must run against the `neo4j-marketplace` account (`385155106615`). Set `AWS_PROFILE=marketplace` before running them. All other scripts work with any account that has CloudFormation, SSM, EC2, and IAM permissions.
+> **Marketplace publishing scripts**: run `marketplace/create-ami.sh` against the `neo4j-marketplace` account (`385155106615`) with `AWS_PROFILE=marketplace` for Marketplace builds. For local AMI iteration only, `marketplace/create-ami.sh` also supports the guarded default-account mode `AMI_BUILD_MODE=iteration AWS_PROFILE=default`. `marketplace/test-ami.sh` should use the same account that owns the AMI under test. All other scripts work with any account that has CloudFormation, SSM, EC2, and IAM permissions.
 
 ### Deploy
 

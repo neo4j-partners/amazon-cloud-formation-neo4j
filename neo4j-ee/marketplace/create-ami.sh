@@ -11,8 +11,10 @@
 #
 # Usage:
 #   AWS_PROFILE=marketplace ./create-ami.sh
+#   AMI_BUILD_MODE=iteration AWS_PROFILE=default ./create-ami.sh
 #
-# The AMI is a base OS image only (SSH hardening + OS patches).
+# The AMI is a base OS image with SSH hardening, OS patches, and static
+# deployment tooling pre-baked.
 # Neo4j Enterprise is installed at deploy time via the CloudFormation UserData
 # script, not baked into the AMI.
 
@@ -24,8 +26,24 @@ set -euo pipefail
 REGION="us-east-1"
 AMI_NAME="neo4j-ee-base-$(date +%Y%m%d)"
 INSTANCE_TYPE="t3.medium"
+AMI_BUILD_MODE="${AMI_BUILD_MODE:-marketplace}"
+MARKETPLACE_ACCOUNT_ID="385155106615"
 
-TAGS="ResourceType=instance,Tags=[{Key=Name,Value=neo4j-ee-ami-build},{Key=Purpose,Value=marketplace-ami-build}]"
+case "${AMI_BUILD_MODE}" in
+  marketplace|iteration)
+    ;;
+  *)
+    echo "ERROR: AMI_BUILD_MODE must be 'marketplace' or 'iteration'."
+    exit 1
+    ;;
+esac
+
+BUILD_PURPOSE="marketplace-ami-build"
+if [ "${AMI_BUILD_MODE}" = "iteration" ]; then
+  BUILD_PURPOSE="default-account-ami-iteration"
+fi
+
+TAGS="ResourceType=instance,Tags=[{Key=Name,Value=neo4j-ee-ami-build},{Key=Purpose,Value=${BUILD_PURPOSE}}]"
 
 # ---------------------------------------------------------------------------
 # Preflight: verify we're in the correct AWS account
@@ -45,10 +63,35 @@ CALLER_ARN=$(echo "${CALLER_IDENTITY}" | grep -o '"Arn": "[^"]*"' | cut -d'"' -f
 
 echo "  Account:  ${ACCOUNT_ID}"
 echo "  Identity: ${CALLER_ARN}"
+echo "  Profile:  ${AWS_PROFILE:-default credential chain}"
 echo "  Region:   ${REGION} (overrides profile default)"
+echo "  Mode:     ${AMI_BUILD_MODE}"
 echo ""
 echo "AMI name:      ${AMI_NAME}"
 echo ""
+
+if [ "${AMI_BUILD_MODE}" = "marketplace" ] && [ "${ACCOUNT_ID}" != "${MARKETPLACE_ACCOUNT_ID}" ]; then
+  echo "ERROR: Marketplace mode must run in account ${MARKETPLACE_ACCOUNT_ID}."
+  echo "For local/default-account iteration, run:"
+  echo "  AMI_BUILD_MODE=iteration AWS_PROFILE=default ./marketplace/create-ami.sh"
+  exit 1
+fi
+
+if [ "${AMI_BUILD_MODE}" = "iteration" ]; then
+  if [ "${AWS_PROFILE:-}" != "default" ]; then
+    echo "ERROR: Iteration mode must be explicit and use AWS_PROFILE=default."
+    echo "Run:"
+    echo "  AMI_BUILD_MODE=iteration AWS_PROFILE=default ./marketplace/create-ami.sh"
+    exit 1
+  fi
+  if [ "${ACCOUNT_ID}" = "${MARKETPLACE_ACCOUNT_ID}" ]; then
+    echo "ERROR: Iteration mode is for non-Marketplace/default-account builds only."
+    exit 1
+  fi
+  echo "Non-Marketplace iteration mode selected."
+  echo "This build will write the resulting AMI ID to marketplace/ami-id.txt."
+  echo ""
+fi
 
 # ---------------------------------------------------------------------------
 # Step 1: Deregister any existing AMI with the same name
@@ -117,6 +160,31 @@ echo "=== Neo4j EE Base AMI Build (via UserData) ==="
 # --- Patch the OS ---
 echo "Patching OS..."
 dnf update -y
+
+# --- Static deployment tooling ---
+echo "Installing static deployment tooling..."
+dnf remove -y awscli 2>/dev/null || true
+dnf install -y unzip python3.11 jq amazon-cloudwatch-agent
+
+ARCH="x86_64"
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o /tmp/awscliv2.zip
+unzip -q /tmp/awscliv2.zip -d /tmp/
+/tmp/aws/install --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update
+rm -rf /tmp/awscliv2.zip /tmp/aws
+
+echo "Configuring Neo4j yum repository..."
+rpm --import https://debian.neo4j.com/neotechnology.gpg.key
+cat > /etc/yum.repos.d/neo4j.repo <<'NEO4JREPO'
+[neo4j]
+name=Neo4j RPM Repository
+baseurl=https://yum.neo4j.com/stable/latest
+enabled=1
+gpgcheck=1
+NEO4JREPO
+
+echo "Creating pinned neo4j system user..."
+getent group neo4j >/dev/null || groupadd -g 500 neo4j
+getent passwd neo4j >/dev/null || useradd -u 500 -g 500 -r -s /sbin/nologin -d /var/lib/neo4j neo4j
 
 # --- SSH Hardening ---
 sed -i 's/^#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
@@ -188,7 +256,7 @@ IMAGE_ID=$(aws ec2 create-image \
   --region "${REGION}" \
   --instance-id "${INSTANCE_ID}" \
   --name "${AMI_NAME}" \
-  --description "Neo4j EE base image on Amazon Linux 2023 (Neo4j installed at deploy time)" \
+  --description "Neo4j EE base image on Amazon Linux 2023 with OS patches, AWS CLI v2, CloudWatch agent, jq, Python 3.11, and Neo4j repo/user pre-baked; Neo4j installed at deploy time" \
   --query "ImageId" \
   --output text)
 
@@ -221,7 +289,8 @@ aws ec2 create-tags \
     Key=Neo4jEdition,Value="enterprise-base" \
     Key=BaseOS,Value="Amazon Linux 2023" \
     Key=IMDSv2,Value="v2.0-required" \
-    Key=Purpose,Value="marketplace-ami"
+    Key=Purpose,Value="${BUILD_PURPOSE}" \
+    Key=AmiBuildMode,Value="${AMI_BUILD_MODE}"
 
 # ---------------------------------------------------------------------------
 # Step 8: Save AMI ID for downstream scripts
@@ -248,13 +317,20 @@ echo "  AMI Name:      ${AMI_NAME}"
 echo "  Region:        ${REGION}"
 echo ""
 echo "Next steps:"
-echo "  1. Test the AMI:"
-echo "       AWS_PROFILE=marketplace ./marketplace/test-ami.sh"
-echo ""
-echo "  2. Run Marketplace AMI scan:"
-echo "       Marketplace Portal > Products > Server > Request changes"
-echo "       > Update versions > Test 'Add version'"
-echo ""
-echo "  3. Update the CFT ImageId parameter default with the product code"
-echo "       once the Marketplace listing is published."
+if [ "${AMI_BUILD_MODE}" = "marketplace" ]; then
+  echo "  1. Test the AMI:"
+  echo "       AWS_PROFILE=marketplace ./marketplace/test-ami.sh"
+  echo ""
+  echo "  2. Run Marketplace AMI scan:"
+  echo "       Marketplace Portal > Products > Server > Request changes"
+  echo "       > Update versions > Test 'Add version'"
+  echo ""
+  echo "  3. Update the CFT ImageId parameter default with the product code"
+  echo "       once the Marketplace listing is published."
+else
+  echo "  1. Inspect the AMI in the default account:"
+  echo "       AWS_PROFILE=default ./marketplace/test-ami.sh"
+  echo ""
+  echo "  2. Deploy default-account stacks against this AMI before Marketplace testing."
+fi
 echo "============================================="

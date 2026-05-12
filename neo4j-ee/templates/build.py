@@ -9,11 +9,17 @@ Usage:
 
 import argparse
 import difflib
+import re
 import sys
 from pathlib import Path
 
 SRC = Path(__file__).parent / "src"
 OUT = Path(__file__).parent
+PARTIALS = SRC / "partials"
+PARTIAL_INCLUDE_RE = re.compile(
+    r"^#\s*include\s+partials/([A-Za-z0-9_.-]+\.sh)\s*$",
+    re.MULTILINE,
+)
 
 GENERATED_HEADER = """\
 # GENERATED FILE — do not edit directly.
@@ -61,9 +67,34 @@ _PREAMBLE_TLS = [
 ]
 
 
+def _inline_partials(content: str, source_name: str) -> str:
+    """Inline UserData partial markers in shell source content."""
+
+    def replace(match: re.Match[str]) -> str:
+        partial_name = match.group(1)
+        partial_path = PARTIALS / partial_name
+        if not partial_path.exists():
+            print(
+                f"ERROR: {source_name} references missing partial {partial_path}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return partial_path.read_text().rstrip("\n")
+
+    rendered = PARTIAL_INCLUDE_RE.sub(replace, content)
+    if PARTIAL_INCLUDE_RE.search(rendered):
+        print(
+            f"ERROR: unresolved partial include marker remains in {source_name}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return rendered
+
+
 def _userdata_block(topology: str, base_indent: int = 8) -> str:
     """Return the UserData: Fn::Base64: !Join [...] block as YAML text."""
-    sh_content = (SRC / f"userdata-{topology}.sh").read_text()
+    source_name = f"userdata-{topology}.sh"
+    sh_content = _inline_partials((SRC / source_name).read_text(), source_name)
 
     p = " " * base_indent         # UserData: level
     p2 = " " * (base_indent + 2)  # Fn::Base64: level

@@ -7,8 +7,11 @@ import getpass
 import sys
 from pathlib import Path
 
+import boto3
+from botocore.exceptions import ClientError
 
-_REQUIRED_FIELDS = ("StackName", "Region", "Neo4jOperatorBastionId", "Neo4jInternalDNS")
+
+_REQUIRED_FIELDS = ("StackName", "Region", "Neo4jOperatorBastionId", "Neo4jInternalDNS", "AdvertisedDNS")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -17,10 +20,11 @@ class StackConfig:
     region: str
     bastion_id: str
     nlb_dns: str
+    advertised_dns: str
+    bolt_scheme: str
     password: str
     install_apoc: bool
     install_gds: bool
-    bolt_tls_secret_arn: str = ""
 
 
 def _parse_outputs(path: Path) -> dict[str, str]:
@@ -34,9 +38,34 @@ def _parse_outputs(path: Path) -> dict[str, str]:
 
 
 def _fetch_secret(secret_name: str, region: str) -> str:
-    import boto3
     sm = boto3.client("secretsmanager", region_name=region)
     return sm.get_secret_value(SecretId=secret_name)["SecretString"]
+
+
+def _certificate_type(fields: dict[str, str], region: str) -> str:
+    cert_type = fields.get("CertificateType", "")
+    if cert_type:
+        return cert_type
+
+    cert_arn = fields.get("CertificateArn", "")
+    if not cert_arn:
+        return ""
+
+    try:
+        acm = boto3.client("acm", region_name=region)
+        cert = acm.describe_certificate(CertificateArn=cert_arn)["Certificate"]
+    except ClientError:
+        return ""
+    return cert.get("Type", "")
+
+
+def _bolt_scheme(fields: dict[str, str], region: str) -> str:
+    base = "bolt" if fields.get("NumberOfServers", "3") == "1" else "neo4j"
+    self_signed = fields.get("SelfSignedCertificate", "").lower() == "true"
+    cert_type = _certificate_type(fields, region)
+    if self_signed or cert_type in {"IMPORTED", "PRIVATE"}:
+        return f"{base}+ssc"
+    return f"{base}+s"
 
 
 def load_config(
@@ -73,6 +102,7 @@ def load_config(
     stack_name = fields["StackName"]
     region = fields["Region"]
     secret_name = f"neo4j/{stack_name}/password"
+    bolt_scheme = _bolt_scheme(fields, region)
 
     if password_override is not None:
         password = password_override
@@ -95,8 +125,9 @@ def load_config(
         region=region,
         bastion_id=fields["Neo4jOperatorBastionId"],
         nlb_dns=fields["Neo4jInternalDNS"],
+        advertised_dns=fields["AdvertisedDNS"],
+        bolt_scheme=bolt_scheme,
         password=password,
         install_apoc=fields.get("InstallAPOC", "no").lower() == "yes",
         install_gds=fields.get("InstallGDS", "false").lower() == "true",
-        bolt_tls_secret_arn=fields.get("BoltTlsSecretArn", ""),
     )

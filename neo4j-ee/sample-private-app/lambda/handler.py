@@ -5,7 +5,7 @@ import random
 import time
 
 import boto3
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, TrustCustomCAs
 from neo4j.exceptions import AuthError
 
 log = logging.getLogger(__name__)
@@ -14,14 +14,36 @@ ssm = boto3.client("ssm")
 sm = boto3.client("secretsmanager")
 
 _driver = None
-_BOLT_TLS = os.environ.get("NEO4J_BOLT_TLS") == "true"
-_BOLT_SCHEME = "neo4j+ssc" if _BOLT_TLS else "neo4j"
 
 
 def _init_driver():
-    nlb_dns = ssm.get_parameter(Name=os.environ["NEO4J_SSM_NLB_PATH"])["Parameter"]["Value"]
+    advertised_dns = ssm.get_parameter(
+        Name=os.environ["NEO4J_SSM_ADVERTISED_DNS_PATH"]
+    )["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
-    return GraphDatabase.driver(f"{_BOLT_SCHEME}://{nlb_dns}:7687", auth=("neo4j", password))
+    bolt_scheme = os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s")
+    driver_config = {}
+
+    trusted_ca_file = os.environ.get("NEO4J_TRUSTED_CA_CERT_FILE", "").strip()
+    if trusted_ca_file:
+        if bolt_scheme in {"bolt+s", "bolt+ssc"}:
+            bolt_scheme = "bolt"
+        elif bolt_scheme in {"neo4j+s", "neo4j+ssc"}:
+            bolt_scheme = "neo4j"
+        ca_path = trusted_ca_file
+        if not os.path.isabs(ca_path):
+            ca_path = os.path.join(
+                os.environ.get("LAMBDA_TASK_ROOT", os.path.dirname(__file__)),
+                ca_path,
+            )
+        driver_config["encrypted"] = True
+        driver_config["trusted_certificates"] = TrustCustomCAs(ca_path)
+
+    return GraphDatabase.driver(
+        f"{bolt_scheme}://{advertised_dns}:7687",
+        auth=("neo4j", password),
+        **driver_config,
+    )
 
 
 def _get_driver():
@@ -77,6 +99,13 @@ def lambda_handler(event, context):
     except AuthError:
         driver = _reset_driver()
         return _run(driver)
+    except Exception as exc:
+        log.exception("lambda_handler failed")
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": type(exc).__name__, "message": str(exc)}),
+        }
 
 
 def _run(driver):
@@ -91,9 +120,11 @@ def _run(driver):
         ).single()
         edition = edition_row["edition"] if edition_row else "unknown"
 
-        routing_rows = session.run(
-            "CALL dbms.routing.getRoutingTable({}, 'neo4j')"
-        ).data()
+        routing_rows = []
+        if os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s").startswith("neo4j"):
+            routing_rows = session.run(
+                "CALL dbms.routing.getRoutingTable({}, 'neo4j')"
+            ).data()
 
         graph_sample = session.run(
             """
@@ -117,8 +148,8 @@ def _run(driver):
                 readers += len(server.get("addresses", []))
 
     body = {
-        "tls_enabled": _BOLT_TLS,
-        "bolt_scheme": _BOLT_SCHEME,
+        "bolt_scheme": os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s"),
+        "trusted_ca": bool(os.environ.get("NEO4J_TRUSTED_CA_CERT_FILE", "").strip()),
         "edition": edition,
         "nodes_created": nodes_created,
         "relationships_created": rels_created,
@@ -202,7 +233,7 @@ def _resilience(driver):
     log.info("Target follower: instance=%s server=%s", target_instance, target_uuid)
 
     t0 = time.time()
-    _ssm_run(target_instance, "systemctl stop neo4j")
+    _ssm_run_document(target_instance, os.environ["SSM_DOC_STOP_NEO4J"], "stop neo4j")
     time_to_stop_issued = round(time.time() - t0, 2)
 
     t1 = time.time()
@@ -210,7 +241,7 @@ def _resilience(driver):
     time_to_unavailable = round(time.time() - t1, 2)
 
     t2 = time.time()
-    _ssm_run(target_instance, "systemctl start neo4j")
+    _ssm_run_document(target_instance, os.environ["SSM_DOC_START_NEO4J"], "start neo4j")
     time_to_start_issued = round(time.time() - t2, 2)
 
     t3 = time.time()
@@ -270,10 +301,7 @@ def _neo4j_instance_ids(ee_stack_id):
 def _read_server_ids(instance_ids):
     cmd_id = _ssm.send_command(
         InstanceIds=instance_ids,
-        DocumentName="AWS-RunShellScript",
-        Parameters={"commands": [
-            "python3 -c \"import uuid; d=open('/var/lib/neo4j/data/server_id','rb').read(); print(str(uuid.UUID(bytes=d[1:])))\""
-        ]},
+        DocumentName=os.environ["SSM_DOC_READ_SERVER_ID"],
     )["Command"]["CommandId"]
 
     mapping = {}
@@ -296,11 +324,10 @@ def _read_server_ids(instance_ids):
     return mapping
 
 
-def _ssm_run(instance_id, command):
+def _ssm_run_document(instance_id, document_name, action):
     cmd_id = _ssm.send_command(
         InstanceIds=[instance_id],
-        DocumentName="AWS-RunShellScript",
-        Parameters={"commands": [command]},
+        DocumentName=document_name,
     )["Command"]["CommandId"]
     deadline = time.time() + 60
     while time.time() < deadline:
@@ -312,8 +339,11 @@ def _ssm_run(instance_id, command):
         if inv["Status"] == "Success":
             return
         if inv["Status"] in ("Failed", "Cancelled", "TimedOut"):
-            raise RuntimeError(f"SSM '{command}' on {instance_id} ended {inv['Status']}: {inv.get('StandardErrorContent','')}")
-    raise TimeoutError(f"SSM '{command}' on {instance_id} did not complete in 60s")
+            raise RuntimeError(
+                f"SSM document for {action} on {instance_id} ended {inv['Status']}: "
+                f"{inv.get('StandardErrorContent','')}"
+            )
+    raise TimeoutError(f"SSM document for {action} on {instance_id} did not complete in 60s")
 
 
 def _wait_for_health(driver, server_uuid, wanted, timeout_s):

@@ -438,7 +438,7 @@ def main():
         ami_id_file = os.path.join(SCRIPT_DIR, "marketplace", "ami-id.txt")
         if not os.path.exists(ami_id_file):
             sys.exit(
-                f"ERROR: {ami_id_file} not found. Run marketplace/build.sh first,\n"
+                f"ERROR: {ami_id_file} not found. Run marketplace/create-ami.sh first,\n"
                 "       or use --marketplace to deploy from the live Marketplace listing."
             )
         source_ami_id = Path(ami_id_file).read_text().strip()

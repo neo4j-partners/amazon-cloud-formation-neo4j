@@ -79,6 +79,14 @@ Key modules: `neo4j_checks.py` (connectivity), `resilience.py` (EBS persistence)
 - Security group opens ports 7474 (HTTP/Browser) and 7687 (Bolt) to `AllowedCIDR`.
 - IMDSv2 is enforced (`HttpTokens: required` in LaunchTemplate metadata options).
 
+### Security invariants (do not remove)
+
+- `internal.dbms.cypher_ip_blocklist` — set unconditionally in EE UserData to block Cypher procedures (e.g. `apoc.load.json`, `apoc.load.csv`) from reaching private IP ranges. The defense covers `169.254.169.0/24` (IMDS credential exfiltration), `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` (VPC-internal SSRF), and the IPv6 unique-local/link-local ranges. Removing it would let any Cypher user steal the instance's IAM role credentials and pivot into the VPC. The G3 conf-key audit asserts this key is present and non-empty on every node.
+
+### AMI lifecycle invariant
+
+`create-ami.sh` refuses to deregister an AMI that any launch template in the account still references. Re-running the builder while a live stack depends on the previous AMI would orphan that stack's launch templates: ASGs would no longer be able to replace failed instances. The G6 fail-fast guard (`check_launch_template_amis_exist`) also asserts every launch template's AMI still exists before resilience tests run.
+
 ## Debugging Deployed Stacks
 
 Check logs on the EC2 instance:

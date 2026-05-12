@@ -85,6 +85,10 @@ def parse_args():
     p.add_argument("--existing-endpoint-sg-id", metavar="SG_ID", default="")
     p.add_argument("--disk-size", type=int, metavar="GB", help="Data volume size in GB (default: 100, min: 100, max: 65536)")
     p.add_argument("--snapshot-id", metavar="SNAPSHOT_ID", help="Snapshot ID to restore Node 1 data volume from (must match --disk-size)")
+    p.add_argument("--no-bloom", action="store_true",
+                   help="Skip the Bloom plugin install (sets InstallBloom=false). Default: install Bloom.")
+    p.add_argument("--no-gds", action="store_true",
+                   help="Skip the GDS plugin install (sets InstallGDS=false). Default: install GDS.")
     p.add_argument(
         "--bloom-license-secret-id", metavar="SECRET",
         help="Secrets Manager secret name or ARN holding the Bloom licence JWT. "
@@ -511,6 +515,21 @@ def main():
                     WaiterConfig={"Delay": 30, "MaxAttempts": 60},
                 )
                 print(f"AMI available in {region}.")
+            # Tag the copy with the source AMI/region so downstream tooling
+            # (the G6 build-mode tag check, future audits) does not have to
+            # parse the Description string. copy_image does not propagate
+            # source tags, so we set them explicitly after the copy becomes
+            # available. Best-effort: log and continue if tagging fails.
+            try:
+                ec2.create_tags(
+                    Resources=[copied_ami_id],
+                    Tags=[
+                        {"Key": "SourceAmiId", "Value": source_ami_id},
+                        {"Key": "SourceRegion", "Value": SOURCE_REGION},
+                    ],
+                )
+            except Exception as exc:
+                print(f"Warning: could not tag copied AMI {copied_ami_id}: {exc}")
             ami_id = copied_ami_id
         else:
             ami_id = source_ami_id
@@ -560,12 +579,15 @@ def main():
     s3.upload_file(os.path.join(SCRIPT_DIR, template_file), bucket_name, template_key)
     template_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{template_key}"
 
+    install_bloom = "false" if getattr(args, "no_bloom", False) else "true"
+    install_gds = "false" if getattr(args, "no_gds", False) else "true"
     cfn_params = [
         {"ParameterKey": "Password", "ParameterValue": password},
         {"ParameterKey": "NumberOfServers", "ParameterValue": str(args.number_of_servers)},
         {"ParameterKey": "InstanceType", "ParameterValue": instance_type},
         {"ParameterKey": "AllowedCIDR", "ParameterValue": allowed_cidr},
-        {"ParameterKey": "InstallGDS", "ParameterValue": "true"},
+        {"ParameterKey": "InstallGDS", "ParameterValue": install_gds},
+        {"ParameterKey": "InstallBloom", "ParameterValue": install_bloom},
     ]
     if ssm_param_path:
         cfn_params.append({"ParameterKey": "ImageId", "ParameterValue": ssm_param_path})
@@ -709,11 +731,13 @@ def main():
         ("DeploymentMode", args.mode),
         ("AmiSource", ami_source),
         ("InstallAPOC", "yes"),
-        ("InstallGDS", "true"),
-        # All three EE userdata variants install the Bloom plugin unconditionally
-        # when its JAR is present on the AMI; the test runner uses this flag to
-        # gate check_bloom_plugin_loaded and check_neo4j_conf_keys.
-        ("BloomExpected", "yes"),
+        ("InstallGDS", install_gds),
+        ("InstallBloom", install_bloom),
+        # The test runner uses this to gate check_bloom_plugin_loaded and the
+        # G3 conf-key audit's Bloom-only expectations. Derived from the
+        # InstallBloom CFN parameter so a deploy with --no-bloom does not
+        # incorrectly assert Bloom is present.
+        ("BloomExpected", "yes" if install_bloom == "true" else "no"),
     ]
     if args.alert_email:
         extra.append(("AlertEmail", args.alert_email))

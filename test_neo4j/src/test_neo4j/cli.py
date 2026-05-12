@@ -205,10 +205,13 @@ def _run_ee(args, config, reporter, session, resource_map) -> None:
         cleanup_movies_dataset(config)
 
     if not args.simple:
+        from test_neo4j.infra_checks import run_robust_tests_checks  # noqa: PLC0415
+
         run_ee_infra_checks(
             session, config, reporter, resource_map,
             run_security=args.infra_security,
         )
+        run_robust_tests_checks(session, config, reporter, resource_map)
         run_cluster_checks(config, reporter, session, resource_map)
         run_ee_volume_checks(config, reporter, session, resource_map)
         run_ee_cluster_resilience_tests(

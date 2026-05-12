@@ -91,6 +91,64 @@ def check_apoc(config: StackConfig, reporter: TestReporter) -> None:
             ctx.fail(f"APOC query failed: {exc}")
 
 
+def check_bloom_plugin_loaded(config: StackConfig, reporter: TestReporter) -> None:
+    """Assert the Bloom plugin JAR is loaded and procedures are registered.
+
+    Independent of licensing: if InstallBloom was requested but the AMI was
+    missing the JAR, install_bloom in UserData emits a WARNING and continues,
+    leaving Bloom procedures unregistered. The license check would then be
+    skipped (no license secret) and the regression would land silently. This
+    check fails loudly in that case.
+    """
+    if not config.bloom_expected:
+        return
+    with reporter.test("Bloom plugin loaded") as ctx:
+        try:
+            with config.driver() as driver:
+                records, _, _ = driver.execute_query(
+                    "SHOW PROCEDURES YIELD name "
+                    "WHERE name STARTS WITH 'bloom.' "
+                    "RETURN count(name) AS n"
+                )
+                n = records[0]["n"] if records else 0
+                if n > 0:
+                    ctx.pass_(f"Bloom procedures registered: {n}")
+                else:
+                    ctx.fail(
+                        "No bloom.* procedures registered — Bloom JAR is "
+                        "missing from /var/lib/neo4j/plugins/ on the cluster."
+                    )
+        except Exception as exc:
+            ctx.fail(f"SHOW PROCEDURES for bloom.* failed: {exc}")
+
+
+def check_gds_plugin_loaded(config: StackConfig, reporter: TestReporter) -> None:
+    """Assert the Graph Data Science plugin is loaded.
+
+    Independent of GDS licensing. gds.version() is callable in Community mode
+    too, so it is the right smoke test for "is the JAR loaded" — distinct from
+    check_gds_license which proves the Enterprise licence has been accepted.
+    """
+    if not config.gds_expected:
+        return
+    with reporter.test("GDS plugin loaded") as ctx:
+        try:
+            with config.driver() as driver:
+                records, _, _ = driver.execute_query(
+                    "RETURN gds.version() AS version"
+                )
+                version = records[0]["version"] if records else None
+                if version:
+                    ctx.pass_(f"gds.version() returned {version}")
+                else:
+                    ctx.fail("gds.version() returned no rows")
+        except Exception as exc:
+            ctx.fail(
+                "gds.version() failed — GDS JAR is missing from "
+                f"/var/lib/neo4j/plugins/ on the cluster: {exc}"
+            )
+
+
 def check_bloom_license(config: StackConfig, reporter: TestReporter) -> None:
     """Assert Bloom reports a valid licence.
 
@@ -154,5 +212,7 @@ def run_simple_tests(config: StackConfig, reporter: TestReporter) -> None:
     check_auth(config, reporter)
     check_bolt(config, reporter)
     check_apoc(config, reporter)
+    check_bloom_plugin_loaded(config, reporter)
+    check_gds_plugin_loaded(config, reporter)
     check_bloom_license(config, reporter)
     check_gds_license(config, reporter)

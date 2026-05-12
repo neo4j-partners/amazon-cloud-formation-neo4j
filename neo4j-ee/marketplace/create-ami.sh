@@ -106,6 +106,24 @@ EXISTING_AMI=$(aws ec2 describe-images \
 if [ -n "${EXISTING_AMI}" ] && [ "${EXISTING_AMI}" != "None" ]; then
   echo "Found existing AMI with name '${AMI_NAME}': ${EXISTING_AMI}"
 
+  # Refuse to deregister the AMI if any launch template in this account still
+  # references it. Deregistering an in-use AMI orphans the launch template:
+  # ASGs cannot replace failed instances and resilience tests time out.
+  IN_USE_LT=$(aws ec2 describe-launch-template-versions \
+    --region "${REGION}" \
+    --filters "Name=image-id,Values=${EXISTING_AMI}" \
+    --query "LaunchTemplateVersions[].[LaunchTemplateId,VersionNumber]" \
+    --output text 2>/dev/null || true)
+
+  if [ -n "${IN_USE_LT}" ] && [ "${IN_USE_LT}" != "None" ]; then
+    echo "ERROR: AMI ${EXISTING_AMI} is still referenced by one or more launch templates:"
+    echo "${IN_USE_LT}"
+    echo ""
+    echo "Deregistering it would orphan the stacks using those launch templates."
+    echo "Tear down those stacks first, or build a new AMI name and update the deploy."
+    exit 1
+  fi
+
   SNAP_IDS=$(aws ec2 describe-images \
     --region "${REGION}" \
     --image-ids "${EXISTING_AMI}" \

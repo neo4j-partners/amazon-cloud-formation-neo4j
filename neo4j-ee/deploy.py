@@ -85,6 +85,18 @@ def parse_args():
     p.add_argument("--disk-size", type=int, metavar="GB", help="Data volume size in GB (default: 100, min: 100, max: 65536)")
     p.add_argument("--snapshot-id", metavar="SNAPSHOT_ID", help="Snapshot ID to restore Node 1 data volume from (must match --disk-size)")
     p.add_argument(
+        "--bloom-license-secret-id", metavar="SECRET",
+        help="Secrets Manager secret name or ARN holding the Bloom licence JWT. "
+             "When set, deploy.py installs the licence on each cluster node "
+             "post-deploy and restarts neo4j so Bloom enters Enterprise mode.",
+    )
+    p.add_argument(
+        "--gds-license-secret-id", metavar="SECRET",
+        help="Secrets Manager secret name or ARN holding the GDS Enterprise licence. "
+             "When set, deploy.py installs the licence on each cluster node "
+             "post-deploy so GDS enters Enterprise mode (gds.isLicensed() returns true).",
+    )
+    p.add_argument(
         "--vpc-file", metavar="PATH",
         help="Path to vpc-*.txt from scripts/create-test-vpc.py. "
              "Auto-detected from .deploy/vpc-*.txt when --mode ExistingVpc and --vpc-id is not provided. "
@@ -152,6 +164,184 @@ def generate_tls_cert(nlb_dns):
         serialization.NoEncryption(),
     ).decode()
     return cert_pem, key_pem
+
+
+def install_licenses(stack_name, region, bloom_secret, gds_secret):
+    """Rolling SSM install of Bloom and/or GDS licence files onto each cluster
+    instance. Skipped if both args are empty. Attaches a stack-role inline
+    policy granting secretsmanager:GetSecretValue on the requested secret
+    ARNs; SSM Run Command on each instance fetches via the role and writes
+    the licence to /var/lib/neo4j/licenses/, then restarts neo4j and waits
+    for target-group health. Verifies via cypher-shell on the first node.
+
+    Assumes the install-bloom upstream change is in the template — i.e., the
+    UserData already copies the plugin JARs and writes dbms.bloom.license_file
+    / gds.enterprise.license_file into neo4j.conf.
+    """
+    if not (bloom_secret or gds_secret):
+        return
+
+    print()
+    print("--- Licence install phase ---")
+    cfn = boto3.client("cloudformation", region_name=region)
+    iam = boto3.client("iam", region_name=region)
+    ec2 = boto3.client("ec2", region_name=region)
+    ssm = boto3.client("ssm", region_name=region)
+    elbv2 = boto3.client("elbv2", region_name=region)
+    sm = boto3.client("secretsmanager", region_name=region)
+
+    # Resolve names to ARNs so the IAM policy can be tightly scoped.
+    bloom_arn = sm.describe_secret(SecretId=bloom_secret)["ARN"] if bloom_secret else None
+    gds_arn = sm.describe_secret(SecretId=gds_secret)["ARN"] if gds_secret else None
+    arns = [a for a in (bloom_arn, gds_arn) if a]
+
+    role_name = cfn.describe_stack_resource(
+        StackName=stack_name, LogicalResourceId="Neo4jRole"
+    )["StackResourceDetail"]["PhysicalResourceId"]
+    print(f"Attaching inline policy 'Neo4jLicenseSecretsRead' to {role_name}")
+    iam.put_role_policy(
+        RoleName=role_name,
+        PolicyName="Neo4jLicenseSecretsRead",
+        PolicyDocument=json.dumps({
+            "Version": "2012-10-17",
+            "Statement": [{
+                "Sid": "ReadNeo4jLicenses",
+                "Effect": "Allow",
+                "Action": "secretsmanager:GetSecretValue",
+                "Resource": arns,
+            }],
+        }),
+    )
+
+    # Filter on Role=neo4j-cluster-node so bastion instances (created in --mode
+    # Private / ExistingVpc) are excluded — they use a different IAM role and
+    # the licence file isn't needed there.
+    reservations = ec2.describe_instances(
+        Filters=[
+            {"Name": "tag:aws:cloudformation:stack-name", "Values": [stack_name]},
+            {"Name": "tag:Role", "Values": ["neo4j-cluster-node"]},
+            {"Name": "instance-state-name", "Values": ["running"]},
+        ]
+    )["Reservations"]
+    instance_ids = sorted(
+        i["InstanceId"] for r in reservations for i in r["Instances"]
+    )
+    print(f"Cluster instances: {instance_ids}")
+
+    tg_http = cfn.describe_stack_resource(
+        StackName=stack_name, LogicalResourceId="Neo4jHTTPTargetGroup"
+    )["StackResourceDetail"]["PhysicalResourceId"]
+
+    # _fetch_secret retries 6x over 60s to absorb IAM propagation between
+    # put-role-policy and STS evaluating the new permission on the instance.
+    cmds = [
+        "set -euo pipefail",
+        (
+            "_fetch_secret() { local arn=$1 dest=$2; for i in 1 2 3 4 5 6; do "
+            f"if aws secretsmanager get-secret-value --region {region} "
+            "--secret-id \"$arn\" --query SecretString --output text "
+            "2>/tmp/getval.err | tr -d '\\n' > \"$dest\" && test -s \"$dest\"; "
+            "then return 0; fi; echo \"  fetch $arn attempt $i: $(cat /tmp/getval.err)\"; "
+            "sleep 10; done; echo \"ERROR: could not fetch $arn after 6 attempts\"; "
+            "return 1; }"
+        ),
+        "mkdir -p /var/lib/neo4j/licenses",
+    ]
+    if bloom_arn:
+        cmds += [
+            f"_fetch_secret '{bloom_arn}' /var/lib/neo4j/licenses/neo4j-bloom.license",
+            "chown neo4j:neo4j /var/lib/neo4j/licenses/neo4j-bloom.license",
+            "chmod 640 /var/lib/neo4j/licenses/neo4j-bloom.license",
+        ]
+    if gds_arn:
+        cmds += [
+            f"_fetch_secret '{gds_arn}' /var/lib/neo4j/licenses/neo4j-gds.license",
+            "chown neo4j:neo4j /var/lib/neo4j/licenses/neo4j-gds.license",
+            "chmod 640 /var/lib/neo4j/licenses/neo4j-gds.license",
+        ]
+    cmds += [
+        "systemctl restart neo4j",
+        ("for i in $(seq 1 60); do curl -sf http://localhost:7474/ -o /dev/null "
+         "&& break; sleep 5; done"),
+        "curl -sf http://localhost:7474/ -o /dev/null",
+    ]
+
+    for inst in instance_ids:
+        print(f"\n>> SSM licence install on {inst}")
+        cmd_id = ssm.send_command(
+            InstanceIds=[inst],
+            DocumentName="AWS-RunShellScript",
+            Parameters={"commands": cmds},
+            TimeoutSeconds=600,
+        )["Command"]["CommandId"]
+        _wait_ssm(ssm, cmd_id, inst)
+        _wait_tg_healthy(elbv2, tg_http, inst)
+
+    print("\n--- Verifying licences via cypher-shell on first node ---")
+    verify_cmds = [
+        "set -uo pipefail",
+        (
+            f"export NEO4J_PASSWORD=$(aws secretsmanager get-secret-value "
+            f"--region {region} --secret-id neo4j/{stack_name}/password "
+            f"--query SecretString --output text)"
+        ),
+    ]
+    if bloom_arn:
+        verify_cmds += [
+            "echo '--- bloom.checkLicenseCompliance ---'",
+            ("cypher-shell -a neo4j://localhost:7687 -u neo4j --format plain "
+             "--non-interactive 'CALL bloom.checkLicenseCompliance();'"),
+        ]
+    if gds_arn:
+        verify_cmds += [
+            "echo '--- gds.isLicensed ---'",
+            ("cypher-shell -a neo4j://localhost:7687 -u neo4j --format plain "
+             "--non-interactive 'RETURN gds.isLicensed() AS isLicensed;'"),
+            "echo '--- gds.debug.sysInfo gdsEdition ---'",
+            ("cypher-shell -a neo4j://localhost:7687 -u neo4j --format plain "
+             "--non-interactive \"CALL gds.debug.sysInfo() YIELD key, value "
+             "WHERE key = 'gdsEdition' RETURN key, value;\""),
+        ]
+    cmd_id = ssm.send_command(
+        InstanceIds=[instance_ids[0]],
+        DocumentName="AWS-RunShellScript",
+        Parameters={"commands": verify_cmds},
+        TimeoutSeconds=120,
+    )["Command"]["CommandId"]
+    _wait_ssm(ssm, cmd_id, instance_ids[0])
+    print(ssm.get_command_invocation(
+        CommandId=cmd_id, InstanceId=instance_ids[0],
+    )["StandardOutputContent"])
+
+
+def _wait_ssm(ssm, cmd_id, instance_id):
+    while True:
+        try:
+            inv = ssm.get_command_invocation(CommandId=cmd_id, InstanceId=instance_id)
+        except ssm.exceptions.InvocationDoesNotExist:
+            # SSM SendCommand returns a CommandId synchronously, but the
+            # per-instance invocation record isn't created until the SSM agent
+            # picks the command up — usually a few seconds. Retry until it
+            # appears.
+            time.sleep(5)
+            continue
+        if inv["Status"] == "Success":
+            return
+        if inv["Status"] in ("Failed", "Cancelled", "TimedOut"):
+            print(inv["StandardOutputContent"])
+            print(inv["StandardErrorContent"], file=sys.stderr)
+            sys.exit(f"ERROR: SSM command {cmd_id} on {instance_id}: {inv['Status']}")
+        time.sleep(5)
+
+
+def _wait_tg_healthy(elbv2, tg_arn, instance_id, attempts=30, delay=10):
+    for _ in range(attempts):
+        targets = elbv2.describe_target_health(TargetGroupArn=tg_arn)["TargetHealthDescriptions"]
+        for t in targets:
+            if t["Target"]["Id"] == instance_id and t["TargetHealth"]["State"] == "healthy":
+                return
+        time.sleep(delay)
+    sys.exit(f"ERROR: {instance_id} did not reach healthy in target group")
 
 
 def main():
@@ -469,6 +659,13 @@ def main():
         print("TLS enabled on Bolt. To activate on the Lambda:")
         print(f"  cd {SCRIPT_DIR}/sample-private-app && cdk deploy")
         print("(neo4j-ca.crt is already staged in the lambda/ directory)")
+
+    install_licenses(
+        stack_name=stack_name,
+        region=region,
+        bloom_secret=args.bloom_license_secret_id,
+        gds_secret=args.gds_license_secret_id,
+    )
 
     deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
     os.makedirs(deploy_dir, exist_ok=True)

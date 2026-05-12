@@ -185,6 +185,8 @@ def _assemble_public() -> str:
         "\n",
         _read("password-secret.yaml"),
         "\n",
+        _read("stack-config-public.yaml"),
+        "\n",
         _read("observability.yaml"),
         "\n",
         "Outputs:\n",

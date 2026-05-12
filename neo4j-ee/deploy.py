@@ -702,6 +702,13 @@ def main():
         extra.extend([("CopiedAmiId", cleanup_state["copied_ami_id"]), ("SourceRegion", SOURCE_REGION)])
     if bolt_tls_secret_arn:
         extra.append(("BoltTlsSecretArn", bolt_tls_secret_arn))
+    # Recorded so test_neo4j can detect a licensed deploy and run the Bloom/GDS
+    # Enterprise-mode assertions; absent fields mean the licence install phase
+    # was skipped.
+    if args.bloom_license_secret_id:
+        extra.append(("BloomLicenseSecretId", args.bloom_license_secret_id))
+    if args.gds_license_secret_id:
+        extra.append(("GdsLicenseSecretId", args.gds_license_secret_id))
     extra.append(("StackID", stack_data["StackId"]))
 
     lines += [f"{k:<20} = {v}" for k, v in extra]

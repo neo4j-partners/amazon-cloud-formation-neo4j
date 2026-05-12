@@ -50,6 +50,10 @@ class StackConfig:
     host: str         # bare hostname extracted from browser_url
     edition: str      # "ce" or "ee"
     number_of_servers: int  # 1 or 3 for EE
+    # Set when deploy.py installed a licence via --bloom-license-secret-id /
+    # --gds-license-secret-id; absence means the licence checks are skipped.
+    bloom_licensed: bool
+    gds_licensed: bool
 
     @contextlib.contextmanager
     def driver(self) -> Iterator[Driver]:
@@ -137,4 +141,6 @@ def load_config(
         host=host,
         edition=edition,
         number_of_servers=number_of_servers,
+        bloom_licensed=bool(fields.get("BloomLicenseSecretId")),
+        gds_licensed=bool(fields.get("GdsLicenseSecretId")),
     )

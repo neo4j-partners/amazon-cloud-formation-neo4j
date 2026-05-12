@@ -1,4 +1,6 @@
-"""Simple connectivity tests: HTTP API, authentication, Bolt, and APOC."""
+"""Simple connectivity tests: HTTP API, authentication, Bolt, APOC, and
+optional Bloom/GDS Enterprise licence assertions (gated on the deploy outputs
+file recording a licence secret ID)."""
 
 from __future__ import annotations
 
@@ -89,9 +91,68 @@ def check_apoc(config: StackConfig, reporter: TestReporter) -> None:
             ctx.fail(f"APOC query failed: {exc}")
 
 
+def check_bloom_license(config: StackConfig, reporter: TestReporter) -> None:
+    """Assert Bloom reports a valid licence.
+
+    bloom.checkLicenseCompliance() returns status="valid" when the licence
+    file is present at the path configured by dbms.bloom.license_file and
+    the JWT validates. Without a licence it reports "missing" — gds.version()
+    style smoke tests would not catch this regression.
+    """
+    if not config.bloom_licensed:
+        return
+    with reporter.test("Bloom Enterprise licence") as ctx:
+        try:
+            with config.driver() as driver:
+                records, _, _ = driver.execute_query(
+                    "CALL bloom.checkLicenseCompliance()"
+                )
+                status = records[0]["status"] if records else None
+                if status == "valid":
+                    ctx.pass_(f"bloom.checkLicenseCompliance status={status}")
+                else:
+                    ctx.fail(f"bloom.checkLicenseCompliance status={status!r}")
+        except Exception as exc:
+            ctx.fail(f"bloom.checkLicenseCompliance failed: {exc}")
+
+
+def check_gds_license(config: StackConfig, reporter: TestReporter) -> None:
+    """Assert GDS is in Enterprise mode.
+
+    gds.version() returns a version in Community mode too, so two independent
+    checks are required: gds.isLicensed() must return TRUE, and the gdsEdition
+    sysInfo key must report "Licensed".
+    """
+    if not config.gds_licensed:
+        return
+    with reporter.test("GDS Enterprise licence") as ctx:
+        try:
+            with config.driver() as driver:
+                records, _, _ = driver.execute_query(
+                    "RETURN gds.isLicensed() AS isLicensed"
+                )
+                is_licensed = records[0]["isLicensed"] if records else None
+                if is_licensed is not True:
+                    ctx.fail(f"gds.isLicensed() returned {is_licensed!r}")
+                    return
+                records, _, _ = driver.execute_query(
+                    "CALL gds.debug.sysInfo() YIELD key, value "
+                    "WHERE key = 'gdsEdition' RETURN value AS edition"
+                )
+                edition = records[0]["edition"] if records else None
+                if edition == "Licensed":
+                    ctx.pass_("gds.isLicensed=TRUE, gdsEdition=Licensed")
+                else:
+                    ctx.fail(f"gdsEdition={edition!r} (expected 'Licensed')")
+        except Exception as exc:
+            ctx.fail(f"GDS licence query failed: {exc}")
+
+
 def run_simple_tests(config: StackConfig, reporter: TestReporter) -> None:
     """Run all simple connectivity tests in order."""
     check_http_api(config, reporter)
     check_auth(config, reporter)
     check_bolt(config, reporter)
     check_apoc(config, reporter)
+    check_bloom_license(config, reporter)
+    check_gds_license(config, reporter)

@@ -113,6 +113,28 @@ fi
 echo ""
 
 # ---------------------------------------------------------------------------
+# Step 0: Detach the licence-secrets inline policy from Neo4jRole.
+#
+# deploy.py --bloom-license-secret-id / --gds-license-secret-id attaches an
+# inline policy named "Neo4jLicenseSecretsRead" to the stack-managed Neo4jRole
+# via IAM:PutRolePolicy. CFN does not know about it, and the role cannot be
+# deleted while an out-of-band inline policy is present, so the stack delete
+# would stall. Remove it first; both calls are idempotent and stay silent when
+# the policy was never attached.
+# ---------------------------------------------------------------------------
+ROLE_NAME=$(aws cloudformation describe-stack-resource \
+  --region "${REGION}" \
+  --stack-name "${STACK_NAME}" \
+  --logical-resource-id Neo4jRole \
+  --query "StackResourceDetail.PhysicalResourceId" \
+  --output text 2>/dev/null || true)
+if [ -n "${ROLE_NAME}" ] && [ "${ROLE_NAME}" != "None" ]; then
+  aws iam delete-role-policy \
+    --role-name "${ROLE_NAME}" \
+    --policy-name Neo4jLicenseSecretsRead 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------------------
 # Step 1: Delete the CloudFormation stack
 # ---------------------------------------------------------------------------
 echo "Deleting stack ${STACK_NAME}..."

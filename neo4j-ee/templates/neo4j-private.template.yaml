@@ -844,13 +844,25 @@ Resources:
                   cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true
                 }
                 install_bloom() {
-                  echo "Installing Bloom plugin..."
-                  cp /var/lib/neo4j/products/bloom-plugin-*.jar /var/lib/neo4j/plugins/
+                  local jar
+                  jar=$(ls /var/lib/neo4j/products/bloom-plugin-*.jar 2>/dev/null | head -1 || true)
+                  if [ -z "$jar" ]; then
+                    echo "WARNING: Bloom plugin JAR not found in /var/lib/neo4j/products/; skipping install"
+                    return 0
+                  fi
+                  echo "Installing Bloom plugin from $jar..."
+                  cp "$jar" /var/lib/neo4j/plugins/
                   chown neo4j:neo4j /var/lib/neo4j/plugins/bloom-plugin-*.jar
                 }
                 install_gds() {
-                  echo "Installing Graph Data Science plugin..."
-                  cp /var/lib/neo4j/products/neo4j-graph-data-science-*.jar /var/lib/neo4j/plugins/
+                  local jar
+                  jar=$(ls /var/lib/neo4j/products/neo4j-graph-data-science-*.jar 2>/dev/null | head -1 || true)
+                  if [ -z "$jar" ]; then
+                    echo "WARNING: GDS plugin JAR not found in /var/lib/neo4j/products/; skipping install"
+                    return 0
+                  fi
+                  echo "Installing Graph Data Science plugin from $jar..."
+                  cp "$jar" /var/lib/neo4j/plugins/
                 }
                 extension_config() {
                   echo Configuring extensions and security in neo4j.conf...

@@ -53,6 +53,9 @@ _PREAMBLE_COMMON = [
     '"installGDS="',
     "Ref: InstallGDS",
     '"\\n"',
+    '"installBloom="',
+    "Ref: InstallBloom",
+    '"\\n"',
 ]
 
 # Present in all three templates — Bolt over an internet-facing NLB must be

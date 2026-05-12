@@ -41,7 +41,7 @@ class StackConfig:
     """Immutable configuration parsed from deploy.sh output (.deploy/<stack>.txt)."""
 
     browser_url: str  # e.g. http://<host>:7474
-    neo4j_uri: str    # e.g. neo4j://<host>:7687
+    neo4j_uri: str    # e.g. neo4j://<host>:7687 or neo4j+ssc://<host>:7687
     username: str
     password: str
     stack_name: str
@@ -54,6 +54,23 @@ class StackConfig:
     # --gds-license-secret-id; absence means the licence checks are skipped.
     bloom_licensed: bool
     gds_licensed: bool
+    # Bloom plugin is installed unconditionally on the EE templates' UserData,
+    # so this is expected to be True on every EE deploy; the field exists so
+    # CE deploys can opt out and so future template changes that drop Bloom
+    # can be reflected by deploy.py without touching the test runner.
+    bloom_expected: bool
+    # gds_expected mirrors the InstallGDS template parameter recorded by
+    # deploy.py; the GDS plugin install is gated on this in the UserData.
+    gds_expected: bool
+    # bolt_tls_enabled is True when deploy.py installed a Bolt TLS certificate
+    # (recorded as BoltTlsSecretArn). When True the runner uses the +ssc Bolt
+    # scheme so the Neo4j driver tolerates the self-signed cert.
+    bolt_tls_enabled: bool
+    # AMI used by the running cluster instances; "local" when built by
+    # marketplace/create-ami.sh (Marketplace or iteration mode), "marketplace"
+    # when sourced from the live Marketplace listing via --marketplace.
+    ami_id: str
+    ami_source: str
 
     @contextlib.contextmanager
     def driver(self) -> Iterator[Driver]:
@@ -117,6 +134,13 @@ def load_config(
 
     install_apoc = fields.get("InstallAPOC", "no").lower() == "yes"
 
+    # deploy.py records BoltTlsSecretArn when --tls was used; in that mode the
+    # stack enforces server.bolt.tls_level=REQUIRED so the runner has to use the
+    # +ssc scheme to tolerate the self-signed cert generated at deploy time.
+    bolt_tls_enabled = bool(fields.get("BoltTlsSecretArn"))
+    if bolt_tls_enabled and neo4j_uri.startswith("neo4j://"):
+        neo4j_uri = "neo4j+ssc://" + neo4j_uri[len("neo4j://"):]
+
     password = (
         password_override
         if password_override is not None
@@ -143,4 +167,9 @@ def load_config(
         number_of_servers=number_of_servers,
         bloom_licensed=bool(fields.get("BloomLicenseSecretId")),
         gds_licensed=bool(fields.get("GdsLicenseSecretId")),
+        bloom_expected=fields.get("BloomExpected", "yes" if edition == "ee" else "no").lower() == "yes",
+        gds_expected=fields.get("InstallGDS", "false").lower() == "true",
+        bolt_tls_enabled=bolt_tls_enabled,
+        ami_id=fields.get("AmiId", ""),
+        ami_source=fields.get("AmiSource", ""),
     )

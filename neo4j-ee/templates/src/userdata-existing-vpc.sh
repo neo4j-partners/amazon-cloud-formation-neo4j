@@ -48,13 +48,15 @@ install_gds() {
 }
 extension_config() {
   echo Configuring extensions and security in neo4j.conf...
-  set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
-  # Bloom and GDS Enterprise do not auto-discover their licence files.
-  # Without these settings, bloom.checkLicenseCompliance() returns "missing"
-  # and gds.isLicensed() returns false even when the licence files are on disk.
-  # Matches the canonical config keys used by neo4j/docker-neo4j and
-  # neo4j/helm-charts (examples/bloom-gds-license/gds-bloom-with-license.yaml).
-  set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
+  if [[ "${installBloom}" == "true" ]]; then
+    set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
+    # Bloom and GDS Enterprise do not auto-discover their licence files.
+    # Without these settings, bloom.checkLicenseCompliance() returns "missing"
+    # and gds.isLicensed() returns false even when the licence files are on disk.
+    # Matches the canonical config keys used by neo4j/docker-neo4j and
+    # neo4j/helm-charts (examples/bloom-gds-license/gds-bloom-with-license.yaml).
+    set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
+  fi
   if [[ "${installGDS}" == "true" ]]; then
     set_neo4j_conf gds.enterprise.license_file /var/lib/neo4j/licenses/neo4j-gds.license
   fi
@@ -202,7 +204,9 @@ install_cloudwatch_agent
 attach_and_mount_data_volume
 install_neo4j_from_yum
 install_apoc
-install_bloom
+if [[ "${installBloom}" == "true" ]]; then
+  install_bloom
+fi
 if [[ "${installGDS}" == "true" ]]; then
   install_gds
 fi

@@ -114,6 +114,17 @@ Parameters:
     AllowedValues:
       - 'true'
       - 'false'
+  InstallBloom:
+    Description: >-
+      Install the Neo4j Bloom plugin at deploy time. Defaults to true so existing
+      deploys keep the plugin available; set to false to skip the JAR install
+      entirely. The Bloom JAR is staged in the AMI; setting this to false also
+      removes the JAR from /var/lib/neo4j/plugins.
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
   Node1SnapshotId:
     Description: >-
       Optional. Snapshot ID to restore Node 1's data volume from. Leave blank
@@ -603,6 +614,9 @@ Resources:
               - "installGDS="
               - Ref: InstallGDS
               - "\n"
+              - "installBloom="
+              - Ref: InstallBloom
+              - "\n"
               - "boltCertArn="
               - Ref: BoltCertificateSecretArn
               - "\n"
@@ -782,13 +796,15 @@ Resources:
                 }
                 extension_config() {
                   echo Configuring extensions and security in neo4j.conf...
-                  set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
-                  # Bloom and GDS Enterprise do not auto-discover their licence files.
-                  # Without these settings, bloom.checkLicenseCompliance() returns "missing"
-                  # and gds.isLicensed() returns false even when the licence files are on disk.
-                  # Matches the canonical config keys used by neo4j/docker-neo4j and
-                  # neo4j/helm-charts (examples/bloom-gds-license/gds-bloom-with-license.yaml).
-                  set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
+                  if [[ "${installBloom}" == "true" ]]; then
+                    set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
+                    # Bloom and GDS Enterprise do not auto-discover their licence files.
+                    # Without these settings, bloom.checkLicenseCompliance() returns "missing"
+                    # and gds.isLicensed() returns false even when the licence files are on disk.
+                    # Matches the canonical config keys used by neo4j/docker-neo4j and
+                    # neo4j/helm-charts (examples/bloom-gds-license/gds-bloom-with-license.yaml).
+                    set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
+                  fi
                   if [[ "${installGDS}" == "true" ]]; then
                     set_neo4j_conf gds.enterprise.license_file /var/lib/neo4j/licenses/neo4j-gds.license
                   fi
@@ -936,7 +952,9 @@ Resources:
                 attach_and_mount_data_volume
                 install_neo4j_from_yum
                 install_apoc
-                install_bloom
+                if [[ "${installBloom}" == "true" ]]; then
+                  install_bloom
+                fi
                 if [[ "${installGDS}" == "true" ]]; then
                   install_gds
                 fi
@@ -1283,6 +1301,9 @@ Resources:
       TreatMissingData: notBreaching
 
 Outputs:
+  Neo4jInternalDNS:
+    Description: NLB DNS name (canonical host across all EE templates)
+    Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
   Neo4jBrowserURL:
     Description: URL for Neo4j Browser
     Value: !Join

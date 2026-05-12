@@ -65,6 +65,17 @@
     AllowedValues:
       - 'true'
       - 'false'
+  InstallBloom:
+    Description: >-
+      Install the Neo4j Bloom plugin at deploy time. Defaults to true so existing
+      deploys keep the plugin available; set to false to skip the JAR install
+      entirely. The Bloom JAR is staged in the AMI; setting this to false also
+      removes the JAR from /var/lib/neo4j/plugins.
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
   Node1SnapshotId:
     Description: >-
       Optional. Snapshot ID to restore Node 1's data volume from. Leave blank

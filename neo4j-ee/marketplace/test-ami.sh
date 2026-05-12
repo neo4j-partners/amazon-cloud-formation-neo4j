@@ -5,7 +5,8 @@
 # over SSM (no SSH key or port 22 required), reports pass/fail, and
 # cleans up.
 #
-# The EE AMI is a base OS image only (SSH hardening + OS patches).
+# The EE AMI is a base OS image with SSH hardening, OS patches, and static
+# deployment tooling pre-baked.
 # Neo4j Enterprise is installed at deploy time via CloudFormation UserData,
 # so this script only verifies the base image properties.
 #
@@ -211,7 +212,29 @@ COMMAND_ID=$(aws ssm send-command \
     "grep -i UseDNS /etc/ssh/sshd_config | head -5",
     "echo \"\"",
     "echo \"=== CHECK 4: OS identity ===\"",
-    "cat /etc/os-release 2>&1 | head -5 || echo FAIL: cannot read os-release"
+    "cat /etc/os-release 2>&1 | head -5 || echo FAIL: cannot read os-release",
+    "echo \"\"",
+    "echo \"=== CHECK 5: Running kernel ===\"",
+    "uname -r",
+    "echo \"\"",
+    "echo \"=== CHECK 6: AWS CLI v2 installed, v1 package absent ===\"",
+    "aws --version 2>&1 || echo FAIL: aws command missing",
+    "rpm -q awscli && echo FAIL: awscli v1 package present || echo PASS: awscli v1 package absent",
+    "echo \"\"",
+    "echo \"=== CHECK 7: Pre-baked tools ===\"",
+    "command -v jq && jq --version",
+    "command -v python3.11 && python3.11 --version",
+    "command -v unzip && unzip -v | head -1",
+    "test -x /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl && echo PASS: CloudWatch agent control binary present",
+    "echo \"\"",
+    "echo \"=== CHECK 8: Neo4j repo and system user ===\"",
+    "test -f /etc/yum.repos.d/neo4j.repo && echo PASS: Neo4j repo present",
+    "getent passwd neo4j",
+    "getent group neo4j",
+    "echo \"\"",
+    "echo \"=== CHECK 9: Volume helper prerequisites ===\"",
+    "test -x /sbin/ebsnvme-id && echo PASS: ebsnvme-id present",
+    "command -v mkfs.xfs && echo PASS: mkfs.xfs present"
   ]' \
   --query "Command.CommandId" \
   --output text)
@@ -291,6 +314,53 @@ else
   echo "  FAIL: OS does not appear to be Amazon Linux 2023"
   FAILURES=$((FAILURES + 1))
 fi
+
+KERNEL_VERSION=$(echo "${COMMAND_OUTPUT}" | awk '/^=== CHECK 5: Running kernel ===/{getline; print; exit}')
+KERNEL_MIN="6.1.168-203.330.amzn2023"
+if [ -n "${KERNEL_VERSION}" ] && [ "$(printf '%s\n%s\n' "${KERNEL_MIN}" "${KERNEL_VERSION}" | sort -V | head -1)" = "${KERNEL_MIN}" ]; then
+  echo "  PASS: Running kernel is ${KERNEL_VERSION}"
+else
+  echo "  FAIL: Running kernel '${KERNEL_VERSION}' is older than ${KERNEL_MIN}"
+  FAILURES=$((FAILURES + 1))
+fi
+
+if echo "${COMMAND_OUTPUT}" | grep -q "aws-cli/2"; then
+  echo "  PASS: AWS CLI v2 is installed"
+else
+  echo "  FAIL: AWS CLI v2 is missing"
+  FAILURES=$((FAILURES + 1))
+fi
+
+if echo "${COMMAND_OUTPUT}" | grep -q "PASS: awscli v1 package absent"; then
+  echo "  PASS: awscli v1 package is absent"
+else
+  echo "  FAIL: awscli v1 package may still be present"
+  FAILURES=$((FAILURES + 1))
+fi
+
+for expected in \
+  "PASS: CloudWatch agent control binary present" \
+  "PASS: Neo4j repo present" \
+  "neo4j:x:500:500" \
+  "neo4j:x:500:" \
+  "PASS: ebsnvme-id present" \
+  "PASS: mkfs.xfs present"; do
+  if echo "${COMMAND_OUTPUT}" | grep -q "${expected}"; then
+    echo "  PASS: ${expected#PASS: }"
+  else
+    echo "  FAIL: Missing expected output '${expected}'"
+    FAILURES=$((FAILURES + 1))
+  fi
+done
+
+for tool in jq python3.11 unzip; do
+  if echo "${COMMAND_OUTPUT}" | grep -q "/${tool}"; then
+    echo "  PASS: ${tool} is installed"
+  else
+    echo "  FAIL: ${tool} is missing"
+    FAILURES=$((FAILURES + 1))
+  fi
+done
 
 echo "============================================="
 echo ""

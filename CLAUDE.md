@@ -22,12 +22,6 @@ All commands run from the edition directory (e.g., `neo4j-ce/`):
 # Test AMI (SSM-based, no SSH)
 ./marketplace/test-ami.sh
 
-# Deploy stack (reads marketplace/ami-id.txt, writes .deploy/<stack-name>.txt)
-./deploy.py                        # default: t3.medium, random region
-./deploy.py r8i                    # memory optimized: r8i.large
-./deploy.py --region eu-west-1     # specific region (AMI auto-copied)
-./deploy.py r8i --region us-east-2 # both
-
 # Test stack (reads .deploy/<stack-name>.txt)
 cd test_ce
 uv run test-ce                           # full: latest deploy

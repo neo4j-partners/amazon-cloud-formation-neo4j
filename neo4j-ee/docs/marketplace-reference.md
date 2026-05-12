@@ -4,17 +4,24 @@ Reference document for the three-template split. Covers the key design decisions
 
 ---
 
-## Network Encryption Requirement
+## Network Encryption Guidance
 
-AWS Marketplace explicitly requires end-to-end encryption for network traffic. From the official AMI best practices:
+AWS Marketplace AMI policy pages distinguish mandatory product requirements from recommended best practices. The current AMI requirements page does not appear to state a blanket hard rejection rule for every plaintext application protocol, but the official AMI best practices recommend encrypting network traffic with SSL/TLS where possible and using valid, up-to-date certificates.
 
-> "Whenever possible, use end-to-end encryption for network traffic. For example, use Secure Sockets Layer (SSL) to secure HTTP sessions between you and your buyers. Ensure that your service uses only valid and up-to-date certificates."
->
-> — [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html)
+The same best-practices page also tells sellers to document the minimum required ports and recommended source IP ranges for administrative access. Those controls are necessary, but they are not substitutes for encryption in transit. A security group `AllowedCIDR` restriction controls which source IPs can initiate a connection at the AWS network layer; it does not encrypt traffic. An attacker controlling a permitted client, a routed network segment, a traffic mirror, or a compromised workload in the same reachable private network can read Neo4j credentials, Cypher queries, and query results in plaintext.
 
-A security group `AllowedCIDR` restriction does not satisfy this requirement. It controls which source IPs can initiate a connection at the AWS network layer, but it does not encrypt traffic. An attacker controlling any network hop between the buyer's client and the EC2 instance, including ISPs, corporate routers, and VPN exit nodes, can read Neo4j credentials, Cypher queries, and query results in plaintext. This is true even when `AllowedCIDR` is locked to a single `/32` address.
+The practical consequence for this listing: TLS is mandatory for the private templates and opt-in for the public evaluation template. When TLS is enabled, the NLB terminates client TLS on 7473 (HTTPS Browser) and 7687 (Bolt) using a customer-supplied ACM cert that matches the AdvertisedDNS SAN, and the target groups open separate TLS connections to self-signed backend certs generated on each instance. Traffic is encrypted from client to NLB and from NLB to instance, without implying one uninterrupted client-to-instance TLS session.
 
-The practical consequence for this listing: plain HTTP on port 7474 and unencrypted `neo4j://` Bolt on port 7687 do not meet the Marketplace standard. TLS must be enabled on both ports for any deployment topology intended for production use.
+Related Marketplace policy points:
+
+- AMIs must comply with the current AWS Marketplace product requirements, and AWS says those policies are regularly updated to align with evolving security guidelines.
+- Password-based authentication for instance services is prohibited, with limited exceptions for non-administrative application access when strong one-time passwords are used and changed immediately after first login.
+- Products with deployment-time external dependencies must disclose those dependencies, and sellers are responsible for their availability and security.
+
+References:
+
+- [AMI-based product requirements for AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/product-and-ami-policies.html)
+- [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html)
 
 ---
 
@@ -22,7 +29,7 @@ The practical consequence for this listing: plain HTTP on port 7474 and unencryp
 
 ### TLS availability
 
-TLS parameters (`BoltCertificateSecretArn`, `BoltAdvertisedDNS`) are present in all three templates as optional fields that default to empty. Both private templates highlight TLS in their operator guides because production and regulated workloads commonly require it. The public template includes the same parameters for buyers who choose to enable TLS on an evaluation deployment.
+TLS parameters (`CertificateArn`, `AdvertisedDNS`) are required for the Private and ExistingVpc templates. The Public template defaults to plaintext Browser/Bolt for evaluation and exposes `EnableTLS` as an opt-in. When `EnableTLS=true`, buyers must provide an ACM certificate whose SAN matches `AdvertisedDNS`; the NLB uses that certificate on 7473 and 7687 and opens separate TLS connections to each instance. The Public template does not create public DNS records.
 
 ### AllowedCIDR default
 
@@ -57,7 +64,7 @@ AllowedCIDR:
   ConstraintDescription: The value 0.0.0.0/0 is not permitted.
 ```
 
-The external security group applies this CIDR to Neo4j ports 7474 (HTTP) and 7687 (Bolt). Intra-cluster ports (5000, 6000, 7000, 7688, 2003, 2004, 3637) are restricted to the internal security group using a self-referential ingress rule. No port 22 ingress is created; operator access goes through SSM Session Manager.
+The NLB security group applies this CIDR to Neo4j Browser and Bolt ports. Private templates use 7473 (HTTPS) and 7687 (Bolt). The Public template uses 7474/7687 by default and 7473/7687 when public TLS is enabled. The instance-facing external security group accepts those ports only from the NLB security group. Intra-cluster ports (5000, 6000, 7000, 7688, 2003, 2004, 3637) are restricted to the internal security group using a self-referential ingress rule. No port 22 ingress is created; operator access goes through SSM Session Manager.
 
 ### IAM least privilege
 
@@ -66,7 +73,7 @@ EC2 instances must use an IAM role, not long-term access keys. Each permission m
 - CloudFormation signaling: restrict to the current stack ARN using `!Sub`.
 - EBS operations (`ec2:AttachVolume`, `ec2:DescribeVolumes`, `ec2:DescribeInstances`): resource `*` is acceptable because EBS volumes lack ARN-level scoping on all relevant APIs.
 - Auto Scaling discovery (`autoscaling:DescribeAutoScalingGroups`): required for cluster node discovery; resource `*` is unavoidable.
-- Secrets Manager (`secretsmanager:GetSecretValue`): always scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`); additionally scoped to the Bolt TLS cert ARN when TLS is enabled using `!If [BoltTLSEnabled, !Ref BoltCertificateSecretArn, !Ref AWS::NoValue]`.
+- Secrets Manager (`secretsmanager:GetSecretValue`): scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`). The TLS backend cert is generated on the instance at boot, not stored in Secrets Manager, so no additional secret read permission is required.
 
 ### Auto Scaling groups for all topologies
 
@@ -150,11 +157,13 @@ Metadata:
         Parameters:
           - AllowedCIDR
       - Label:
-          default: "TLS (optional)"
+          default: "TLS"
         Parameters:
-          - BoltCertificateSecretArn
-          - BoltAdvertisedDNS
+          - CertificateArn
+          - AdvertisedDNS
 ```
+
+For the Public template, include `EnableTLS` in the TLS group and keep the certificate fields optional unless that flag is true.
 
 ### Architectural diagrams
 
@@ -164,7 +173,7 @@ Each template requires a separate diagram submitted to the Marketplace seller po
 
 ## References
 
-1. [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html) — Official Marketplace AMI guidelines. Explicitly requires end-to-end encryption for network traffic; recommends SSL/TLS for HTTP sessions and valid, up-to-date certificates.
+1. [Best practices for building AMIs for use with AWS Marketplace](https://docs.aws.amazon.com/marketplace/latest/userguide/best-practices-for-building-your-amis.html) — Official Marketplace AMI guidelines. Recommends SSL/TLS for network traffic where possible and valid, up-to-date certificates.
 
 2. [CloudFormation Templates 101 for Sellers in AWS Marketplace](https://aws.amazon.com/blogs/awsmarketplace/cloudformation-templates-101-for-sellers-in-aws-marketplace/) — Covers IAM roles, Auto Scaling, password handling, and cluster deployment patterns for Marketplace sellers.
 

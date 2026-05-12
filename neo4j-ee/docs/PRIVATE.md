@@ -1,10 +1,22 @@
 # Neo4j EE: Private
 
-`neo4j-private.template.yaml` deploys a Neo4j Enterprise cluster in private subnets behind an internal Network Load Balancer. No instance has a public IP. Operator access runs through a dedicated `t4g.nano` bastion using AWS Systems Manager Session Manager. Use this topology for production, staging, and regulated workloads.
+`neo4j-private.template.yaml` deploys a Neo4j Enterprise cluster in private subnets behind an internal Network Load Balancer.
+
+- **What it deploys:** Neo4j EE cluster (1 or 3 nodes) in private subnets behind an internal NLB
+- **Public exposure:** none — no instance has a public IP
+- **Operator access:** dedicated `t4g.nano` bastion via AWS Systems Manager Session Manager
+- **When to use:** production, staging, and regulated workloads
+
+> **Marketplace operator** (deployed from AWS Marketplace, running stack):
+> Start with [Prerequisites](#prerequisites) and the [Operator Guide](#operator-guide) below.
+>
+> **Template developer** (working on the templates, deploying from source):
+> Start with [Local Deployment and Testing](#local-deployment-and-testing).
+> The [Operator Guide](#operator-guide) applies once your stack is running.
 
 ## Contents
 
-- [General Operator Guide](#general-operator-guide)
+- [Operator Guide](#operator-guide)
   - [Prerequisites](#prerequisites)
   - [Preflight Check](#preflight-check)
   - [Access via Bastion](#access-via-bastion)
@@ -21,11 +33,12 @@
   - [Operator Bastion: NLB Hairpin](#operator-bastion-nlb-hairpin)
   - [Platform Contract](#platform-contract)
   - [Password Security Model](#password-security-model)
-  - [Bolt TLS](#bolt-tls)
+  - [TLS Architecture](#tls-architecture)
 - [Local Deployment and Testing](#local-deployment-and-testing)
+  - [Set Up a Certificate](#set-up-a-certificate)
   - [Build](#build)
   - [Deploy](#deploy)
-  - [Add Bolt TLS (Optional)](#add-bolt-tls-optional)
+  - [Local Dry Run](#local-dry-run)
   - [Preflight and Basic Validation](#preflight-and-basic-validation)
   - [Smoke Test](#smoke-test)
   - [Failover Suite](#failover-suite)
@@ -35,7 +48,11 @@
 
 ---
 
-## General Operator Guide
+## Operator Guide
+
+Applies to any running private stack, whether deployed from the Marketplace or from source.
+
+All `uv run` commands (`admin-shell`, `run-cypher`, `validate-private`) must be run from `neo4j-ee/validate-private/`. Shell scripts under `scripts/` must be run from `neo4j-ee/validate-private/` as well.
 
 ### Prerequisites
 
@@ -45,8 +62,6 @@
 aws --version                                    # AWS CLI v2
 brew install --cask session-manager-plugin       # required for SSM port-forward tunnels
 session-manager-plugin --version
-brew install jq                                  # required for --tls cert packaging
-openssl version                                  # typically pre-installed on macOS
 ```
 
 **Python tooling**
@@ -62,10 +77,10 @@ These are the minimum permissions the operator's local IAM principal (user or as
 
 | Permission | Resource | Used by |
 |---|---|---|
-| `cloudformation:DescribeStacks`, `cloudformation:DescribeStackResources` | The stack ARN | `preflight.sh`, `deploy.py` (reads stack outputs) |
-| `ssm:SendCommand`, `ssm:GetCommandInvocation`, `ssm:StartSession`, `ssm:DescribeInstanceInformation` | The bastion instance | `browser-tunnel.sh`, `bolt-tunnel.sh`, `admin-shell`, `run-cypher`, `validate-private`, `preflight.sh` (bastion ping check) |
+| `cloudformation:DescribeStacks`, `cloudformation:DescribeStackResources` | The stack ARN | `uv run preflight`, `deploy.py` (reads stack outputs) |
+| `ssm:SendCommand`, `ssm:GetCommandInvocation`, `ssm:StartSession`, `ssm:DescribeInstanceInformation` | The bastion instance | `uv run scripts/browser-tunnel.py`, `uv run scripts/bolt-tunnel.py`, `admin-shell`, `run-cypher`, `validate-private`, `uv run preflight` (bastion ping check) |
 | `ssm:GetParameter`, `ssm:GetParametersByPath` | `/neo4j-ee/<stack-name>/*` | Any tool that resolves the NLB DNS or security group IDs from the platform contract |
-| `secretsmanager:GetSecretValue`, `secretsmanager:DescribeSecret` | `neo4j/<stack-name>/password` | `get-password.sh`, `preflight.sh` (secret existence check) |
+| `secretsmanager:GetSecretValue`, `secretsmanager:DescribeSecret` | `neo4j/<stack-name>/password` | `get-password.sh`, `uv run preflight` (secret existence check) |
 
 ### Preflight Check
 
@@ -73,8 +88,8 @@ Before running any other tool, confirm the stack and bastion are ready:
 
 ```bash
 cd neo4j-ee/validate-private
-./scripts/preflight.sh                     # most recent deployment
-./scripts/preflight.sh <stack-name>        # specific deployment
+uv run preflight                     # most recent deployment
+uv run preflight <stack-name>        # specific deployment
 ```
 
 Expected output on a healthy stack:
@@ -91,7 +106,7 @@ Expected output on a healthy stack:
   [PASS] neo4j Python driver installed on bastion
   [PASS] cypher-shell installed on bastion
   [PASS] Secret 'neo4j/test-ee-1776575131/password' exists
-  [PASS] Contract SSM params: vpc-id, nlb-dns, external-sg-id, password-secret-arn, vpc-endpoint-sg-id
+  [PASS] Contract SSM params: vpc-id, nlb-dns, advertised-dns, external-sg-id, password-secret-arn, vpc-endpoint-sg-id
   [INFO] Operational SSM params: region, stack-name, private-subnet-1-id, private-subnet-2-id
   [PASS] VPC interface endpoints: secretsmanager, logs, ssm, ssmmessages
   [PASS] Endpoint reachable: secretsmanager.us-east-1.amazonaws.com
@@ -106,43 +121,57 @@ If the bastion SSM check fails immediately after a fresh deploy, the bastion Use
 
 ### Access via Bastion
 
-Instances have no public IP. All operator access goes through the `t4g.nano` bastion via SSM Session Manager.
+All operator access goes through the `t4g.nano` bastion via SSM. Tunnels are only needed when your laptop talks to the NLB directly. Run `uv run` commands from `neo4j-ee/validate-private/`.
+
+`CreatePrivateDns=true` makes `AdvertisedDNS` resolve inside the VPC, so bastion-run tools such as `admin-shell`, `run-cypher`, `validate-private`, and `uv run scripts/smoke-write.py` need no local DNS changes. It does not change your laptop resolver. For local SSM port-forward tunnels, keep the `/etc/hosts` entry so `AdvertisedDNS` resolves to `127.0.0.1` and the connection still uses the certificate name rather than `localhost`.
 
 | Tool | How it connects | Tunnel needed? |
 |---|---|---|
 | `uv run admin-shell` | SSM interactive session on the bastion | No |
 | `uv run run-cypher` | SSM `RunShellScript` on the bastion | No |
 | `uv run validate-private` | SSM `RunShellScript` on the bastion | No |
-| `./scripts/smoke-write.sh` | SSM `RunShellScript` on the bastion | No |
+| `uv run scripts/smoke-write.py` | SSM `RunShellScript` on the bastion | No |
 | Local driver or client tool | Bolt connection from your laptop | Yes — Bolt tunnel (7687) |
-| Neo4j Browser | HTTP for the web UI + Bolt for queries | Yes — both tunnels (7474 + 7687) |
-
-Local port-forwarding is only needed when your laptop connects to the NLB directly. All CLI tools dispatch commands to the bastion over SSM and receive results back without a tunnel.
+| Neo4j Browser | HTTPS for the web UI + Bolt for queries | Yes — both tunnels (7473 + 7687) |
 
 ### Bolt Tunnel
 
-Use the Bolt tunnel when you want to connect a local driver, client tool, or script to the cluster from your laptop:
+Use the Bolt tunnel when you want to connect a local driver, client tool, or script to the cluster from your laptop.
 
 ```bash
-./scripts/bolt-tunnel.sh      # localhost:7687 → NLB:7687  (blocks; Ctrl-C to close)
+uv run scripts/bolt-tunnel.py      # localhost:7687 -> NLB:7687  (blocks; Ctrl-C to close)
 ```
 
-Connect with `bolt://localhost:7687`. Use `bolt://` rather than `neo4j://` — the routing table that `neo4j://` returns contains the NLB's internal DNS name, which is not reachable from your laptop.
-
-The Bolt tunnel is also required alongside the Browser Tunnel when using Neo4j Browser — see [Browser Tunnel](#browser-tunnel).
+- **Connect URL:** use the URI printed by `uv run scripts/bolt-tunnel.py`. It chooses `bolt` for single-server stacks, `neo4j` for clusters, `+s` for system-trusted certificates, and `+ssc` for self-signed/imported/private certificates that are not installed in the client trust store.
+- **Required hosts entry for laptop tunnels:** `127.0.0.1 <AdvertisedDNS>` in `/etc/hosts` — the NLB-presented certificate is issued for `AdvertisedDNS`, so connecting to `localhost` fails hostname validation for trusted certs. Stack-managed private DNS helps clients inside the VPC; it does not affect local laptop DNS.
+- **Bypass routing table:** use `bolt+s://` instead of `neo4j+s://`, or `bolt+ssc://` instead of `neo4j+ssc://` for self-signed tests. With `neo4j+s://` or `neo4j+ssc://`, the routing table contains `AdvertisedDNS` itself, which resolves back to `localhost` via the hosts entry and works through the same tunnel
+- **Also required for Neo4j Browser:** open this tunnel alongside the [Browser Tunnel](#browser-tunnel)
 
 ### Browser Tunnel
 
-Use this to open the Neo4j Browser web UI. The browser makes two connections: HTTP to load the UI (port 7474) and Bolt to run queries (port 7687). Both tunnels must be open simultaneously. Run each in a separate terminal:
+Use this to open the Neo4j Browser web UI. The browser makes two connections: HTTPS to load the UI (port 7473) and Bolt to run queries (port 7687). Both tunnels must be open simultaneously.
+
+**Single-command option** — run from `neo4j-ee/`:
 
 ```bash
-./scripts/browser-tunnel.sh   # localhost:7474 → NLB:7474  (blocks; Ctrl-C to close)
-./scripts/bolt-tunnel.sh      # localhost:7687 → NLB:7687  (blocks; Ctrl-C to close)
+uv run browse.py                   # most recent deployment
+uv run browse.py <stack-name>      # specific deployment
 ```
 
-Then open `http://localhost:7474`. When prompted for a connection URL, enter `bolt://localhost:7687`. For the password, see [Retrieve the Password](#retrieve-the-password).
+`browse.py` reads `.deploy/<stack-name>.txt`, opens both SSM port-forward tunnels in the same shell (7473 and 7687), and prints the URL and credentials. Press Ctrl+C to close both tunnels.
 
-> **Note:** Connection strings inside Neo4j Browser show the internal NLB DNS hostname. Substitute `localhost` when connecting through the tunnel.
+**Two-terminal option** — run from `neo4j-ee/validate-private/`:
+
+```bash
+uv run scripts/browser-tunnel.py   # localhost:7473 -> NLB:7473  (blocks; Ctrl-C to close)
+uv run scripts/bolt-tunnel.py      # localhost:7687 -> NLB:7687  (blocks; Ctrl-C to close)
+```
+
+Add `127.0.0.1 <AdvertisedDNS>` to your laptop's `/etc/hosts`, then open `https://<AdvertisedDNS>:7473`. When prompted for a connection URL, enter the Bolt URI printed by `uv run browse.py` or `uv run scripts/bolt-tunnel.py`. For the password, see [Retrieve the Password](#retrieve-the-password).
+
+For self-signed test certificates, the browser will still show a certificate warning for `https://<AdvertisedDNS>:7473`; that is expected for local testing. Marketplace/customer deployments should use a certificate trusted by the client.
+
+> **Note:** Connection strings inside Neo4j Browser show `AdvertisedDNS`, which now resolves to `127.0.0.1` for the duration of the tunnel session. Remove the hosts entry when finished.
 
 > **Note:** Writes through Neo4j Browser go to whichever node the NLB selects, which may not be the leader, producing a `NotALeader` error. Use `uv run admin-shell` for writes.
 
@@ -164,11 +193,12 @@ Only the Browser Tunnel requires the password locally — you type it into the N
 For Cypher queries and write operations:
 
 ```bash
+cd neo4j-ee/validate-private
 uv run admin-shell                     # most recent deployment
 uv run admin-shell <stack-name>        # specific deployment
 ```
 
-Opens `cypher-shell` on the bastion with a `neo4j://` URI. The Neo4j driver fetches the routing table and directs writes to the current leader automatically. The password is resolved on the bastion using the bastion's IAM role. It does not appear on the local machine or in CloudTrail.
+Opens `cypher-shell` on the bastion with `neo4j+s://<AdvertisedDNS>:7687` for trusted certificates, or `neo4j+ssc://<AdvertisedDNS>:7687` when the EE output file has `SelfSignedCertificate=true`. The Neo4j driver fetches the routing table and directs writes to the current leader automatically. The password is resolved on the bastion using the bastion's IAM role. It does not appear on the local machine or in CloudTrail.
 
 ```
 neo4j@neo4j> CREATE (n:Test {msg: "hello"}) RETURN n;
@@ -179,6 +209,7 @@ neo4j@neo4j> :exit
 ### Ad-Hoc Cypher Queries
 
 ```bash
+cd neo4j-ee/validate-private
 uv run run-cypher "CALL dbms.components() YIELD name, versions, edition RETURN name, versions[0] AS version, edition"
 
 # Output is JSON; pipe to jq for formatting
@@ -214,7 +245,7 @@ cd neo4j-ee
 
 **Three-node cluster:**
 - VPC with three public subnets (one per AZ) hosting NAT Gateways, and three private subnets (one per AZ) hosting the Neo4j instances
-- Internal NLB with listeners on 7474 and 7687, targets spread across all three private subnets
+- Internal NLB with TLS listeners on 7473 (HTTPS) and 7687 (Bolt), with encrypted client-to-NLB and NLB-to-instance hops via TLS target groups, targets spread across all three private subnets
 - Three Neo4j EC2 instances in private subnets, forming a Raft cluster
 - Three NAT Gateways for outbound traffic from the cluster members
 - One `t4g.nano` operator bastion in a private subnet, not registered as an NLB target
@@ -232,13 +263,13 @@ cd neo4j-ee
 |---|---|
 | VPC | New VPC with public subnets (NAT Gateways) and private subnets (Neo4j instances); 3 AZs for a cluster, 1 AZ for a single instance |
 | NAT Gateways | One per AZ for outbound internet access from the cluster nodes |
-| Internal NLB | Listeners on port 7474 (HTTP) and 7687 (Bolt); routable from inside the VPC only |
+| Internal NLB | Listeners on port 7473 (HTTPS) and 7687 (Bolt); routable from inside the VPC only |
 | EC2 instances | 1 or 3 Neo4j nodes in private subnets; no public IPs |
 | ASG per node | One Auto Scaling Group per Neo4j node, fixed at `MinSize=MaxSize=DesiredCapacity=1`, for self-healing |
 | EBS data volumes | One GP3 volume per node with `DeletionPolicy: Retain`; survives stack deletion |
 | Operator bastion | `t4g.nano` in a private subnet, not registered as an NLB target; receives SSM sessions for operator access |
 | VPC interface endpoints | `ssm`, `ssmmessages`, `logs`, `secretsmanager` with `PrivateDnsEnabled: true`; no NAT required for AWS service calls |
-| Security groups | External SG (AllowedCIDR on 7474/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
+| Security groups | NLB SG (AllowedCIDR on 7473/7687 to the NLB); External SG (NLB SG as source on 7473/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
 | SSM parameters | `/neo4j-ee/<stack>/` prefix; publishes VPC ID, NLB DNS, security group IDs, and secret ARN for downstream consumers |
 | Secrets Manager | Neo4j admin password at `neo4j/<stack>/password` |
 | CloudWatch | Log group, VPC flow logs, failed-auth alarm, CloudTrail trail |
@@ -248,37 +279,27 @@ cd neo4j-ee
 At boot, each cluster node sets:
 
 ```
-server.bolt.advertised_address = <nlb-dns>:7687
-dbms.routing.default_router    = SERVER
+server.bolt.advertised_address  = <AdvertisedDNS>:7687
+server.https.advertised_address = <AdvertisedDNS>:7473
+dbms.routing.default_router     = SERVER
 ```
 
-Every routing table entry points back to the NLB. A driver connecting with `neo4j://` receives a routing table containing only the NLB DNS, sends all subsequent requests through it, and lets Neo4j server-side routing handle leader vs. follower direction.
+Every routing table entry points back to `AdvertisedDNS`. A driver connecting with `neo4j+s://` receives a routing table containing only `AdvertisedDNS`, sends all subsequent requests through it, and lets Neo4j server-side routing handle leader vs. follower direction. The NLB terminates client TLS on the listener using the customer-supplied ACM cert (whose SAN matches `AdvertisedDNS`) and then opens a separate encrypted TLS connection to the instance using a self-signed backend cert generated at boot.
 
 | Access pattern | URI | Notes |
 |---|---|---|
-| Same VPC | `neo4j://<nlb-dns>:7687` | Full cluster failover |
-| Peered VPC / Transit Gateway | `neo4j://<nlb-dns>:7687` | NLB DNS resolves to private IPs reachable through the peering route |
-| SSM tunnel | `bolt://localhost:7687` | Skips routing table; reliable for operator access |
-| Direct node IP | `bolt://<node-ip>:7687` | Bypasses NLB; single node, no failover |
+| Same VPC | `neo4j+s://<AdvertisedDNS>:7687` | Full cluster failover. `AdvertisedDNS` should normally resolve to the NLB through Route 53 private DNS. |
+| Peered VPC / Transit Gateway | `neo4j+s://<AdvertisedDNS>:7687` | Same. The NLB DNS resolves to private IPs reachable through the peering route; the Route 53 record can target the NLB hostname. |
+| SSM tunnel | `neo4j+s://<AdvertisedDNS>:7687`, or `neo4j+ssc://<AdvertisedDNS>:7687` for self-signed tests, with `127.0.0.1 <AdvertisedDNS>` in `/etc/hosts` | Routing table returns `AdvertisedDNS` -> loops back to the tunnel via the hosts entry. |
+| Direct node IP | `neo4j+ssc://<node-ip>:7687` | Bypasses NLB; single node, no failover. `+ssc` skips cert validation since the self-signed backend cert is not bound to an IP. |
 
-**`neo4j://` through an SSM tunnel requires a custom resolver.** Via SSM, the driver connects to `localhost:7687`. The server returns a routing table with the NLB DNS. The driver then tries to connect to that address, which resolves to private IPs inside the VPC. Those IPs are not reachable from the operator's laptop. Use `bolt://localhost:7687` for SSM access. If `neo4j://` is required (for example, a CI runner exercising cluster routing), use a custom resolver that maps the NLB DNS back to `localhost`:
-
-```python
-from neo4j import GraphDatabase
-
-def resolver(address):
-    return [("localhost", 7687)]
-
-driver = GraphDatabase.driver(
-    "neo4j://localhost:7687",
-    auth=("neo4j", password),
-    resolver=resolver
-)
-```
+**`neo4j+s://` through an SSM tunnel relies on `/etc/hosts`.** The driver opens a TLS handshake to `<AdvertisedDNS>:7687`. The hosts entry resolves that to `127.0.0.1`, so the tunnel terminates the connection at the NLB. The NLB presents the ACM cert; the cert's SAN matches `AdvertisedDNS`, so the driver validates successfully. The server then returns a routing table containing `<AdvertisedDNS>:7687`, and the driver loops back through the same tunnel for subsequent connections. No custom Python resolver is needed.
 
 ### Operator Bastion: NLB Hairpin
 
-The bastion is `t4g.nano`, sits in the same private subnet as the cluster, and is not registered as an NLB target. It solves a specific AWS networking failure that surfaces when operator tunnels run through a cluster member.
+> **Why a dedicated bastion?** To prevent NLB hairpin failures where a cluster node tunneling SSM through itself sees its own IP as the source and silently drops the reply — a 1-in-3 connection failure rate.
+
+The bastion is `t4g.nano`, sits in the same private subnet as the cluster, and is not registered as an NLB target.
 
 **The failure.** When SSM tunnels ran through a Neo4j cluster member instead of a dedicated bastion, every third connection timed out. NLB target health was fine; VPC endpoints, security groups, and routing all checked out.
 
@@ -297,15 +318,16 @@ Either mitigation alone closes the observed failure. Both ship together so the t
 
 ### Platform Contract
 
-The stack publishes resource IDs via SSM under `/neo4j-ee/<stack-name>/` so that applications and operator tooling can wire themselves up without knowing stack internals. `preflight.sh` validates both groups on every run.
+The stack publishes resource IDs via SSM under `/neo4j-ee/<stack-name>/` so that applications and operator tooling can wire themselves up without knowing stack internals. `uv run preflight` validates both groups on every run.
 
-**Contract parameters** — required; all five must exist:
+**Contract parameters** — required; all six must exist:
 
 | Parameter | Purpose |
 |---|---|
 | `/neo4j-ee/<stack>/vpc-id` | VPC the application should attach to |
-| `/neo4j-ee/<stack>/nlb-dns` | Internal NLB DNS for Bolt connections |
-| `/neo4j-ee/<stack>/external-sg-id` | Security group with inbound 7687 to Neo4j instances |
+| `/neo4j-ee/<stack>/nlb-dns` | Internal NLB DNS name; map `AdvertisedDNS` to this hostname for TLS clients to validate the ACM cert SAN |
+| `/neo4j-ee/<stack>/advertised-dns` | DNS name that resolves to the internal NLB and matches the ACM cert SAN; clients connect via `neo4j+s://<advertised-dns>:7687` and `https://<advertised-dns>:7473` |
+| `/neo4j-ee/<stack>/external-sg-id` | NLB security group that accepts client/app ingress on 7473 and 7687 |
 | `/neo4j-ee/<stack>/password-secret-arn` | Secrets Manager ARN for the Neo4j password |
 | `/neo4j-ee/<stack>/vpc-endpoint-sg-id` | Security group attached to the VPC interface endpoints |
 
@@ -319,7 +341,7 @@ The stack publishes resource IDs via SSM under `/neo4j-ee/<stack-name>/` so that
 | `/neo4j-ee/<stack>/private-subnet-2-id` | Second private subnet |
 | `/neo4j-ee/<stack>/private-route-table-1-id` | Route table for the first private subnet |
 
-**VPC interface endpoints.** All four regional service hostnames (`ssm`, `ssmmessages`, `logs`, `secretsmanager`) resolve to private IPs inside the VPC. No endpoint URL overrides are needed in application code, and no NAT data-processing charges apply to AWS service calls.
+**VPC interface endpoints.** The regional service hostnames (`ssm`, `ssmmessages`, `logs`, `secretsmanager`) resolve to private IPs inside the VPC. No endpoint URL overrides are needed in application code, and no NAT data-processing charges apply to AWS service calls.
 
 The `vpc-endpoint-sg-id` parameter is the mechanism by which applications opt into reaching these endpoints. Each application adds its own security group to the endpoint SG's ingress on port 443. Opening the endpoint SG to the whole VPC CIDR would allow any workload in the VPC to call SSM and Secrets Manager via PrivateLink. The published SG ID approach requires each application to explicitly opt in, creating an auditable per-application record and a clean removal path.
 
@@ -327,34 +349,101 @@ See [`sample-private-app/README.md`](../sample-private-app/README.md) for the fu
 
 ### Password Security Model
 
-The `Password` CloudFormation parameter accepts only alphanumerics (`^[a-zA-Z0-9]{8,}$`). This prevents shell metacharacter injection: lookahead-based patterns that admit arbitrary characters allow values like `Test1$(cmd)` to execute as root during boot.
+- **Allowed characters:** `^[a-zA-Z0-9]{24,}$` — alphanumerics only, 24+ chars. Prevents shell metacharacter injection (e.g. `Test1$(cmd)` executing as root during boot)
+- **Default length:** `deploy.py` generates a 32-character value
+- **Storage:** Secrets Manager at `neo4j/<stack-name>/password`
+- **Never in UserData:** `NoEcho: true` only suppresses values in CloudFormation API responses, not UserData. Any IAM principal with `ec2:DescribeLaunchTemplateVersions` can read UserData
+- **Retrieval at boot:** cluster nodes fetch the password via their IAM role, which has `secretsmanager:GetSecretValue` scoped to the single stack secret
 
-The password is stored in Secrets Manager at `neo4j/<stack-name>/password` and is never written to the EC2 LaunchTemplate UserData. `NoEcho: true` only suppresses the value in CloudFormation API responses. It has no effect on UserData, which any IAM principal with `ec2:DescribeLaunchTemplateVersions` can read. The cluster nodes retrieve the password from Secrets Manager at boot via their IAM role, which has `secretsmanager:GetSecretValue` scoped to that secret.
+### TLS Architecture
 
-### Bolt TLS
+**TL;DR**
 
-When `BoltCertificateSecretArn` is set, Neo4j configures `server.bolt.tls_level=REQUIRED` using the cert and key from the named Secrets Manager secret. The secret must be JSON with `certificate` and `private_key` keys:
+- **TLS is mandatory.** The NLB terminates TLS on 7473 (HTTPS Browser) and 7687 (Bolt) using the `CertificateArn` ACM certificate
+- **Encrypted on both client data-plane hops.** The NLB terminates client TLS, and target groups open a separate TLS connection to a self-signed backend cert generated on each instance at boot. This encrypts client-to-NLB and NLB-to-instance traffic without implying one uninterrupted client-to-instance TLS session
+- **`AdvertisedDNS` is the TLS hostname** clients use; it must match the ACM cert SAN. Typically a Route 53 private hosted zone name like `neo4j.prod.internal.example.com`
+- **No public exposure required.** The Private template does not create public DNS or ingress. Public access, API front doors, VPN, etc. are separate customer-owned layers — see [`sample-private-app/README.md`](../sample-private-app/README.md)
 
-```json
-{
-  "certificate": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
-  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-}
+**Customer responsibilities at deploy time**
+
+1. Provision or import an ACM certificate in the same Region as the stack. The certificate SAN must match the DNS name you will pass as `AdvertisedDNS`.
+2. Ensure private DNS resolves `AdvertisedDNS` to the internal NLB for every in-VPC client. `deploy.py` sets `CreatePrivateDns=true` by default for Private mode, so the stack creates an A-record alias to the NLB unless you pass `--no-create-private-dns`.
+3. Pass `CertificateArn` and `AdvertisedDNS` as CloudFormation parameters at stack create or update. If `CreatePrivateDns=true`, also pass either `PrivateDnsZoneName` so the stack creates a private hosted zone, or `PrivateDnsHostedZoneId` so it writes the record into an existing private hosted zone. `deploy.py` derives `PrivateDnsZoneName` from `AdvertisedDNS` when possible.
+
+**Cert lifecycle**
+
+- **Backend cert (NLB → instance):** generated on each node at first boot via `openssl req -x509` in `/var/lib/neo4j/certificates/{bolt,https}/`. The NLB does not validate it, so self-signed is sufficient. Regenerated on instance replacement with no client-visible effect — clients only see the NLB-presented ACM cert
+- **ACM cert rotation (clients → NLB):** ACM-managed certs renew automatically. To swap ARNs, update the `CertificateArn` stack parameter — CloudFormation updates the listener in place, no instance refresh required
+- **Regional scope:** ACM certs are regional. A stack deployed with `--region us-east-2` requires an ARN beginning with `arn:aws:acm:us-east-2:...`. To deploy the same DNS name in another Region, request or import a cert there too
+
+**What `CertificateArn` looks like**
+
+```text
+arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>
 ```
 
-**Production pattern: customer-owned DNS.** The `--tls` flag generates a self-signed cert pinned to the AWS-generated NLB DNS. For production, use a stable customer-owned DNS name so certs are not tied to the NLB DNS:
+`deploy.py` does not create this certificate; it consumes an existing ARN and passes it to the NLB TLS listeners. ARNs in this guide like `arn:aws:acm:us-east-1:123456789012:certificate/12345678-...` are placeholders. See the AWS docs for [ACM regional behavior](https://docs.aws.amazon.com/acm/latest/userguide/acm-overview.html#acm-regions), [DNS validation](https://docs.aws.amazon.com/acm/latest/userguide/dns-validation.html), and [`request-certificate`](https://docs.aws.amazon.com/cli/latest/reference/acm/request-certificate.html).
 
-1. Create a Route 53 private hosted zone with an A-record alias pointing to the NLB, or configure external DNS.
-2. Obtain a certificate for that name.
-3. Push the cert and key to Secrets Manager in the JSON format above.
-4. Set `BoltAdvertisedDNS` and `BoltCertificateSecretArn` as CloudFormation parameters when deploying or updating the stack. All cluster nodes will advertise the custom DNS name, and the cert SAN will match every connection the driver opens.
-5. To rotate: update the Secrets Manager secret value, then trigger an ASG instance refresh.
+**Certificate options for private deployments**
 
-**Residual risk.** Phase 1 covers the client-facing Bolt port only. HTTP (7474) and cluster-internal ports (6000/7000/7688) remain plaintext, protected by the cluster security group. An actor with `ec2:RunInstances` permission to launch into the cluster subnet with the cluster security group, `ec2:CreateTrafficMirrorSession` targeting a cluster ENI, or root on any cluster node can observe replication traffic on the wire. For regulated workloads or shared-tenancy accounts where IAM blast radius extends beyond the cluster operator team, request Phase 2 (cluster TLS) before deploying.
+| Option | Public DNS required? | Notes |
+|---|---:|---|
+| ACM Private CA certificate | No | Best fit for fully private enterprise networks when clients already trust the private CA. AWS Private CA has separate cost and CA lifecycle management. |
+| Imported enterprise certificate | No | Use an existing internal PKI. Import the cert and key into ACM in the same Region as the stack. Customer owns renewal and re-import. |
+| ACM public certificate for a privately resolved name | Public validation only | The Neo4j DNS record can remain private. ACM still needs domain ownership validation through public DNS or email because public certificates cannot be validated solely from a VPC private hosted zone. |
+
+The last option often causes confusion: the validation CNAME can be public, but the Neo4j service record does not need to be public. For example, ACM might validate `neo4j.prod.internal.example.com` through a public CNAME under `example.com`, while Route 53 private DNS resolves `neo4j.prod.internal.example.com` to the internal NLB only inside the customer's VPCs.
+
+**Recommended private workflow.** Keep the base Neo4j stack internal. Use a private DNS name for `AdvertisedDNS`, use an ACM Private CA or imported internal certificate when the customer has private PKI, and let customer application stacks handle any user-facing access. That preserves encryption in transit and avoids requiring the Neo4j Marketplace stack itself to create public DNS or public ingress.
+
+**Stack-managed private DNS.** For repeatable tests and simple private deployments, `deploy.py` defaults `CreatePrivateDns=true` in Private mode. With `PrivateDnsZoneName`, the stack creates a Route 53 private hosted zone associated with the stack VPC and creates an alias record for `AdvertisedDNS`. With `PrivateDnsHostedZoneId`, the stack creates only the alias record in an existing private hosted zone. Pass `--no-create-private-dns` if customer-managed DNS already owns the same `AdvertisedDNS` record.
+
+**Residual risk.** Cluster-internal ports (5000, 6000, 7000, 7688) remain plaintext between cluster members, protected by the cluster security group. An actor with `ec2:RunInstances` permission to launch into the cluster subnet with the cluster security group, `ec2:CreateTrafficMirrorSession` targeting a cluster ENI, or root on any cluster node can observe replication traffic on the wire. For regulated workloads or shared-tenancy accounts where IAM blast radius extends beyond the cluster operator team, request cluster TLS before deploying.
 
 ---
 
 ## Local Deployment and Testing
+
+For template developers deploying from source. The [Operator Guide](#operator-guide) covers day-to-day stack usage once the stack is running.
+
+### Set Up a Certificate
+
+The private stack requires an ACM certificate before deployment. `certificate.py` handles this and writes `.deploy/cert-*.json`, which `deploy.py` picks up automatically so you don't need to copy-paste the ARN.
+
+**Option A — No domain (local testing only)**
+
+Generate a self-signed cert and import it directly into ACM. No public DNS ownership or ACM validation is required:
+
+```bash
+cd neo4j-ee
+./certificate.py --region us-east-2 --domain-name neo4j.test.local --self-signed
+```
+
+This is instant. The trade-off: clients must use a skip-validation scheme such as `bolt+ssc://` or `neo4j+ssc://` instead of `+s`. `deploy.py` records `SelfSignedCertificate=true` in the EE output file when it can match the cert to a local `certificate.py --self-signed` cert file, and the `validate-private` suite, `admin-shell`, `run-cypher`, and `uv run scripts/smoke-write.py` choose `+ssc` for those test stacks. In-VPC applications still need `AdvertisedDNS` to resolve. Private mode creates that private DNS record by default unless you pass `--no-create-private-dns`. The sample app also reads the EE output file and switches away from system trust for self-signed test deployments.
+
+**Option B — Real domain with Route 53**
+
+If the domain is in a Route 53 hosted zone in this account, `--auto-route53` creates the validation CNAME and waits for issuance automatically:
+
+```bash
+./certificate.py --region us-east-2 --domain-name neo4j-test.yourdomain.com --auto-route53
+```
+
+**Option C — Real domain, DNS elsewhere**
+
+If your DNS is at another provider (Cloudflare, Namecheap, etc.), omit `--auto-route53`. The script prints the validation CNAME, you add it manually, and it polls until ACM issues the cert:
+
+```bash
+./certificate.py --region us-east-2 --domain-name neo4j-test.yourdomain.com
+```
+
+**After any option:** `deploy.py` reads the cert ARN and domain from `.deploy/cert-*.json` automatically — no flags needed.
+
+**Choosing a domain name.** The string is the cert SAN and Neo4j's advertised address. For Options B and C, two DNS records are needed: the ACM validation CNAME (created by `certificate.py`) and a service record pointing the name to the NLB. Private mode creates the service record by default. ExistingVpc mode can create it with `--create-private-dns`, or you can provide customer-managed DNS. For Option A, no public DNS records are needed, but in-VPC application clients still need private DNS.
+
+`certificate.py` reuses an existing `ISSUED` or `PENDING_VALIDATION` cert for the same domain and region rather than requesting a new one. Pass `--no-wait` to print the CNAME and exit without polling.
+
+See [Certificate options for private deployments](#tls-architecture) in the Architecture section for Private CA and imported-cert alternatives.
 
 ### Build
 
@@ -369,22 +458,37 @@ Commit both the edited partial and the regenerated `neo4j-private.template.yaml`
 
 ### Deploy
 
+Run `certificate.py` first (see [Set Up a Certificate](#set-up-a-certificate)). `deploy.py` reads the cert ARN, domain name, and region from `.deploy/cert-*.json` automatically.
+
 ```bash
 cd neo4j-ee
 
-# 3-node cluster, t3.medium, pin region to avoid AMI copy
-./deploy.py --region us-east-1
+# Simplest — cert file auto-detected, region from cert file:
+./deploy.py
 
-# Single instance
-./deploy.py --number-of-servers 1 --region us-east-1
+# Override instance type or server count:
+./deploy.py --number-of-servers 1
+./deploy.py r8i.xlarge
 
-# Memory-optimized instance
-./deploy.py r8i.xlarge --region us-east-1
+# Pass cert explicitly if you have multiple cert files or want to be precise:
+./deploy.py --cert-arn <arn> --advertised-dns <dns> --region us-east-2
 
-# Use the published Marketplace AMI
+# Private mode creates a private hosted zone and AdvertisedDNS alias by default:
+./deploy.py --cert-arn <arn> --advertised-dns neo4j.test.local \
+  --private-dns-zone test.local
+
+# Or write the AdvertisedDNS alias into an existing private hosted zone:
+./deploy.py --cert-arn <arn> --advertised-dns neo4j.internal.example.com \
+  --create-private-dns --private-dns-hosted-zone-id Z1234567890ABC
+
+# Use customer-managed DNS instead:
+./deploy.py --cert-arn <arn> --advertised-dns neo4j.internal.example.com \
+  --no-create-private-dns
+
+# Use the published Marketplace AMI:
 ./deploy.py --marketplace
 
-# Enable CloudWatch alarm email notifications
+# Enable CloudWatch alarm email notifications:
 ./deploy.py --alert-email you@example.com
 ```
 
@@ -392,30 +496,32 @@ The default mode is Private. No `--mode` flag needed. Stack creation takes 5-10 
 
 > **Cost note.** Private mode provisions 3 NAT Gateways for a cluster (~$0.045/hr each) or 1 for a single instance. Tear down promptly after testing.
 
-### Add Bolt TLS (Optional)
+### Local Dry Run
 
-Bolt TLS encrypts port 7687 using a customer-supplied certificate. Because the certificate SAN must match the NLB DNS, which does not exist until the stack creates it, `--tls` uses a two-phase flow:
+Use `--dry-run` to confirm the command shape, selected template, region, instance type, and CloudFormation parameters without making AWS API calls:
 
 ```bash
-./deploy.py --number-of-servers 3 --region us-east-1 --tls
+cd neo4j-ee
+
+./deploy.py --dry-run --number-of-servers 1 --region us-east-2 r8i.xlarge \
+  --cert-arn arn:aws:acm:us-east-2:123456789012:certificate/12345678-1234-1234-1234-123456789012 \
+  --advertised-dns neo4j.prod.internal.example.com
 ```
 
-1. Creates the stack without TLS. The NLB DNS is now known.
-2. Generates a self-signed certificate with the NLB DNS as the SAN.
-3. Uploads the cert and key as a JSON Secrets Manager secret.
-4. Stages the CA bundle at `sample-private-app/lambda/neo4j-ca.crt`.
-5. Updates the stack with `BoltCertificateSecretArn`, then triggers an ASG instance refresh to apply the cert. The refresh takes 5-10 minutes.
+For a deeper local check after template edits, run:
 
-All cluster nodes advertise the NLB DNS in their routing tables, so a single SAN covers every connection the driver makes after fetching the routing table.
-
-For a production-grade certificate, see the [Bolt TLS section in Architecture](#bolt-tls) for the customer-owned DNS pattern and cert rotation approach.
+```bash
+python3 templates/build.py --verify
+python3 -m py_compile deploy.py
+cfn-lint templates/neo4j-private.template.yaml
+```
 
 ### Preflight and Basic Validation
 
 ```bash
 cd neo4j-ee/validate-private
 
-./scripts/preflight.sh <stack-name>            # 11 checks: stack, bastion, endpoints
+uv run preflight <stack-name>                  # 11 checks: stack, bastion, endpoints
 
 uv run validate-private                        # most recent deployment
 uv run validate-private --stack <stack-name>   # specific deployment
@@ -426,8 +532,8 @@ uv run validate-private --stack <stack-name>   # specific deployment
 ### Smoke Test
 
 ```bash
-./scripts/smoke-write.sh                       # 20 CREATE/DELETE iterations
-./scripts/smoke-write.sh <stack-name> 50       # custom iteration count
+uv run scripts/smoke-write.py                       # 20 CREATE/DELETE iterations
+uv run scripts/smoke-write.py <stack-name> 50       # custom iteration count
 ```
 
 Runs write operations through the cluster via the bastion. Each iteration uses a fresh driver connection to exercise routing table handling.
@@ -435,6 +541,7 @@ Runs write operations through the cluster via the bastion. Each iteration uses a
 ### Failover Suite
 
 ```bash
+cd neo4j-ee/validate-private
 uv run validate-private --stack <stack-name> --suite failover
 ```
 
@@ -450,6 +557,7 @@ Four cases using `systemctl stop`/`start` via SSM; no instance termination:
 ### Resilience Suite
 
 ```bash
+cd neo4j-ee/validate-private
 uv run validate-private --stack <stack-name> --suite resilience
 ```
 
@@ -485,7 +593,7 @@ The bastion UserData may still be running in the first 3 minutes after stack cre
 The bastion's IAM role does not have access to the secret or SSM parameter for this stack. The policy scopes to `neo4j/<stack-name>/password` and `/neo4j-ee/<stack-name>/*`. Re-deploying the stack re-creates the policy with the correct scope.
 
 **"NotALeader" error in Neo4j Browser**
-The NLB routed a write to a follower. Use `uv run admin-shell` for writes: `neo4j://` routing directs writes to the leader automatically.
+The NLB routed a write to a follower. Use `uv run admin-shell` for writes: `neo4j+s://` or `neo4j+ssc://` routing directs writes to the leader automatically.
 
 **Bastion Python checks fail but SSM is Online**
 The bastion installs Python 3.11 alongside the AL2023 system Python 3.9, with `neo4j` and `boto3` under 3.11. If package installation failed during UserData, reinstall via SSM:
@@ -510,6 +618,8 @@ aws ssm send-command \
 
 **Mounting an existing EBS snapshot and resetting the password**
 
+> **TL;DR:** Disable auth → set password via Cypher → re-enable auth. Repeat steps 2-3 per node in a cluster.
+
 When a data volume is restored from a snapshot, the Neo4j system database on that volume already contains the auth store from the original deployment. The password in Secrets Manager will not match, producing `Neo.ClientError.Security.Unauthorized` on every connection.
 
 `neo4j-admin dbms set-initial-password` does not help here. It only takes effect when the system database has never been initialized. On a snapshot restore the system database already exists, so the command is silently ignored.
@@ -530,8 +640,8 @@ aws ssm send-command --instance-ids <node-id> --document-name AWS-RunShellScript
 PASSWORD=$(./scripts/get-password.sh 2>/dev/null)
 aws ssm send-command --instance-ids <node-id> --document-name AWS-RunShellScript \
   --parameters "commands=[
-    \"for i in \$(seq 1 30); do cypher-shell -a bolt://localhost:7687 -u neo4j -p \\\"\\\" \\\"RETURN 1\\\" >/dev/null 2>&1 && break || sleep 3; done\",
-    \"cypher-shell -a bolt://localhost:7687 -u neo4j -p \\\"\\\" \\\"ALTER USER neo4j SET PASSWORD '${PASSWORD}' CHANGE NOT REQUIRED\\\"\"
+    \"for i in \$(seq 1 30); do cypher-shell -a bolt+ssc://localhost:7687 -u neo4j -p \\\"\\\" \\\"RETURN 1\\\" >/dev/null 2>&1 && break || sleep 3; done\",
+    \"cypher-shell -a bolt+ssc://localhost:7687 -u neo4j -p \\\"\\\" \\\"ALTER USER neo4j SET PASSWORD '${PASSWORD}' CHANGE NOT REQUIRED\\\"\"
   ]" --region <region>
 
 # 3. Re-enable auth
@@ -559,3 +669,22 @@ The `<Neo4jNode1ASGName>` value is in `.deploy/<stack-name>.txt`. For a three-no
 > **Note:** `dbms.security.auth_enabled` may appear multiple times in `neo4j.conf` if the recovery procedure is run more than once. Neo4j 5 treats duplicate keys as a fatal config error and refuses to start. The `sed -i "/dbms.security.auth_enabled/d"` step above removes all occurrences before adding a single clean entry, which prevents this.
 
 Reference: [Recover admin user and password — Neo4j Operations Manual](https://neo4j.com/docs/operations-manual/current/authentication-authorization/password-and-user-recovery/)
+
+---
+
+## EBS Snapshots
+
+`snapshot.sh` creates EBS snapshots of all Neo4j data volumes for a deployed stack. Snapshots are incremental and stored in AWS-managed S3; snapshot size reflects used blocks only, not the allocated volume size.
+
+```bash
+./snapshot.sh                  # most recent deployment
+./snapshot.sh <stack-name>     # specific deployment
+./snapshot.sh --list           # list all snapshots for the most recent deployment
+./snapshot.sh --list <stack-name>  # list all snapshots for a specific deployment
+```
+
+The script reads `.deploy/<stack-name>.txt` for volume IDs and region. Each snapshot is tagged with the stack name and date. For a three-node cluster all three volumes are snapshotted in the same run.
+
+`--list` queries by the `stack` tag and shows snapshot ID, timestamp, state, progress, volume size, and description.
+
+**Note on memory.** The `neo4j-admin database backup` recovery phase runs inside the Neo4j JVM and competes with the running database for heap. On an `r8i.xlarge` (32 GB) with a 19.3 GB heap and a 21.5 GB store, the combined footprint exceeds available RAM and triggers an OOM kill. EBS snapshots do not touch the JVM; they are taken at the block-device level and are safe to run on any instance size without restarting Neo4j.

@@ -69,6 +69,16 @@ def parse_args():
     p.add_argument("--number-of-servers", type=int, default=3, choices=[1, 3])
     p.add_argument("--marketplace", action="store_true")
     p.add_argument(
+        "--enable-public-tls",
+        action="store_true",
+        help=(
+            "For Public deployments, enable TLS on Browser (7473) and Bolt "
+            "(7687). Requires --cert-arn and --advertised-dns, or a "
+            ".deploy/cert-*.json file from certificate.py. Private and "
+            "ExistingVpc deployments always use TLS."
+        ),
+    )
+    p.add_argument(
         "--dry-run",
         action="store_true",
         help="Validate arguments and print the deployment plan without making AWS API calls.",
@@ -169,7 +179,6 @@ def _parse_cert_file(path: str) -> dict[str, str]:
 
 def _detect_self_signed_cert(
     cert_arn: str,
-    advertised_dns: str,
     deploy_dir: str,
 ) -> bool:
     for cert_file in Path(deploy_dir).glob("cert-*.json"):
@@ -181,9 +190,14 @@ def _detect_self_signed_cert(
             continue
         if cert_fields.get("cert_arn") == cert_arn:
             return True
-        if cert_fields.get("domain_name") == advertised_dns:
-            return True
     return False
+
+
+def _acm_certificate_region(cert_arn: str) -> str:
+    arn_parts = cert_arn.split(":")
+    if len(arn_parts) >= 6 and arn_parts[2] == "acm":
+        return arn_parts[3]
+    return ""
 
 
 def _certificate_type(cert_arn: str, region: str) -> str:
@@ -246,6 +260,7 @@ def build_cfn_params(
     allowed_cidr: str,
     ssm_param_path: str,
 ) -> list[dict[str, str]]:
+    tls_required = args.mode in ("Private", "ExistingVpc") or args.enable_public_tls
     params = [
         {"ParameterKey": "Password", "ParameterValue": password},
         {
@@ -254,10 +269,20 @@ def build_cfn_params(
         },
         {"ParameterKey": "InstanceType", "ParameterValue": args.instance_type},
         {"ParameterKey": "AllowedCIDR", "ParameterValue": allowed_cidr},
-        {"ParameterKey": "CertificateArn", "ParameterValue": args.cert_arn},
-        {"ParameterKey": "AdvertisedDNS", "ParameterValue": args.advertised_dns},
         {"ParameterKey": "InstallGDS", "ParameterValue": "true"},
     ]
+    if args.mode == "Public":
+        params.append(
+            {
+                "ParameterKey": "EnableTLS",
+                "ParameterValue": "true" if args.enable_public_tls else "false",
+            }
+        )
+    if tls_required:
+        params += [
+            {"ParameterKey": "CertificateArn", "ParameterValue": args.cert_arn},
+            {"ParameterKey": "AdvertisedDNS", "ParameterValue": args.advertised_dns},
+        ]
     if args.mode in ("Private", "ExistingVpc"):
         params += [
             {
@@ -307,6 +332,16 @@ def main():
     os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
     cert_self_signed = False
+    tls_required = args.mode in ("Private", "ExistingVpc") or args.enable_public_tls
+
+    if args.enable_public_tls and args.mode != "Public":
+        sys.exit("ERROR: --enable-public-tls is only valid with --mode Public.")
+    if args.mode == "Public" and not args.enable_public_tls:
+        if args.cert_arn or args.advertised_dns:
+            sys.exit(
+                "ERROR: --cert-arn and --advertised-dns require "
+                "--enable-public-tls for Public deployments."
+            )
 
     if args.mode == "ExistingVpc" and not args.vpc_id:
         deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
@@ -340,7 +375,7 @@ def main():
         if args.create_vpc_endpoints == "false" and not args.existing_endpoint_sg_id:
             sys.exit("ERROR: --existing-endpoint-sg-id is required when --create-vpc-endpoints false")
 
-    if not args.cert_arn or not args.advertised_dns:
+    if tls_required and (not args.cert_arn or not args.advertised_dns):
         deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
         cert_file_path = _resolve_cert_file(None, deploy_dir)
         if cert_file_path:
@@ -354,19 +389,18 @@ def main():
             if not args.region_override:
                 args.region_override = cert_fields.get("region", "")
 
-    if not args.cert_arn:
+    if tls_required and not args.cert_arn:
         sys.exit(
             "ERROR: --cert-arn is required (or run certificate.py first to write .deploy/cert-*.json)."
         )
-    if not args.advertised_dns:
+    if tls_required and not args.advertised_dns:
         sys.exit(
             "ERROR: --advertised-dns is required (or run certificate.py first to write .deploy/cert-*.json)."
         )
     deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
-    if not cert_self_signed:
+    if tls_required and not cert_self_signed:
         cert_self_signed = _detect_self_signed_cert(
             args.cert_arn,
-            args.advertised_dns,
             deploy_dir,
         )
     if args.create_private_dns is None:
@@ -400,9 +434,16 @@ def main():
         allowed_cidr = f"{ip}/32"
 
     region = args.region_override or random.choice(SUPPORTED_REGIONS)
+    if tls_required:
+        cert_region = _acm_certificate_region(args.cert_arn)
+        if cert_region and cert_region != region:
+            sys.exit(
+                "ERROR: --cert-arn region "
+                f"'{cert_region}' must match deployment region '{region}'."
+            )
     ts = int(time.time())
     stack_name = args.name if args.name else f"ee-{ts}"
-    cert_type = "" if args.dry_run else _certificate_type(args.cert_arn, region)
+    cert_type = "" if args.dry_run or not tls_required else _certificate_type(args.cert_arn, region)
 
     # NLB target group names are "{stack_name}-https-tg" (the longest suffix).
     # AWS enforces a 32-character limit on target group names.
@@ -436,9 +477,12 @@ def main():
         print(f"  Mode:           {args.mode}")
         print(f"  Template:       {TEMPLATE_MAP[args.mode]}")
         print(f"  AllowedCIDR:    {allowed_cidr}")
-        print(f"  CertificateArn: {args.cert_arn}")
-        print(f"  AdvertisedDNS:  {args.advertised_dns}")
-        if cert_self_signed:
+        if args.mode == "Public":
+            print(f"  PublicTLS:      {'enabled' if args.enable_public_tls else 'disabled'}")
+        if tls_required:
+            print(f"  CertificateArn: {args.cert_arn}")
+            print(f"  AdvertisedDNS:  {args.advertised_dns}")
+        if tls_required and cert_self_signed:
             print("  CertTrust:      self-signed test certificate")
         if args.mode in ("Private", "ExistingVpc"):
             print(f"  PrivateDNS:     {'create/manage' if args.create_private_dns else 'disabled'}")
@@ -560,11 +604,14 @@ def main():
     print(f"  Servers:        {args.number_of_servers}")
     print(f"  Mode:           {args.mode}")
     print(f"  AllowedCIDR:    {allowed_cidr}")
-    print(f"  CertificateArn: {args.cert_arn}")
-    if cert_type:
-        print(f"  CertificateType: {cert_type}")
-    print(f"  AdvertisedDNS:  {args.advertised_dns}")
-    if cert_self_signed:
+    if args.mode == "Public":
+        print(f"  PublicTLS:      {'enabled' if args.enable_public_tls else 'disabled'}")
+    if tls_required:
+        print(f"  CertificateArn: {args.cert_arn}")
+        if cert_type:
+            print(f"  CertificateType: {cert_type}")
+        print(f"  AdvertisedDNS:  {args.advertised_dns}")
+    if tls_required and cert_self_signed:
         print("  CertTrust:      self-signed test certificate")
     if args.mode in ("Private", "ExistingVpc"):
         print(f"  PrivateDNS:     {'create/manage' if args.create_private_dns else 'disabled'}")
@@ -658,12 +705,15 @@ def main():
         extra.extend([("SSMParamPath", ssm_param_path), ("AmiId", ami_id)])
     if cleanup_state["copied_ami_id"]:
         extra.extend([("CopiedAmiId", cleanup_state["copied_ami_id"]), ("SourceRegion", SOURCE_REGION)])
-    extra.append(("CertificateArn", args.cert_arn))
-    if cert_type:
-        extra.append(("CertificateType", cert_type))
-    extra.append(("AdvertisedDNS", args.advertised_dns))
-    if cert_self_signed:
-        extra.append(("SelfSignedCertificate", "true"))
+    if args.mode == "Public":
+        extra.append(("PublicTLS", "true" if args.enable_public_tls else "false"))
+    if tls_required:
+        extra.append(("CertificateArn", args.cert_arn))
+        if cert_type:
+            extra.append(("CertificateType", cert_type))
+        extra.append(("AdvertisedDNS", args.advertised_dns))
+        if cert_self_signed:
+            extra.append(("SelfSignedCertificate", "true"))
     extra.append(("StackID", stack_data["StackId"]))
 
     lines += [f"{k:<20} = {v}" for k, v in extra]

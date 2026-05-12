@@ -10,7 +10,7 @@ AWS Marketplace AMI policy pages distinguish mandatory product requirements from
 
 The same best-practices page also tells sellers to document the minimum required ports and recommended source IP ranges for administrative access. Those controls are necessary, but they are not substitutes for encryption in transit. A security group `AllowedCIDR` restriction controls which source IPs can initiate a connection at the AWS network layer; it does not encrypt traffic. An attacker controlling a permitted client, a routed network segment, a traffic mirror, or a compromised workload in the same reachable private network can read Neo4j credentials, Cypher queries, and query results in plaintext.
 
-The practical consequence for this listing: TLS is mandatory. The NLB terminates client TLS on 7473 (HTTPS Browser) and 7687 (Bolt) using a customer-supplied ACM cert that matches the AdvertisedDNS SAN, and the target groups open separate TLS connections to self-signed backend certs generated on each instance. Traffic is encrypted from client to NLB and from NLB to instance, without implying one uninterrupted client-to-instance TLS session.
+The practical consequence for this listing: TLS is mandatory for the private templates and opt-in for the public evaluation template. When TLS is enabled, the NLB terminates client TLS on 7473 (HTTPS Browser) and 7687 (Bolt) using a customer-supplied ACM cert that matches the AdvertisedDNS SAN, and the target groups open separate TLS connections to self-signed backend certs generated on each instance. Traffic is encrypted from client to NLB and from NLB to instance, without implying one uninterrupted client-to-instance TLS session.
 
 Related Marketplace policy points:
 
@@ -29,7 +29,7 @@ References:
 
 ### TLS availability
 
-TLS parameters (`CertificateArn`, `AdvertisedDNS`) are required in all three templates. Buyers must provide an ACM certificate whose SAN matches `AdvertisedDNS`; the NLB uses that certificate on 7473 and 7687 and opens separate TLS connections to each instance.
+TLS parameters (`CertificateArn`, `AdvertisedDNS`) are required for the Private and ExistingVpc templates. The Public template defaults to plaintext Browser/Bolt for evaluation and exposes `EnableTLS` as an opt-in. When `EnableTLS=true`, buyers must provide an ACM certificate whose SAN matches `AdvertisedDNS`; the NLB uses that certificate on 7473 and 7687 and opens separate TLS connections to each instance. The Public template does not create public DNS records.
 
 ### AllowedCIDR default
 
@@ -64,7 +64,7 @@ AllowedCIDR:
   ConstraintDescription: The value 0.0.0.0/0 is not permitted.
 ```
 
-The NLB security group applies this CIDR to Neo4j ports 7473 (HTTPS) and 7687 (Bolt). The instance-facing external security group accepts those ports only from the NLB security group. Intra-cluster ports (5000, 6000, 7000, 7688, 2003, 2004, 3637) are restricted to the internal security group using a self-referential ingress rule. No port 22 ingress is created; operator access goes through SSM Session Manager.
+The NLB security group applies this CIDR to Neo4j Browser and Bolt ports. Private templates use 7473 (HTTPS) and 7687 (Bolt). The Public template uses 7474/7687 by default and 7473/7687 when public TLS is enabled. The instance-facing external security group accepts those ports only from the NLB security group. Intra-cluster ports (5000, 6000, 7000, 7688, 2003, 2004, 3637) are restricted to the internal security group using a self-referential ingress rule. No port 22 ingress is created; operator access goes through SSM Session Manager.
 
 ### IAM least privilege
 
@@ -162,6 +162,8 @@ Metadata:
           - CertificateArn
           - AdvertisedDNS
 ```
+
+For the Public template, include `EnableTLS` in the TLS group and keep the certificate fields optional unless that flag is true.
 
 ### Architectural diagrams
 

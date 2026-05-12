@@ -49,9 +49,9 @@ _PREAMBLE_COMMON = [
     '"\\n"',
 ]
 
-# Present in all three templates. The ACM cert ARN is consumed by the
-# NLB listener directly, not by userdata, so it is not part of the preamble.
-_PREAMBLE_TLS = [
+# Present in all three templates. Private templates require a value; Public
+# templates use it only when optional TLS is enabled.
+_PREAMBLE_ADVERTISED_DNS = [
     '"advertisedDNS="',
     "Ref: AdvertisedDNS",
     '"\\n"',
@@ -69,7 +69,13 @@ def _userdata_block(topology: str, base_indent: int = 8) -> str:
     p8 = " " * (base_indent + 8)  # block literal content
 
     items = _PREAMBLE_COMMON[:]
-    items.extend(_PREAMBLE_TLS)
+    items.extend(_PREAMBLE_ADVERTISED_DNS)
+    if topology == "public":
+        items.extend([
+            '"enableTLS="',
+            "Ref: EnableTLS",
+            '"\\n"',
+        ])
 
     result = [
         f"{p}UserData:\n",
@@ -168,6 +174,9 @@ def _assemble_public() -> str:
         _read("parameters-tls.yaml"),
         "\n",
         _read("parameters-public.yaml"),
+        "\n",
+        "Rules:\n",
+        _read("rules-public.yaml"),
         "\n",
         "Conditions:\n",
         _read("conditions-public.yaml"),

@@ -1,0 +1,10 @@
+  PublicTlsCertificateRequired:
+    RuleCondition: !Equals [!Ref EnableTLS, 'true']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref CertificateArn, '']]
+        AssertDescription: CertificateArn is required when EnableTLS is true.
+  PublicTlsAdvertisedDnsRequired:
+    RuleCondition: !Equals [!Ref EnableTLS, 'true']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AdvertisedDNS, '']]
+        AssertDescription: AdvertisedDNS is required when EnableTLS is true.

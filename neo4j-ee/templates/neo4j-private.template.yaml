@@ -140,20 +140,24 @@ Parameters:
     Description: >-
       ARN of an ACM certificate for the NLB TLS listeners on ports 7473 (HTTPS)
       and 7687 (Bolt). The certificate's SAN must match AdvertisedDNS. Both
-      ACM-issued and ACM Private CA certificates are accepted.
+      ACM-issued and ACM Private CA certificates are accepted. Required for
+      Private and ExistingVpc deployments; required for Public only when TLS is
+      enabled.
     Type: String
-    AllowedPattern: ^arn:aws[a-zA-Z-]*:acm:[a-z0-9-]+:[0-9]+:certificate/.+$
-    ConstraintDescription: Must be a valid ACM certificate ARN.
+    Default: ''
+    AllowedPattern: (^$)|(^arn:aws[a-zA-Z-]*:acm:[a-z0-9-]+:[0-9]+:certificate/.+$)
+    ConstraintDescription: Must be blank or a valid ACM certificate ARN.
   AdvertisedDNS:
     Description: >-
       Public DNS name that resolves to this NLB. Used as the certificate SAN
       and as the host placed in server.bolt.advertised_address and
       server.http.advertised_address. Map this name to the NLB DNS via Route 53
-      or operator-managed DNS before clients connect.
+      or operator-managed DNS before clients connect. Required for Private and
+      ExistingVpc deployments; required for Public only when TLS is enabled.
     Type: String
-    MinLength: 1
-    AllowedPattern: ^[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$
-    ConstraintDescription: Must be a valid DNS name.
+    Default: ''
+    AllowedPattern: (^$)|(^[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$)
+    ConstraintDescription: Must be blank or a valid DNS name.
 
   AllowedCIDR:
     Description: >-
@@ -191,6 +195,14 @@ Parameters:
       named PrivateDnsZoneName.
 
 Rules:
+  CertificateArnRequired:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref CertificateArn, '']]
+        AssertDescription: CertificateArn is required for Private deployments.
+  AdvertisedDNSRequired:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AdvertisedDNS, '']]
+        AssertDescription: AdvertisedDNS is required for Private deployments.
   PrivateDnsZoneRequired:
     RuleCondition: !And
       - !Equals [!Ref CreatePrivateDns, 'true']
@@ -349,7 +361,7 @@ Resources:
           ToPort: 7687
           SourceSecurityGroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
 
-  Neo4jNLBEgressToHTTPS:
+  Neo4jNLBEgressToBrowser:
     Type: AWS::EC2::SecurityGroupEgress
     Properties:
       GroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
@@ -608,7 +620,7 @@ Resources:
       VPCZoneIdentifier:
         - !Ref Neo4jPrivateSubnet1
       TargetGroupARNs:
-        - Ref: Neo4jHTTPSTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       Tags:
         - Key: StackID
@@ -646,7 +658,7 @@ Resources:
       VPCZoneIdentifier:
         - !Ref Neo4jPrivateSubnet2
       TargetGroupARNs:
-        - Ref: Neo4jHTTPSTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       Tags:
         - Key: StackID
@@ -684,7 +696,7 @@ Resources:
       VPCZoneIdentifier:
         - !Ref Neo4jPrivateSubnet3
       TargetGroupARNs:
-        - Ref: Neo4jHTTPSTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       Tags:
         - Key: StackID
@@ -1477,11 +1489,11 @@ Resources:
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       Type: network
 
-  Neo4jHTTPSListener:
+  Neo4jBrowserListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
-        - TargetGroupArn: !Ref Neo4jHTTPSTargetGroup
+        - TargetGroupArn: !Ref Neo4jBrowserTargetGroup
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
       Port: 7473
@@ -1536,7 +1548,7 @@ Resources:
         HostedZoneId: !GetAtt Neo4jNetworkLoadBalancer.CanonicalHostedZoneID
         EvaluateTargetHealth: false
 
-  Neo4jHTTPSTargetGroup:
+  Neo4jBrowserTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: !Join

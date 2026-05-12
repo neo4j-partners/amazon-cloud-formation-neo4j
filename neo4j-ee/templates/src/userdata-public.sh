@@ -177,13 +177,22 @@ build_neo4j_conf_file() {
   local -r privateIP="$(hostname -i | awk '{print $NF}')"
   echo "Configuring network in neo4j.conf..."
   set_neo4j_conf server.default_listen_address 0.0.0.0
-  set_neo4j_conf server.default_advertised_address "${advertisedDNS}"
   set_neo4j_conf server.bolt.listen_address 0.0.0.0:7687
-  set_neo4j_conf server.bolt.advertised_address "${advertisedDNS}:7687"
-  set_neo4j_conf server.http.enabled false
-  set_neo4j_conf server.https.enabled true
-  set_neo4j_conf server.https.listen_address 0.0.0.0:7473
-  set_neo4j_conf server.https.advertised_address "${advertisedDNS}:7473"
+  if [[ "${enableTLS:-false}" == "true" ]]; then
+    set_neo4j_conf server.default_advertised_address "${advertisedDNS}"
+    set_neo4j_conf server.bolt.advertised_address "${advertisedDNS}:7687"
+    set_neo4j_conf server.http.enabled false
+    set_neo4j_conf server.https.enabled true
+    set_neo4j_conf server.https.listen_address 0.0.0.0:7473
+    set_neo4j_conf server.https.advertised_address "${advertisedDNS}:7473"
+  else
+    set_neo4j_conf server.default_advertised_address "${loadBalancerDNSName}"
+    set_neo4j_conf server.bolt.advertised_address "${loadBalancerDNSName}:7687"
+    set_neo4j_conf server.http.enabled true
+    set_neo4j_conf server.http.listen_address 0.0.0.0:7474
+    set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
+    set_neo4j_conf server.https.enabled false
+  fi
   neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
   set_neo4j_conf server.metrics.enabled true
   set_neo4j_conf server.metrics.jmx.enabled true
@@ -243,6 +252,10 @@ add_cypher_ip_blocklist() {
   set_neo4j_conf internal.dbms.cypher_ip_blocklist "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8"
 }
 configure_neo4j_tls() {
+  if [[ "${enableTLS:-false}" != "true" ]]; then
+    echo "Public TLS disabled; leaving Browser and Bolt plaintext."
+    return
+  fi
   echo "Configuring TLS for Bolt and HTTPS..."
   command -v openssl >/dev/null 2>&1 || dnf install -y openssl
   for _proto in bolt https; do

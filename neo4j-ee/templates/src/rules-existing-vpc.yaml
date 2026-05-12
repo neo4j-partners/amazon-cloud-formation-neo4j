@@ -4,6 +4,14 @@
       - Assert: !Not [!Equals [!Ref ExistingEndpointSgId, '']]
         AssertDescription: >-
           ExistingEndpointSgId must be provided when CreateVpcEndpoints is false.
+  CertificateArnRequired:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref CertificateArn, '']]
+        AssertDescription: CertificateArn is required for ExistingVpc deployments.
+  AdvertisedDNSRequired:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AdvertisedDNS, '']]
+        AssertDescription: AdvertisedDNS is required for ExistingVpc deployments.
   PrivateDnsZoneRequired:
     RuleCondition: !And
       - !Equals [!Ref CreatePrivateDns, 'true']

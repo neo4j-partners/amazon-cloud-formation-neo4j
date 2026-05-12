@@ -1,3 +1,11 @@
+  CertificateArnRequired:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref CertificateArn, '']]
+        AssertDescription: CertificateArn is required for Private deployments.
+  AdvertisedDNSRequired:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AdvertisedDNS, '']]
+        AssertDescription: AdvertisedDNS is required for Private deployments.
   PrivateDnsZoneRequired:
     RuleCondition: !And
       - !Equals [!Ref CreatePrivateDns, 'true']

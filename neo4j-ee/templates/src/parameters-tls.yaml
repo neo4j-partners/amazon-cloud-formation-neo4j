@@ -2,17 +2,21 @@
     Description: >-
       ARN of an ACM certificate for the NLB TLS listeners on ports 7473 (HTTPS)
       and 7687 (Bolt). The certificate's SAN must match AdvertisedDNS. Both
-      ACM-issued and ACM Private CA certificates are accepted.
+      ACM-issued and ACM Private CA certificates are accepted. Required for
+      Private and ExistingVpc deployments; required for Public only when TLS is
+      enabled.
     Type: String
-    AllowedPattern: ^arn:aws[a-zA-Z-]*:acm:[a-z0-9-]+:[0-9]+:certificate/.+$
-    ConstraintDescription: Must be a valid ACM certificate ARN.
+    Default: ''
+    AllowedPattern: (^$)|(^arn:aws[a-zA-Z-]*:acm:[a-z0-9-]+:[0-9]+:certificate/.+$)
+    ConstraintDescription: Must be blank or a valid ACM certificate ARN.
   AdvertisedDNS:
     Description: >-
       Public DNS name that resolves to this NLB. Used as the certificate SAN
       and as the host placed in server.bolt.advertised_address and
       server.http.advertised_address. Map this name to the NLB DNS via Route 53
-      or operator-managed DNS before clients connect.
+      or operator-managed DNS before clients connect. Required for Private and
+      ExistingVpc deployments; required for Public only when TLS is enabled.
     Type: String
-    MinLength: 1
-    AllowedPattern: ^[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$
-    ConstraintDescription: Must be a valid DNS name.
+    Default: ''
+    AllowedPattern: (^$)|(^[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$)
+    ConstraintDescription: Must be blank or a valid DNS name.

@@ -30,7 +30,7 @@
       VPCZoneIdentifier:
         - !Ref PrivateSubnet1Id
       TargetGroupARNs:
-        - Ref: Neo4jHTTPSTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       Tags:
         - Key: StackID
@@ -68,7 +68,7 @@
       VPCZoneIdentifier:
         - !Ref PrivateSubnet2Id
       TargetGroupARNs:
-        - Ref: Neo4jHTTPSTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       Tags:
         - Key: StackID
@@ -106,7 +106,7 @@
       VPCZoneIdentifier:
         - !Ref PrivateSubnet3Id
       TargetGroupARNs:
-        - Ref: Neo4jHTTPSTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       Tags:
         - Key: StackID

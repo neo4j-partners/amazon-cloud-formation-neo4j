@@ -29,7 +29,7 @@
           ToPort: 7687
           SourceSecurityGroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
 
-  Neo4jNLBEgressToHTTPS:
+  Neo4jNLBEgressToBrowser:
     Type: AWS::EC2::SecurityGroupEgress
     Properties:
       GroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId

@@ -62,8 +62,8 @@ These are the minimum permissions the operator's local IAM principal (user or as
 
 Connect directly from your machine — no SSM tunneling required.
 
-- **Neo4j Browser:** `https://<AdvertisedDNS>:7473`
-- **Bolt:** `neo4j+s://<AdvertisedDNS>:7687`
+- **Neo4j Browser:** `http://<NLB DNS>:7474` by default, or `https://<AdvertisedDNS>:7473` when public TLS is enabled
+- **Bolt:** `neo4j://<NLB DNS>:7687` by default, or `neo4j+s://<AdvertisedDNS>:7687` when public TLS is enabled
 - **Ingress filter:** connections from outside `AllowedCIDR` are dropped at the NLB security group
 
 Connection details are in the stack outputs:
@@ -135,11 +135,11 @@ Single-instance:
 |---|---|
 | VPC | New VPC with public subnets: one per AZ for a 3-node cluster, one for a single instance |
 | Internet Gateway | Outbound internet access; no NAT Gateways needed |
-| Internet-facing NLB | Listeners on port 7473 (HTTPS) and 7687 (Bolt); distributes connections across cluster nodes |
+| Internet-facing NLB | Default listeners on 7474 (HTTP Browser) and 7687 (Bolt); optional TLS listeners on 7473 and 7687 when `EnableTLS=true` |
 | EC2 instances | 1 or 3 Neo4j nodes with public IPs; no NAT, no private subnets |
 | ASG per node | One Auto Scaling Group per Neo4j node, fixed at `MinSize=MaxSize=DesiredCapacity=1`, for self-healing |
 | EBS data volumes | One GP3 volume per node with `DeletionPolicy: Retain`; survives stack deletion |
-| Security groups | `NLBSecurityGroup` (AllowedCIDR on 7473/7687 to the NLB); `ExternalSecurityGroup` (NLBSecurityGroup as source on 7473/7687 to the instances); `InternalSecurityGroup` (cluster ports 5000/6000/7000/7688 between cluster members only) |
+| Security groups | `NLBSecurityGroup` (AllowedCIDR on Browser and Bolt ports to the NLB); `ExternalSecurityGroup` (NLBSecurityGroup as source on Browser and Bolt ports to the instances); `InternalSecurityGroup` (cluster ports 5000/6000/7000/7688 between cluster members only) |
 | Secrets Manager | Neo4j admin password at `neo4j/<stack>/password` |
 | CloudWatch | Log group, VPC flow logs, failed-auth alarm, CloudTrail trail |
 
@@ -147,16 +147,16 @@ Single-instance:
 
 | Setting | Value | Notes |
 |---|---|---|
-| `AllowedCIDR` | Required | CIDR allowed to reach ports 7473 and 7687. `0.0.0.0/0` is rejected. `deploy.py` defaults to `<your-public-ip>/32`. |
-| NLB security group | Filters external traffic | `AllowedCIDR` on ports 7473 and 7687 to the NLB |
+| `AllowedCIDR` | Required | CIDR allowed to reach Browser and Bolt ports. `0.0.0.0/0` is rejected. `deploy.py` defaults to `<your-public-ip>/32`. |
+| NLB security group | Filters external traffic | `AllowedCIDR` on 7474/7687 by default, or 7473/7687 when public TLS is enabled |
 | Instance security group | Sources from NLB SG | Allows both forwarded client traffic and NLB health checks without hardcoding a VPC CIDR |
 | IMDSv2 | Enforced | Instance metadata requires session tokens; IMDSv1 requests are rejected |
 | JDWP (port 5005) | Disabled | Remote debug port is closed and the JVM debug flag is stripped from `neo4j.conf` at boot |
-| TLS | Required | `CertificateArn` is an ACM certificate ARN whose SAN matches `AdvertisedDNS`. The NLB presents it on 7473 and 7687, then opens separate TLS connections to self-signed backend certs on each instance. |
+| TLS | Optional | Set `EnableTLS=true` and provide `CertificateArn` plus `AdvertisedDNS` to enable TLS on 7473 and 7687. Public DNS is customer-managed; the stack does not create public Route 53 records. |
 
 ### NLB Routing
 
-At boot, each cluster node sets these `neo4j.conf` values:
+At boot, each cluster node sets these `neo4j.conf` values when public TLS is enabled:
 
 ```
 server.bolt.advertised_address = <AdvertisedDNS>:7687
@@ -168,12 +168,15 @@ dbms.routing.default_router    = SERVER
 - **`neo4j+s://` flow:** driver fetches a routing table containing only `AdvertisedDNS`, sends all subsequent requests through the NLB
 - **Server-side routing:** Neo4j directs writes to the leader and reads to followers automatically
 
+When public TLS is disabled, nodes advertise the NLB DNS name and Browser remains on HTTP port 7474.
+
 | Access pattern | URI | Notes |
 |---|---|---|
-| Direct from internet | `neo4j+s://<AdvertisedDNS>:7687` | ACM cert validates against AdvertisedDNS; Route 53 must point AdvertisedDNS at the NLB. |
+| Direct from internet, default | `neo4j://<NLB DNS>:7687` | No customer domain is required; use for public evaluation only. |
+| Direct from internet, public TLS | `neo4j+s://<AdvertisedDNS>:7687` | ACM cert validates against AdvertisedDNS; customer DNS must point AdvertisedDNS at the NLB. |
 | Direct node IP (same subnet) | `neo4j+ssc://<node-ip>:7687` | Bypasses NLB; single node, no failover. `+ssc` skips cert validation since the self-signed backend cert is not bound to an IP. |
 
-Public stacks do not support `CreatePrivateDns`. `AdvertisedDNS` must resolve through public DNS, or through customer-managed DNS reachable from the clients that connect to the public NLB.
+Public stacks do not support `CreatePrivateDns` and do not manage public DNS. `AdvertisedDNS` is needed only when public TLS is enabled, and it must resolve through customer-managed DNS reachable from the clients that connect to the public NLB.
 
 ### EBS Persistence
 
@@ -183,7 +186,7 @@ Each node has a dedicated GP3 EBS data volume. `DeletionPolicy: Retain` keeps th
 
 > **Why two SGs?** NLB health checks originate from the NLB's private VPC IPs, not from `AllowedCIDR`. Applying `AllowedCIDR` directly to the instance SG blocks health checks and fails all NLB targets.
 
-- **`Neo4jNLBSecurityGroup` (on the NLB):** allows `AllowedCIDR` on 7473/7687 — filters external client traffic without hardcoding any VPC CIDR
+- **`Neo4jNLBSecurityGroup` (on the NLB):** allows `AllowedCIDR` on Browser/Bolt ports — filters external client traffic without hardcoding any VPC CIDR
 - **`Neo4jExternalSecurityGroup` (on the instances):** sources from `Neo4jNLBSecurityGroup` via `SourceSecurityGroupId` — allows both forwarded client traffic and NLB health checks
 
 This pattern works for any marketplace deployment without knowing the VPC CIDR at template-authoring time.
@@ -209,22 +212,25 @@ Commit both the edited partial and the regenerated `neo4j-public.template.yaml`.
 cd neo4j-ee
 
 # 3-node cluster, t3.medium, random region
-./deploy.py --mode Public --cert-arn <arn> --advertised-dns <dns>
+./deploy.py --mode Public
 
 # Single instance
-./deploy.py --mode Public --number-of-servers 1 --cert-arn <arn> --advertised-dns <dns>
+./deploy.py --mode Public --number-of-servers 1
 
 # Memory-optimized instance
-./deploy.py --mode Public r8i.xlarge --cert-arn <arn> --advertised-dns <dns>
+./deploy.py --mode Public r8i.xlarge
 
 # Pin region (avoids 10-20 min AMI copy)
-./deploy.py --mode Public --region us-east-1 --cert-arn <arn> --advertised-dns <dns>
+./deploy.py --mode Public --region us-east-1
 
 # Use the published Marketplace AMI
-./deploy.py --mode Public --marketplace --cert-arn <arn> --advertised-dns <dns>
+./deploy.py --mode Public --marketplace
 
 # Enable CloudWatch alarm email notifications
-./deploy.py --mode Public --alert-email you@example.com --cert-arn <arn> --advertised-dns <dns>
+./deploy.py --mode Public --alert-email you@example.com
+
+# Opt in to public TLS after creating customer-managed DNS and an ACM cert
+./deploy.py --mode Public --enable-public-tls --cert-arn <arn> --advertised-dns <dns>
 ```
 
 `deploy.py` detects your public IP automatically and restricts the security group to `<your-ip>/32`. Pass `--allowed-cidr` to override. The script writes outputs to `.deploy/<stack-name>.txt`.

@@ -147,11 +147,11 @@
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       Type: network
 
-  Neo4jHTTPSListener:
+  Neo4jBrowserListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
-        - TargetGroupArn: !Ref Neo4jHTTPSTargetGroup
+        - TargetGroupArn: !Ref Neo4jBrowserTargetGroup
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
       Port: 7473
@@ -206,7 +206,7 @@
         HostedZoneId: !GetAtt Neo4jNetworkLoadBalancer.CanonicalHostedZoneID
         EvaluateTargetHealth: false
 
-  Neo4jHTTPSTargetGroup:
+  Neo4jBrowserTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: !Join

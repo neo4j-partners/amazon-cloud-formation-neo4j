@@ -115,30 +115,11 @@ def describe_stack_id(cfn, stack_name: str) -> str:
     return stack_id
 
 
-def certificate_type(acm, cert_arn: str) -> str:
-    if not cert_arn:
-        return ""
-    try:
-        return acm.describe_certificate(CertificateArn=cert_arn)["Certificate"].get(
-            "Type", ""
-        )
-    except ClientError:
-        return ""
-
-
-def resolve_bolt_settings(
-    number_of_servers: str,
-    self_signed: bool,
-    cert_type: str,
-) -> tuple[str, str]:
-    if cert_type in {"IMPORTED", "PRIVATE"}:
-        scheme = "bolt" if number_of_servers == "1" else "neo4j"
-        return scheme, "neo4j-ca.pem"
-    if self_signed:
-        scheme = "bolt+ssc" if number_of_servers == "1" else "neo4j+ssc"
-        return scheme, ""
-    scheme = "bolt+s" if number_of_servers == "1" else "neo4j+s"
-    return scheme, ""
+def resolve_bolt_scheme(number_of_servers: str, bolt_tls_enabled: bool) -> str:
+    base = "bolt" if number_of_servers == "1" else "neo4j"
+    if bolt_tls_enabled:
+        return f"{base}+ssc"
+    return base
 
 
 def print_header(
@@ -148,9 +129,7 @@ def print_header(
     ssm_prefix: str,
     enable_resilience: bool,
     bolt_scheme: str,
-    trusted_ca_file: str,
-    cert_type: str,
-    self_signed: bool,
+    bolt_tls_enabled: bool,
 ) -> None:
     print("=== Neo4j Sample Private App Deploy ===")
     print()
@@ -160,12 +139,7 @@ def print_header(
     print(f"  SSM Prefix:     {ssm_prefix}")
     print(f"  Resilience:     {str(enable_resilience).lower()}")
     print(f"  Bolt Scheme:    {bolt_scheme}")
-    if trusted_ca_file:
-        print(f"  Cert Trust:     custom CA bundle from ACM {cert_type} certificate")
-    elif self_signed:
-        print("  Cert Trust:     self-signed skip-validation")
-    else:
-        print("  Cert Trust:     system CA store")
+    print(f"  Bolt TLS:       {str(bolt_tls_enabled).lower()}")
     print()
 
 
@@ -198,23 +172,10 @@ def install_lambda_dependencies() -> None:
     )
 
 
-def write_trusted_ca(acm, cert_arn: str, trusted_ca_file: str) -> None:
-    if not trusted_ca_file:
-        return
-    cert = acm.get_certificate(CertificateArn=cert_arn)
-    pem = cert.get("CertificateChain") or cert.get("Certificate") or ""
-    if not pem:
-        raise SystemExit("ERROR: ACM did not return a certificate or chain.")
-    target = LAMBDA_DIR / trusted_ca_file
-    print(f"  writing custom CA bundle: {target.relative_to(SCRIPT_DIR)}")
-    target.write_text(pem if pem.endswith("\n") else f"{pem}\n")
-
-
-def package_lambda(acm, cert_arn: str, trusted_ca_file: str) -> Path:
+def package_lambda() -> Path:
     print("Packaging Lambda...")
     clean_lambda_dir()
     install_lambda_dependencies()
-    write_trusted_ca(acm, cert_arn, trusted_ca_file)
 
     zip_path = SCRIPT_DIR / "lambda.zip"
     if zip_path.exists():
@@ -228,8 +189,6 @@ def package_lambda(acm, cert_arn: str, trusted_ca_file: str) -> Path:
                 archive.write(path, path.relative_to(LAMBDA_DIR))
 
     (LAMBDA_DIR / ".lock").unlink(missing_ok=True)
-    if trusted_ca_file:
-        (LAMBDA_DIR / trusted_ca_file).unlink(missing_ok=True)
 
     print(f"  zip: {zip_path} ({zip_path.stat().st_size} bytes)")
     return zip_path
@@ -458,8 +417,7 @@ def main() -> None:
     region = require_field(fields, "Region", outputs_file)
     deployment_mode = fields.get("DeploymentMode", "")
     number_of_servers = fields.get("NumberOfServers", "1")
-    self_signed = fields.get("SelfSignedCertificate", "").lower() == "true"
-    cert_arn = fields.get("CertificateArn", "")
+    bolt_tls_enabled = bool(fields.get("BoltTlsSecretArn"))
 
     if deployment_mode not in {"Private", "ExistingVpc"}:
         raise SystemExit(
@@ -468,7 +426,6 @@ def main() -> None:
         )
 
     session = boto3.Session(region_name=region)
-    acm = session.client("acm")
     cfn = session.client("cloudformation")
     s3 = session.client("s3")
     ssm = session.client("ssm")
@@ -477,12 +434,7 @@ def main() -> None:
     app_stack_name = f"neo4j-sample-private-app-{neo4j_stack}{suffix}"
     ssm_prefix = f"/neo4j-ee/{neo4j_stack}"
     neo4j_stack_id = describe_stack_id(cfn, neo4j_stack)
-    cert_type = certificate_type(acm, cert_arn)
-    bolt_scheme, trusted_ca_file = resolve_bolt_settings(
-        number_of_servers,
-        self_signed,
-        cert_type,
-    )
+    bolt_scheme = resolve_bolt_scheme(number_of_servers, bolt_tls_enabled)
 
     print_header(
         neo4j_stack,
@@ -491,9 +443,7 @@ def main() -> None:
         ssm_prefix,
         args.enable_resilience,
         bolt_scheme,
-        trusted_ca_file,
-        cert_type,
-        self_signed,
+        bolt_tls_enabled,
     )
 
     print("Reading SSM parameters from EE stack...")
@@ -519,7 +469,7 @@ def main() -> None:
         print("  private-subnet-2-id: not present for single-server EE stack")
     print()
 
-    zip_path = package_lambda(acm, cert_arn, trusted_ca_file)
+    zip_path = package_lambda()
     account_id = sts.get_caller_identity()["Account"]
     bucket = ensure_deploy_bucket(s3, account_id, region)
     lambda_key = f"{app_stack_name}/lambda.zip"
@@ -538,8 +488,8 @@ def main() -> None:
         "LambdaS3Key": lambda_key,
         "LambdaS3ObjectVersion": lambda_version_id,
         "EnableResilienceTestFunction": str(args.enable_resilience).lower(),
-        "BoltScheme": bolt_scheme,
-        "TrustedCaCertFile": trusted_ca_file,
+        "NumberOfServers": number_of_servers,
+        "BoltTlsEnabled": str(bolt_tls_enabled).lower(),
     }
     deploy_stack(
         cfn,
@@ -577,7 +527,7 @@ def main() -> None:
             "validate_url": validate_url,
             "validate_arn": validate_arn,
             "bolt_scheme": bolt_scheme,
-            "trusted_ca_cert_file": trusted_ca_file,
+            "bolt_tls_enabled": str(bolt_tls_enabled).lower(),
         },
     )
 

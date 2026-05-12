@@ -251,17 +251,6 @@ if [ -n "${COPIED_AMI_ID}" ]; then
   echo "Copied AMI cleaned up."
 fi
 
-# ---------------------------------------------------------------------------
-# Step 4: Clean up local files
-# ---------------------------------------------------------------------------
-CA_BUNDLE="${SCRIPT_DIR}/sample-private-app/lambda/neo4j-ca.crt"
-if [ -f "${CA_BUNDLE}" ]; then
-  echo ""
-  echo "Removing staged CA bundle ${CA_BUNDLE}..."
-  rm -f "${CA_BUNDLE}"
-  echo "CA bundle removed."
-fi
-
 echo ""
 echo "Removing ${OUTPUTS_FILE}..."
 rm -f "${OUTPUTS_FILE}"

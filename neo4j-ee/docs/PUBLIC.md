@@ -62,8 +62,8 @@ These are the minimum permissions the operator's local IAM principal (user or as
 
 Connect directly from your machine — no SSM tunneling required.
 
-- **Neo4j Browser:** `http://<NLB DNS>:7474` by default, or `https://<AdvertisedDNS>:7473` when public TLS is enabled
-- **Bolt:** `neo4j://<NLB DNS>:7687` by default, or `neo4j+s://<AdvertisedDNS>:7687` when public TLS is enabled
+- **Neo4j Browser:** `http://<NLB DNS>:7474`
+- **Bolt:** `neo4j://<NLB DNS>:7687`
 - **Ingress filter:** connections from outside `AllowedCIDR` are dropped at the NLB security group
 
 Connection details are in the stack outputs:
@@ -135,7 +135,7 @@ Single-instance:
 |---|---|
 | VPC | New VPC with public subnets: one per AZ for a 3-node cluster, one for a single instance |
 | Internet Gateway | Outbound internet access; no NAT Gateways needed |
-| Internet-facing NLB | Default listeners on 7474 (HTTP Browser) and 7687 (Bolt); optional TLS listeners on 7473 and 7687 when `EnableTLS=true` |
+| Internet-facing NLB | Listeners on 7474 (HTTP Browser) and 7687 (Bolt) |
 | EC2 instances | 1 or 3 Neo4j nodes with public IPs; no NAT, no private subnets |
 | ASG per node | One Auto Scaling Group per Neo4j node, fixed at `MinSize=MaxSize=DesiredCapacity=1`, for self-healing |
 | EBS data volumes | One GP3 volume per node with `DeletionPolicy: Retain`; survives stack deletion |
@@ -148,35 +148,22 @@ Single-instance:
 | Setting | Value | Notes |
 |---|---|---|
 | `AllowedCIDR` | Required | CIDR allowed to reach Browser and Bolt ports. `0.0.0.0/0` is rejected. `deploy.py` defaults to `<your-public-ip>/32`. |
-| NLB security group | Filters external traffic | `AllowedCIDR` on 7474/7687 by default, or 7473/7687 when public TLS is enabled |
+| NLB security group | Filters external traffic | `AllowedCIDR` on 7474/7687 |
 | Instance security group | Sources from NLB SG | Allows both forwarded client traffic and NLB health checks without hardcoding a VPC CIDR |
 | IMDSv2 | Enforced | Instance metadata requires session tokens; IMDSv1 requests are rejected |
 | JDWP (port 5005) | Disabled | Remote debug port is closed and the JVM debug flag is stripped from `neo4j.conf` at boot |
-| TLS | Optional | Set `EnableTLS=true` and provide `CertificateArn` plus `AdvertisedDNS` to enable TLS on 7473 and 7687. Public DNS is customer-managed; the stack does not create public Route 53 records. |
+| Bolt TLS | Optional test flow | `deploy.py --tls` can enable self-signed Bolt TLS on 7687 for local testing. Browser remains HTTP on 7474. |
 
 ### NLB Routing
 
-At boot, each cluster node sets these `neo4j.conf` values when public TLS is enabled:
-
-```
-server.bolt.advertised_address = <AdvertisedDNS>:7687
-server.https.advertised_address = <AdvertisedDNS>:7473
-dbms.routing.default_router    = SERVER
-```
-
-- **Single name everywhere:** every routing table entry points back to `AdvertisedDNS`, which matches the ACM cert SAN
-- **`neo4j+s://` flow:** driver fetches a routing table containing only `AdvertisedDNS`, sends all subsequent requests through the NLB
-- **Server-side routing:** Neo4j directs writes to the leader and reads to followers automatically
-
-When public TLS is disabled, nodes advertise the NLB DNS name and Browser remains on HTTP port 7474.
+At boot, each cluster node advertises the NLB DNS name for Bolt routing and keeps Neo4j Browser on HTTP port 7474. Server-side routing directs writes to the leader and reads to followers automatically.
 
 | Access pattern | URI | Notes |
 |---|---|---|
-| Direct from internet, default | `neo4j://<NLB DNS>:7687` | No customer domain is required; use for public evaluation only. |
-| Direct from internet, public TLS | `neo4j+s://<AdvertisedDNS>:7687` | ACM cert validates against AdvertisedDNS; customer DNS must point AdvertisedDNS at the NLB. |
-| Direct node IP (same subnet) | `neo4j+ssc://<node-ip>:7687` | Bypasses NLB; single node, no failover. `+ssc` skips cert validation since the self-signed backend cert is not bound to an IP. |
+| Direct from internet | `neo4j://<NLB DNS>:7687` | No customer domain is required; use for public evaluation only. |
+| Direct node IP (same subnet) | `neo4j://<node-ip>:7687` | Bypasses NLB; single node, no failover. |
 
-Public stacks do not support `CreatePrivateDns` and do not manage public DNS. `AdvertisedDNS` is needed only when public TLS is enabled, and it must resolve through customer-managed DNS reachable from the clients that connect to the public NLB.
+Public stacks do not manage public DNS records.
 
 ### EBS Persistence
 
@@ -229,8 +216,8 @@ cd neo4j-ee
 # Enable CloudWatch alarm email notifications
 ./deploy.py --mode Public --alert-email you@example.com
 
-# Opt in to public TLS after creating customer-managed DNS and an ACM cert
-./deploy.py --mode Public --enable-public-tls --cert-arn <arn> --advertised-dns <dns>
+# Optional self-signed Bolt TLS test flow
+./deploy.py --mode Public --tls
 ```
 
 `deploy.py` detects your public IP automatically and restricts the security group to `<your-ip>/32`. Pass `--allowed-cidr` to override. The script writes outputs to `.deploy/<stack-name>.txt`.

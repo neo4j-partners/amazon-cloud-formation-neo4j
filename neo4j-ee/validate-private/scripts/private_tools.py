@@ -5,10 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-import boto3
-from botocore.exceptions import ClientError
-
-
 SCRIPTS_DIR = Path(__file__).resolve().parent
 VALIDATE_PRIVATE_DIR = SCRIPTS_DIR.parent
 EE_DIR = VALIDATE_PRIVATE_DIR.parent
@@ -64,33 +60,8 @@ def require_private_mode(fields: dict[str, str]) -> None:
         )
 
 
-def certificate_type(fields: dict[str, str]) -> str:
-    cert_type = fields.get("CertificateType", "")
-    if cert_type:
-        return cert_type
-
-    cert_arn = fields.get("CertificateArn", "")
-    region = fields.get("Region", "")
-    if not cert_arn or not region:
-        return ""
-
-    try:
-        acm = boto3.client("acm", region_name=region)
-        cert = acm.describe_certificate(CertificateArn=cert_arn)["Certificate"]
-    except ClientError:
-        return ""
-    return cert.get("Type", "")
-
-
 def resolve_bolt_scheme(fields: dict[str, str]) -> str:
-    number_of_servers = fields.get("NumberOfServers", "3")
-    base = "bolt" if number_of_servers == "1" else "neo4j"
-    self_signed = fields.get("SelfSignedCertificate", "").lower() == "true"
-    cert_type = certificate_type(fields)
-
-    # These operator tools do not install a custom CA bundle into Browser,
-    # cypher-shell, or the bastion smoke-test driver. Use +ssc for certs that
-    # are not expected to chain to the client system trust store.
-    if self_signed or cert_type in {"IMPORTED", "PRIVATE"}:
+    base = "bolt" if fields.get("NumberOfServers", "3") == "1" else "neo4j"
+    if fields.get("BoltTlsSecretArn", ""):
         return f"{base}+ssc"
-    return f"{base}+s"
+    return base

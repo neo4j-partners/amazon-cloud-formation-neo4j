@@ -40,12 +40,12 @@ sm = boto3.client("secretsmanager", region_name=region)
 password = sm.get_secret_value(SecretId=f"neo4j/{stack}/password")["SecretString"]
 
 ssm_client = boto3.client("ssm", region_name=region)
-advertised_dns = ssm_client.get_parameter(
-    Name=f"/neo4j-ee/{stack}/advertised-dns"
+nlb_dns = ssm_client.get_parameter(
+    Name=f"/neo4j-ee/{stack}/nlb-dns"
 )["Parameter"]["Value"]
 
 driver = GraphDatabase.driver(
-    f"{bolt_scheme}://{advertised_dns}:7687",
+    f"{bolt_scheme}://{nlb_dns}:7687",
     auth=("neo4j", password),
 )
 successes = 0
@@ -127,7 +127,7 @@ def main() -> None:
     stack_name = require_field(fields, "StackName", outputs_file)
     region = require_field(fields, "Region", outputs_file)
     bastion_id = require_field(fields, "Neo4jOperatorBastionId", outputs_file)
-    advertised_dns = require_field(fields, "AdvertisedDNS", outputs_file)
+    nlb_dns = require_field(fields, "Neo4jInternalDNS", outputs_file)
     bolt_scheme = resolve_bolt_scheme(fields)
 
     print("=== Smoke Write Test ===")
@@ -135,7 +135,7 @@ def main() -> None:
     print(f"  Stack:      {stack_name}")
     print(f"  Region:     {region}")
     print(f"  Bastion:    {bastion_id}")
-    print(f"  URI:        {bolt_scheme}://{advertised_dns}:7687")
+    print(f"  URI:        {bolt_scheme}://{nlb_dns}:7687")
     print(f"  Iterations: {args.iterations}")
     print()
 

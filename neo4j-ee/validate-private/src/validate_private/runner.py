@@ -39,9 +39,9 @@ sm = boto3.client("secretsmanager", region_name=region)
 password = sm.get_secret_value(SecretId=f"neo4j/{stack}/password")["SecretString"]
 
 ssm_client = boto3.client("ssm", region_name=region)
-advertised_dns = ssm_client.get_parameter(Name=f"/neo4j-ee/{stack}/advertised-dns")["Parameter"]["Value"]
+nlb_dns = ssm_client.get_parameter(Name=f"/neo4j-ee/{stack}/nlb-dns")["Parameter"]["Value"]
 
-driver = GraphDatabase.driver(f"{bolt_scheme}://{advertised_dns}:7687", auth=("neo4j", password))
+driver = GraphDatabase.driver(f"{bolt_scheme}://{nlb_dns}:7687", auth=("neo4j", password))
 try:
     kwargs = {"parameters_": params}
     if database:

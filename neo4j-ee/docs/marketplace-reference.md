@@ -4,13 +4,13 @@ Reference document for the three-template split. Covers the key design decisions
 
 ---
 
-## Network Encryption Guidance
+## Network Security Guidance
 
 AWS Marketplace AMI policy pages distinguish mandatory product requirements from recommended best practices. The current AMI requirements page does not appear to state a blanket hard rejection rule for every plaintext application protocol, but the official AMI best practices recommend encrypting network traffic with SSL/TLS where possible and using valid, up-to-date certificates.
 
 The same best-practices page also tells sellers to document the minimum required ports and recommended source IP ranges for administrative access. Those controls are necessary, but they are not substitutes for encryption in transit. A security group `AllowedCIDR` restriction controls which source IPs can initiate a connection at the AWS network layer; it does not encrypt traffic. An attacker controlling a permitted client, a routed network segment, a traffic mirror, or a compromised workload in the same reachable private network can read Neo4j credentials, Cypher queries, and query results in plaintext.
 
-The practical consequence for this listing: TLS is mandatory for the private templates and opt-in for the public evaluation template. When TLS is enabled, the NLB terminates client TLS on 7473 (HTTPS Browser) and 7687 (Bolt) using a customer-supplied ACM cert that matches the AdvertisedDNS SAN, and the target groups open separate TLS connections to self-signed backend certs generated on each instance. Traffic is encrypted from client to NLB and from NLB to instance, without implying one uninterrupted client-to-instance TLS session.
+The practical consequence for this listing: the templates restrict Neo4j Browser and Bolt access with `AllowedCIDR`, route private operator access through SSM, and retain optional Bolt TLS parameters for customers or local test flows that need encrypted Bolt on port 7687. The current templates do not implement stack-managed Browser HTTPS or a stack-managed public/private DNS alias.
 
 Related Marketplace policy points:
 
@@ -27,9 +27,9 @@ References:
 
 ## Key Design Decisions
 
-### TLS availability
+### Bolt TLS availability
 
-TLS parameters (`CertificateArn`, `AdvertisedDNS`) are required for the Private and ExistingVpc templates. The Public template defaults to plaintext Browser/Bolt for evaluation and exposes `EnableTLS` as an opt-in. When `EnableTLS=true`, buyers must provide an ACM certificate whose SAN matches `AdvertisedDNS`; the NLB uses that certificate on 7473 and 7687 and opens separate TLS connections to each instance. The Public template does not create public DNS records.
+All three templates include optional Bolt TLS parameters (`BoltCertificateSecretArn`, `BoltAdvertisedDNS`). When `BoltCertificateSecretArn` is set, Neo4j enables TLS on Bolt port 7687 using the certificate and private key stored in Secrets Manager. Neo4j Browser remains HTTP on port 7474 in the current templates.
 
 ### AllowedCIDR default
 
@@ -64,7 +64,7 @@ AllowedCIDR:
   ConstraintDescription: The value 0.0.0.0/0 is not permitted.
 ```
 
-The NLB security group applies this CIDR to Neo4j Browser and Bolt ports. Private templates use 7473 (HTTPS) and 7687 (Bolt). The Public template uses 7474/7687 by default and 7473/7687 when public TLS is enabled. The instance-facing external security group accepts those ports only from the NLB security group. Intra-cluster ports (5000, 6000, 7000, 7688, 2003, 2004, 3637) are restricted to the internal security group using a self-referential ingress rule. No port 22 ingress is created; operator access goes through SSM Session Manager.
+The NLB security group applies this CIDR to Neo4j Browser and Bolt ports. The current templates use 7474 for Browser and 7687 for Bolt. The instance-facing external security group accepts those ports only from the NLB security group. Intra-cluster ports (5000, 6000, 7000, 7688, 2003, 2004, 3637) are restricted to the internal security group using a self-referential ingress rule. No port 22 ingress is created; operator access goes through SSM Session Manager.
 
 ### IAM least privilege
 
@@ -73,7 +73,7 @@ EC2 instances must use an IAM role, not long-term access keys. Each permission m
 - CloudFormation signaling: restrict to the current stack ARN using `!Sub`.
 - EBS operations (`ec2:AttachVolume`, `ec2:DescribeVolumes`, `ec2:DescribeInstances`): resource `*` is acceptable because EBS volumes lack ARN-level scoping on all relevant APIs.
 - Auto Scaling discovery (`autoscaling:DescribeAutoScalingGroups`): required for cluster node discovery; resource `*` is unavoidable.
-- Secrets Manager (`secretsmanager:GetSecretValue`): scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`). The TLS backend cert is generated on the instance at boot, not stored in Secrets Manager, so no additional secret read permission is required.
+- Secrets Manager (`secretsmanager:GetSecretValue`): scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`) and, when optional Bolt TLS is configured, the `BoltCertificateSecretArn` secret.
 
 ### Auto Scaling groups for all topologies
 
@@ -157,13 +157,11 @@ Metadata:
         Parameters:
           - AllowedCIDR
       - Label:
-          default: "TLS"
+          default: "Bolt TLS"
         Parameters:
-          - CertificateArn
-          - AdvertisedDNS
+          - BoltCertificateSecretArn
+          - BoltAdvertisedDNS
 ```
-
-For the Public template, include `EnableTLS` in the TLS group and keep the certificate fields optional unless that flag is true.
 
 ### Architectural diagrams
 

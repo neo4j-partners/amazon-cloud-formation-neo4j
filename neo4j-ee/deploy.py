@@ -15,6 +15,7 @@ import secrets
 import string
 import sys
 import time
+import urllib.parse
 import urllib.request
 
 import boto3
@@ -164,6 +165,33 @@ def generate_tls_cert(nlb_dns):
         serialization.NoEncryption(),
     ).decode()
     return cert_pem, key_pem
+
+
+def describe_stack_outputs(cfn, stack_name: str) -> dict[str, str]:
+    stack = cfn.describe_stacks(StackName=stack_name)["Stacks"][0]
+    return {
+        output["OutputKey"]: output["OutputValue"]
+        for output in stack.get("Outputs", [])
+    }
+
+
+def nlb_dns_from_outputs(cfn, stack_name: str) -> str:
+    outputs = describe_stack_outputs(cfn, stack_name)
+    if outputs.get("Neo4jInternalDNS"):
+        return outputs["Neo4jInternalDNS"]
+
+    for key in ("Neo4jURI", "Neo4jBrowserURL"):
+        value = outputs.get(key, "")
+        if not value:
+            continue
+        hostname = urllib.parse.urlparse(value).hostname
+        if hostname:
+            return hostname
+
+    sys.exit(
+        "ERROR: Could not resolve the NLB DNS name from stack outputs. "
+        "Expected Neo4jInternalDNS, Neo4jURI, or Neo4jBrowserURL."
+    )
 
 
 def install_licenses(stack_name, region, bloom_secret, gds_secret):
@@ -578,9 +606,7 @@ def main():
         print()
         print("--- TLS Phase: generating self-signed cert and updating stack ---")
 
-        nlb_dns = boto3.client("ssm", region_name=region).get_parameter(
-            Name=f"/neo4j-ee/{stack_name}/nlb-dns"
-        )["Parameter"]["Value"]
+        nlb_dns = nlb_dns_from_outputs(cfn, stack_name)
         print(f"NLB DNS: {nlb_dns}")
 
         cert_pem, key_pem = generate_tls_cert(nlb_dns)
@@ -592,12 +618,6 @@ def main():
         )["ARN"]
         cleanup_state["tls_secret_arn"] = bolt_tls_secret_arn
         print(f"Secrets Manager secret created: {bolt_tls_secret_arn}")
-
-        lambda_dir = os.path.join(SCRIPT_DIR, "sample-private-app", "lambda")
-        ca_path = os.path.join(lambda_dir, "neo4j-ca.crt")
-        with open(ca_path, "w") as f:
-            f.write(cert_pem)
-        print(f"CA bundle staged at {ca_path}")
 
         print("Updating stack with BoltCertificateSecretArn...")
         existing_params = cfn.describe_stacks(StackName=stack_name)["Stacks"][0]["Parameters"]
@@ -656,9 +676,10 @@ def main():
         cleanup_state["tls_secret_arn"] = None  # persist for teardown.sh
 
         print()
-        print("TLS enabled on Bolt. To activate on the Lambda:")
-        print(f"  cd {SCRIPT_DIR}/sample-private-app && cdk deploy")
-        print("(neo4j-ca.crt is already staged in the lambda/ directory)")
+        print(
+            "TLS enabled on Bolt. Local tools and the sample app use +ssc "
+            "when BoltTlsSecretArn is present."
+        )
 
     install_licenses(
         stack_name=stack_name,

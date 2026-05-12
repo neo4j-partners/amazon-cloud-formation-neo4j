@@ -5,7 +5,7 @@ import random
 import time
 
 import boto3
-from neo4j import GraphDatabase, TrustCustomCAs
+from neo4j import GraphDatabase
 from neo4j.exceptions import AuthError
 
 log = logging.getLogger(__name__)
@@ -16,33 +16,23 @@ sm = boto3.client("secretsmanager")
 _driver = None
 
 
+def _bolt_scheme():
+    base_scheme = "bolt" if os.environ.get("NEO4J_NUMBER_OF_SERVERS") == "1" else "neo4j"
+    if os.environ.get("NEO4J_BOLT_TLS") == "true":
+        return f"{base_scheme}+ssc"
+    return base_scheme
+
+
 def _init_driver():
-    advertised_dns = ssm.get_parameter(
-        Name=os.environ["NEO4J_SSM_ADVERTISED_DNS_PATH"]
+    nlb_dns = ssm.get_parameter(
+        Name=os.environ["NEO4J_SSM_NLB_PATH"]
     )["Parameter"]["Value"]
     password = sm.get_secret_value(SecretId=os.environ["NEO4J_SECRET_ARN"])["SecretString"]
-    bolt_scheme = os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s")
-    driver_config = {}
-
-    trusted_ca_file = os.environ.get("NEO4J_TRUSTED_CA_CERT_FILE", "").strip()
-    if trusted_ca_file:
-        if bolt_scheme in {"bolt+s", "bolt+ssc"}:
-            bolt_scheme = "bolt"
-        elif bolt_scheme in {"neo4j+s", "neo4j+ssc"}:
-            bolt_scheme = "neo4j"
-        ca_path = trusted_ca_file
-        if not os.path.isabs(ca_path):
-            ca_path = os.path.join(
-                os.environ.get("LAMBDA_TASK_ROOT", os.path.dirname(__file__)),
-                ca_path,
-            )
-        driver_config["encrypted"] = True
-        driver_config["trusted_certificates"] = TrustCustomCAs(ca_path)
+    bolt_scheme = _bolt_scheme()
 
     return GraphDatabase.driver(
-        f"{bolt_scheme}://{advertised_dns}:7687",
+        f"{bolt_scheme}://{nlb_dns}:7687",
         auth=("neo4j", password),
-        **driver_config,
     )
 
 
@@ -121,7 +111,7 @@ def _run(driver):
         edition = edition_row["edition"] if edition_row else "unknown"
 
         routing_rows = []
-        if os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s").startswith("neo4j"):
+        if os.environ.get("NEO4J_NUMBER_OF_SERVERS") != "1":
             routing_rows = session.run(
                 "CALL dbms.routing.getRoutingTable({}, 'neo4j')"
             ).data()
@@ -148,8 +138,8 @@ def _run(driver):
                 readers += len(server.get("addresses", []))
 
     body = {
-        "bolt_scheme": os.environ.get("NEO4J_BOLT_SCHEME", "neo4j+s"),
-        "trusted_ca": bool(os.environ.get("NEO4J_TRUSTED_CA_CERT_FILE", "").strip()),
+        "tls_enabled": os.environ.get("NEO4J_BOLT_TLS") == "true",
+        "bolt_scheme": _bolt_scheme(),
         "edition": edition,
         "nodes_created": nodes_created,
         "relationships_created": rels_created,

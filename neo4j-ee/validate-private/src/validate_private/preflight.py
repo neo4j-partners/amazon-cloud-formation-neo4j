@@ -25,7 +25,6 @@ _RETRY_CFG = Config(retries={"mode": "standard"})
 _CONTRACT_PARAMS = (
     "vpc-id",
     "nlb-dns",
-    "advertised-dns",
     "external-sg-id",
     "password-secret-arn",
     "vpc-endpoint-sg-id",
@@ -299,7 +298,7 @@ def main() -> None:
         (f"Secret 'neo4j/{ctx.stack_name}/password' exists", lambda: _secret_exists(ctx)),
         (
             "Contract SSM params: "
-            "vpc-id, nlb-dns, advertised-dns, external-sg-id, "
+            "vpc-id, nlb-dns, external-sg-id, "
             "password-secret-arn, vpc-endpoint-sg-id",
             lambda: _contract_params_exist(ctx),
         ),

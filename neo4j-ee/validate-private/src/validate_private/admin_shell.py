@@ -25,10 +25,10 @@ set -euo pipefail
 export NEO4J_PASSWORD=$(aws secretsmanager get-secret-value \\
   --secret-id 'neo4j/__STACK__/password' \\
   --query SecretString --output text --region '__REGION__')
-ADVERTISED_DNS=$(aws ssm get-parameter \\
-  --name '/neo4j-ee/__STACK__/advertised-dns' \\
+NLB_DNS=$(aws ssm get-parameter \\
+  --name '/neo4j-ee/__STACK__/nlb-dns' \\
   --query Parameter.Value --output text --region '__REGION__')
-exec cypher-shell -a "__BOLT_SCHEME__://${ADVERTISED_DNS}:7687" -u neo4j -p "${NEO4J_PASSWORD}"
+exec cypher-shell -a "__BOLT_SCHEME__://${NLB_DNS}:7687" -u neo4j -p "${NEO4J_PASSWORD}"
 """
 
 
@@ -67,7 +67,7 @@ def main() -> None:
     log.info("  Stack:   %s", config.stack_name)
     log.info("  Region:  %s", config.region)
     log.info("  Bastion: %s", config.bastion_id)
-    log.info("  URI:     %s://%s:7687", config.bolt_scheme, config.advertised_dns)
+    log.info("  URI:     %s://%s:7687", config.bolt_scheme, config.nlb_dns)
     log.info("")
     log.info("  Password is resolved on the bastion — not visible here or in CloudTrail.")
     log.info("  Type ':exit' or press Ctrl-D to close the session.")

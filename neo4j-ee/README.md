@@ -1,6 +1,6 @@
 # Neo4j Enterprise Edition: AWS CloudFormation
 
-CloudFormation templates and operator tooling for the Neo4j Enterprise Edition AWS Marketplace listing. Each template deploys a one or three-node Neo4j cluster fronted by a Network Load Balancer. Every node runs in a dedicated Auto Scaling group for self-healing, with a GP3 EBS data volume that is retained across stack deletion. TLS is mandatory for private deployments and opt-in for public evaluation deployments. Three topologies are available to match different infrastructure requirements: a public new-VPC deployment for evaluation, a private new-VPC deployment for production, and a private deployment into an existing VPC for environments with pre-existing network infrastructure.
+CloudFormation templates and operator tooling for the Neo4j Enterprise Edition AWS Marketplace listing. Each template deploys a one or three-node Neo4j cluster fronted by a Network Load Balancer. Every node runs in a dedicated Auto Scaling group for self-healing, with a GP3 EBS data volume that is retained across stack deletion. Bolt TLS is optional on all three templates. Three topologies are available to match different infrastructure requirements: a public new-VPC deployment for evaluation, a private new-VPC deployment for production, and a private deployment into an existing VPC for environments with pre-existing network infrastructure.
 
 ---
 
@@ -44,33 +44,21 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 
 ```bash
 # Private (default): 3-node cluster, t3.medium
-./deploy.py --region us-east-1 --cert-arn <acm-cert-arn> --advertised-dns <dns>
+./deploy.py --region us-east-1
 
 # Public
 ./deploy.py --mode Public --region us-east-1
 
-# Public with TLS
-./deploy.py --mode Public --region us-east-1 --enable-public-tls \
-  --cert-arn <acm-cert-arn> --advertised-dns <dns>
-
 # Existing VPC
-./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx \
-  --cert-arn <acm-cert-arn> --advertised-dns <dns>
-
-# Private DNS managed by the stack
-# Private mode does this by default; pass --no-create-private-dns to disable it.
-# ExistingVpc keeps it opt-in because the VPC may already have customer-managed DNS.
-./deploy.py --cert-arn <acm-cert-arn> --advertised-dns neo4j.test.local \
-  --create-private-dns --private-dns-zone test.local
+./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx
 
 # Common flags (apply to all modes)
 ./deploy.py --number-of-servers 1           # single instance instead of 3-node
 ./deploy.py r8i.xlarge                      # memory-optimized instance type
 ./deploy.py --marketplace                   # use the published Marketplace AMI
 ./deploy.py --alert-email you@example.com   # enable CloudWatch alarm emails
+./deploy.py --tls                           # optional self-signed Bolt TLS test flow
 ```
-
-TLS is mandatory for Private and ExistingVpc deployments. `--cert-arn` must be an ACM certificate whose SAN matches `--advertised-dns`. Private mode creates the in-VPC DNS alias by default so `--advertised-dns` resolves to the internal NLB. Use `--no-create-private-dns` when customer-managed DNS already provides that record. ExistingVpc mode keeps stack-managed private DNS opt-in via `--create-private-dns`. Public mode defaults to plaintext Browser/Bolt for evaluation; use `--enable-public-tls` when the customer has a DNS name and ACM certificate.
 
 ### Look Up Connection Details
 

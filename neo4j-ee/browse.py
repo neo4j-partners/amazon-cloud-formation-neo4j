@@ -14,9 +14,6 @@ from pathlib import Path
 import subprocess
 import time
 
-import boto3
-from botocore.exceptions import ClientError
-
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEPLOY_DIR = SCRIPT_DIR / ".deploy"
@@ -67,31 +64,10 @@ def require_field(fields: dict[str, str], key: str, source: Path) -> str:
     return value
 
 
-def certificate_type(fields: dict[str, str]) -> str:
-    cert_type = fields.get("CertificateType", "")
-    if cert_type:
-        return cert_type
-
-    cert_arn = fields.get("CertificateArn", "")
-    region = fields.get("Region", "")
-    if not cert_arn or not region:
-        return ""
-
-    try:
-        acm = boto3.client("acm", region_name=region)
-        cert = acm.describe_certificate(CertificateArn=cert_arn)["Certificate"]
-    except ClientError:
-        return ""
-    return cert.get("Type", "")
-
-
 def resolve_bolt_scheme(fields: dict[str, str]) -> str:
-    base = "bolt" if fields.get("NumberOfServers", "3") == "1" else "neo4j"
-    self_signed = fields.get("SelfSignedCertificate", "").lower() == "true"
-    cert_type = certificate_type(fields)
-    if self_signed or cert_type in {"IMPORTED", "PRIVATE"}:
-        return f"{base}+ssc"
-    return f"{base}+s"
+    if fields.get("BoltTlsSecretArn", ""):
+        return "bolt+ssc"
+    return "bolt"
 
 
 def start_tunnel(
@@ -136,7 +112,6 @@ def main() -> None:
     region = require_field(fields, "Region", outputs_file)
     bastion_id = require_field(fields, "Neo4jOperatorBastionId", outputs_file)
     nlb_host = require_field(fields, "Neo4jInternalDNS", outputs_file)
-    advertised_dns = require_field(fields, "AdvertisedDNS", outputs_file)
     username = fields.get("Username", "neo4j")
     password = require_field(fields, "Password", outputs_file)
     stack_name = require_field(fields, "StackName", outputs_file)
@@ -145,15 +120,11 @@ def main() -> None:
     print(f"Stack:         {stack_name}")
     print(f"Region:        {region}")
     print(f"Bastion:       {bastion_id}")
-    print(f"AdvertisedDNS: {advertised_dns}")
     print()
-    print("Opening SSM port-forwards to localhost:7473 and localhost:7687")
+    print("Opening SSM port-forwards to localhost:7474 and localhost:7687")
     print()
-    print("Add this line to /etc/hosts:")
-    print(f"  127.0.0.1 {advertised_dns}")
-    print()
-    print(f"Then open: https://{advertised_dns}:7473")
-    print(f"Bolt URI:  {bolt_scheme}://{advertised_dns}:7687")
+    print("Then open: http://localhost:7474")
+    print(f"Bolt URI:  {bolt_scheme}://localhost:7687")
     print(f"Username: {username}")
     print(f"Password: {password}")
     print()
@@ -164,7 +135,7 @@ def main() -> None:
     try:
         bolt_process = start_tunnel(region, bastion_id, nlb_host, 7687)
         time.sleep(1)
-        browser_process = start_tunnel(region, bastion_id, nlb_host, 7473)
+        browser_process = start_tunnel(region, bastion_id, nlb_host, 7474)
         raise SystemExit(browser_process.wait())
     except KeyboardInterrupt:
         raise SystemExit(130)

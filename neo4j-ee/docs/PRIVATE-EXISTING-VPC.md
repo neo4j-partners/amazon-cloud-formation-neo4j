@@ -26,11 +26,9 @@
   - [VPC Interface Endpoint Design](#vpc-interface-endpoint-design)
   - [What the Caller's VPC Must Provide](#what-the-callers-vpc-must-provide)
   - [Platform Contract](#platform-contract)
-  - [Production DNS Alias (AdvertisedDNS)](#production-dns-alias-advertiseddns)
 - [Local Deployment and Testing](#local-deployment-and-testing)
   - [Build](#build)
   - [Deploy](#deploy)
-  - [Local Dry Run](#local-dry-run)
   - [Create a Test VPC](#create-a-test-vpc)
   - [Path A: Template Creates Endpoints (CI Gate)](#path-a-template-creates-endpoints-ci-gate)
   - [Path B: Pre-Existing Endpoints](#path-b-pre-existing-endpoints)
@@ -57,8 +55,6 @@ Applies to any running ExistingVpc stack, whether deployed from the Marketplace 
 
 Bastion access and all operator tools (`uv run preflight`, `validate-private`, `admin-shell`, `run-cypher`, `uv run scripts/smoke-write.py`, `uv run scripts/browser-tunnel.py`, `uv run scripts/bolt-tunnel.py`) are identical to the Private template. See [the Operator Guide in PRIVATE.md](PRIVATE.md#operator-guide) from "Access via Bastion" onward.
 
-ExistingVpc mode defaults `CreatePrivateDns=false`, so customer-managed DNS remains authoritative by default. If you leave it false, `AdvertisedDNS` must already resolve to the internal NLB from the supplied VPC, including from the operator bastion. Otherwise bastion-run tools fail during Bolt DNS resolution. For source-based test deployments, the simplest path is usually `--create-private-dns --private-dns-zone <zone>` or `--create-private-dns --private-dns-hosted-zone-id <zone-id>`.
-
 ### Observability Checks
 
 ```bash
@@ -80,13 +76,13 @@ The template creates the following inside your VPC. It does **not** create: VPC,
 
 | AWS Resource | What it creates |
 |---|---|
-| Internal NLB | Listeners on port 7473 (HTTPS) and 7687 (Bolt); deployed into the subnets you supply |
+| Internal NLB | Listeners on port 7474 (HTTP Browser) and 7687 (Bolt); deployed into the subnets you supply |
 | EC2 instances | 1 or 3 Neo4j nodes in your private subnets; no public IPs |
 | ASG per node | One Auto Scaling Group per Neo4j node, fixed at `MinSize=MaxSize=DesiredCapacity=1`, for self-healing |
 | EBS data volumes | One GP3 volume per node with `DeletionPolicy: Retain`; survives stack deletion |
 | Operator bastion | `t4g.nano` in your private subnet, not registered as an NLB target; receives SSM sessions for operator access |
 | VPC interface endpoints | `ssm`, `ssmmessages`, `logs`, `secretsmanager` with `PrivateDnsEnabled: true`; created when `CreateVpcEndpoints=true` (the default), skipped when `CreateVpcEndpoints=false` |
-| Security groups | NLB SG (AllowedCIDR on 7473/7687 to the NLB); External SG (NLB SG as source on 7473/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
+| Security groups | NLB SG (AllowedCIDR on 7474/7687 to the NLB); External SG (NLB SG as source on 7474/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
 | SSM parameters | `/neo4j-ee/<stack>/` prefix; publishes VPC ID, NLB DNS, security group IDs, and secret ARN |
 | Secrets Manager | Neo4j admin password at `neo4j/<stack>/password` |
 | CloudWatch | Log group, VPC flow logs, failed-auth alarm, CloudTrail trail |
@@ -125,27 +121,6 @@ Structurally identical to `neo4j-private.template.yaml`: same operator bastion, 
 
 Identical to the Private template. See [Platform Contract in PRIVATE.md](PRIVATE.md#platform-contract) for the full SSM parameter reference.
 
-### Production DNS Alias (AdvertisedDNS)
-
-**TL;DR**
-
-- **TLS is mandatory.** Provide both `CertificateArn` (ACM cert ARN) and `AdvertisedDNS` (DNS name matching the cert SAN) at stack create
-- **Encrypted on both client data-plane hops.** The NLB terminates client TLS on 7473/7687 with the ACM cert, and target groups open a separate TLS connection to a self-signed backend cert generated on each instance
-- **One name everywhere.** `server.bolt.advertised_address`, the cert SAN, and the client connect URL all resolve to `AdvertisedDNS`
-
-**Customer responsibilities at deploy time**
-
-1. Provision an ACM certificate whose Subject Alternative Name matches the DNS name you will use as `AdvertisedDNS`. ACM-issued public certs and ACM Private CA certs are both accepted.
-2. Ensure DNS resolves `AdvertisedDNS` to the internal NLB from every client network. ExistingVpc mode defaults `CreatePrivateDns=false` so customer-owned networks keep DNS ownership by default. Set `CreatePrivateDns=true` when you want the stack to create an A-record alias to the NLB.
-3. Set the `AdvertisedDNS` and `CertificateArn` CloudFormation parameters at stack create or update. If `CreatePrivateDns=true`, also pass either `PrivateDnsZoneName` so the stack creates a private hosted zone associated with the existing VPC, or `PrivateDnsHostedZoneId` so it writes the record into an existing private hosted zone.
-
-**Cert lifecycle**
-
-- **ACM cert rotation:** ACM-managed certs renew automatically. To swap ARNs, update `CertificateArn` on the stack — no instance refresh required
-- **Cert options for fully private deployments:** see [Certificate options for private deployments in PRIVATE.md](PRIVATE.md#tls-architecture) for ACM Private CA and imported-cert alternatives
-
----
-
 ## Local Deployment and Testing
 
 ### Build
@@ -172,61 +147,28 @@ cd neo4j-ee
   --region us-east-2 \
   --vpc-id vpc-0123456789abcdef0 \
   --subnet-1 subnet-0123456789abcdef0 \
-  r8i.xlarge \
-  --cert-arn <arn> --advertised-dns <dns>
+  r8i.xlarge
 
 # 3-node (three subnets required, one per AZ)
 ./deploy.py --mode ExistingVpc \
   --vpc-id vpc-0123456789abcdef0 \
   --subnet-1 subnet-11111111111111111 \
   --subnet-2 subnet-22222222222222222 \
-  --subnet-3 subnet-33333333333333333 \
-  --cert-arn <arn> --advertised-dns <dns>
+  --subnet-3 subnet-33333333333333333
 
 # With Marketplace AMI
 ./deploy.py --marketplace --mode ExistingVpc \
   --vpc-id vpc-0123456789abcdef0 \
-  --subnet-1 subnet-0123456789abcdef0 \
-  --cert-arn <arn> --advertised-dns <dns>
+  --subnet-1 subnet-0123456789abcdef0
 
 # VPC already has interface endpoints; skip endpoint creation
 ./deploy.py --mode ExistingVpc \
   --vpc-id vpc-0123456789abcdef0 --subnet-1 subnet-0123456789abcdef0 \
   --create-vpc-endpoints false \
-  --existing-endpoint-sg-id sg-0123456789abcdef0 \
-  --cert-arn <arn> --advertised-dns <dns>
-
-# Stack-managed private DNS in a new private hosted zone
-./deploy.py --mode ExistingVpc \
-  --vpc-id vpc-0123456789abcdef0 --subnet-1 subnet-0123456789abcdef0 \
-  --cert-arn <arn> --advertised-dns neo4j.test.local \
-  --create-private-dns --private-dns-zone test.local
-
-# Stack-managed private DNS in an existing private hosted zone
-./deploy.py --mode ExistingVpc \
-  --vpc-id vpc-0123456789abcdef0 --subnet-1 subnet-0123456789abcdef0 \
-  --cert-arn <arn> --advertised-dns neo4j.internal.example.com \
-  --create-private-dns --private-dns-hosted-zone-id Z1234567890ABC
+  --existing-endpoint-sg-id sg-0123456789abcdef0
 ```
 
 The deploy script writes outputs to `.deploy/<stack-name>.txt`. Stack creation takes 10-20 minutes (includes AMI copy if the region differs from the source AMI region; pin `--region` to the source region to skip the copy).
-
-### Local Dry Run
-
-Use `--dry-run` to confirm argument parsing, VPC file resolution, selected template, and CloudFormation parameters without creating AWS resources:
-
-```bash
-cd neo4j-ee
-
-./deploy.py --dry-run --mode ExistingVpc \
-  --number-of-servers 1 \
-  --region us-east-2 \
-  --vpc-id vpc-0123456789abcdef0 \
-  --subnet-1 subnet-0123456789abcdef0 \
-  r8i.xlarge \
-  --cert-arn arn:aws:acm:us-east-2:111111111111:certificate/abcd-efgh-ijkl-mnop \
-  --advertised-dns neo4j.example.com
-```
 
 For a deeper local check after template edits, run:
 
@@ -244,21 +186,15 @@ For automated testing, `scripts/create-test-vpc.py` provisions a minimal private
 ```bash
 # Path A: template creates endpoints (default)
 scripts/create-test-vpc.py --region us-east-1
-./deploy.py --mode ExistingVpc --number-of-servers 3 \
-  --cert-arn <arn> --advertised-dns neo4j.test.local \
-  --create-private-dns --private-dns-zone test.local
+./deploy.py --mode ExistingVpc --number-of-servers 3
 
 # Path B: VPC already has endpoints
 scripts/create-test-vpc.py --region us-east-1 --with-endpoints
 ./deploy.py --mode ExistingVpc --number-of-servers 1 \
-  --create-vpc-endpoints false \
-  --cert-arn <arn> --advertised-dns neo4j.test.local \
-  --create-private-dns --private-dns-zone test.local
+  --create-vpc-endpoints false
 
 # Select a specific VPC file when multiple exist
-./deploy.py --mode ExistingVpc --vpc-file .deploy/vpc-<ts>.txt \
-  --cert-arn <arn> --advertised-dns neo4j.test.local \
-  --create-private-dns --private-dns-zone test.local
+./deploy.py --mode ExistingVpc --vpc-file .deploy/vpc-<ts>.txt
 ```
 
 Tear down the test VPC after the stack is deleted:
@@ -280,9 +216,7 @@ cd neo4j-ee
 scripts/create-test-vpc.py --region us-east-1
 
 # 2. Deploy 3-node cluster (auto-detects vpc-*.txt)
-./deploy.py --mode ExistingVpc --number-of-servers 3 \
-  --cert-arn <arn> --advertised-dns neo4j.test.local \
-  --create-private-dns --private-dns-zone test.local
+./deploy.py --mode ExistingVpc --number-of-servers 3
 STACK=$(ls -t .deploy/ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
 
 # 3. Preflight (11 checks: stack, bastion, endpoints)
@@ -311,9 +245,7 @@ scripts/create-test-vpc.py --region us-east-1 --with-endpoints
 
 # 2. Deploy 1-node cluster (auto-detects VPC file and reads EndpointSgId)
 ./deploy.py --mode ExistingVpc --number-of-servers 1 \
-  --create-vpc-endpoints false \
-  --cert-arn <arn> --advertised-dns neo4j.test.local \
-  --create-private-dns --private-dns-zone test.local
+  --create-vpc-endpoints false
 STACK=$(ls -t .deploy/ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
 
 # 3. Preflight: endpoint reachability confirms the wiring the template added

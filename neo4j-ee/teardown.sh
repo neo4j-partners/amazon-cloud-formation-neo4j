@@ -93,6 +93,7 @@ STACK_NAME=$(read_field "${OUTPUTS_FILE}" "StackName")
 REGION=$(read_field "${OUTPUTS_FILE}" "Region")
 SSM_PARAM_PATH=$(read_field "${OUTPUTS_FILE}" "SSMParamPath" 2>/dev/null || true)
 COPIED_AMI_ID=$(read_field "${OUTPUTS_FILE}" "CopiedAmiId" 2>/dev/null || true)
+AUTO_LICENSE_SECRET_ARNS=$(read_field "${OUTPUTS_FILE}" "AutoCreatedLicenseSecretArns" 2>/dev/null || true)
 STACK_ID=$(read_field "${OUTPUTS_FILE}" "StackID" 2>/dev/null || true)
 
 if [ -z "${STACK_NAME}" ] || [ -z "${REGION}" ]; then
@@ -111,28 +112,6 @@ if [ -n "${COPIED_AMI_ID}" ]; then
   echo "  Copied AMI: ${COPIED_AMI_ID}"
 fi
 echo ""
-
-# ---------------------------------------------------------------------------
-# Step 0: Detach the licence-secrets inline policy from Neo4jRole.
-#
-# deploy.py --bloom-license-secret-id / --gds-license-secret-id attaches an
-# inline policy named "Neo4jLicenseSecretsRead" to the stack-managed Neo4jRole
-# via IAM:PutRolePolicy. CFN does not know about it, and the role cannot be
-# deleted while an out-of-band inline policy is present, so the stack delete
-# would stall. Remove it first; both calls are idempotent and stay silent when
-# the policy was never attached.
-# ---------------------------------------------------------------------------
-ROLE_NAME=$(aws cloudformation describe-stack-resource \
-  --region "${REGION}" \
-  --stack-name "${STACK_NAME}" \
-  --logical-resource-id Neo4jRole \
-  --query "StackResourceDetail.PhysicalResourceId" \
-  --output text 2>/dev/null || true)
-if [ -n "${ROLE_NAME}" ] && [ "${ROLE_NAME}" != "None" ]; then
-  aws iam delete-role-policy \
-    --role-name "${ROLE_NAME}" \
-    --policy-name Neo4jLicenseSecretsRead 2>/dev/null || true
-fi
 
 # ---------------------------------------------------------------------------
 # Step 1: Delete the CloudFormation stack
@@ -189,7 +168,23 @@ if [ -n "${BOLT_TLS_SECRET_ARN}" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2d: Handle retained EBS data volumes
+# Step 2d: Force-delete licence secrets created from local .licenses files
+# ---------------------------------------------------------------------------
+if [ -n "${AUTO_LICENSE_SECRET_ARNS}" ]; then
+  echo ""
+  echo "Force-deleting auto-created licence secrets..."
+  IFS=',' read -r -a LICENSE_ARNS <<< "${AUTO_LICENSE_SECRET_ARNS}"
+  for secret_arn in "${LICENSE_ARNS[@]}"; do
+    if [ -n "${secret_arn}" ]; then
+      echo "  ${secret_arn}"
+      force_delete_secret "${secret_arn}"
+    fi
+  done
+  echo "Licence secret cleanup done."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 2e: Handle retained EBS data volumes
 #
 # Volumes have DeletionPolicy: Retain so they survive stack deletion by design.
 # Default: enumerate them and print a rerun hint so the operator can decide.

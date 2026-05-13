@@ -64,6 +64,20 @@
                     - secretsmanager:GetSecretValue
                   Resource: !Ref BoltCertificateSecretArn
                 - !Ref AWS::NoValue
+              - !If
+                - BloomEnabledAndLicensed
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref BloomLicenseSecretArn
+                - !Ref AWS::NoValue
+              - !If
+                - GdsEnabledAndLicensed
+                - Effect: Allow
+                  Action:
+                    - secretsmanager:GetSecretValue
+                  Resource: !Ref GdsLicenseSecretArn
+                - !Ref AWS::NoValue
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue

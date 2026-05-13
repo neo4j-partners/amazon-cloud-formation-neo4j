@@ -22,7 +22,9 @@ CloudFormation templates and operator tooling for the Neo4j Enterprise Edition A
 
 ## For Marketplace Users
 
-Deploy from the AWS Marketplace listing. Once the stack is complete, the guide for your topology covers prerequisites, accessing the cluster, retrieving the password, observability checks, and tear down:
+Deploy from the AWS Marketplace listing. By default, no Neo4j plugins are installed: the templates set `InstallBloom=false` and `InstallGDS=false`. To enable Bloom or Graph Data Science at launch, create a Secrets Manager secret holding the license file contents and pass its ARN as `BloomLicenseSecretArn` or `GdsLicenseSecretArn`. Stacks that request a plugin without supplying its license ARN are rejected at parameter validation before any resource is created. See the "Plugin licenses (optional)" prerequisite in the topology guide for your deployment.
+
+Once the stack is complete, the guide for your topology covers prerequisites, accessing the cluster, retrieving the password, observability checks, and tear down:
 
 - **Public:** [docs/PUBLIC.md — Operator Guide](docs/PUBLIC.md#operator-guide)
 - **Private:** [docs/PRIVATE.md — Operator Guide](docs/PRIVATE.md#operator-guide)
@@ -59,6 +61,16 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ./deploy.py --alert-email you@example.com   # enable CloudWatch alarm emails
 ./deploy.py --tls                           # optional self-signed Bolt TLS test flow
 ```
+
+> **`deploy.py` defaults differ from Marketplace template defaults.** `deploy.py` installs both Bloom and Graph Data Science by default so local validation exercises the same plugin surface customers tend to enable. The Marketplace templates default `InstallBloom=false` and `InstallGDS=false`. The buyer-facing flow is covered in the topology guides ([Public](docs/PUBLIC.md#prerequisites), [Private](docs/PRIVATE.md#prerequisites), [Private Existing VPC](docs/PRIVATE-EXISTING-VPC.md#prerequisites)).
+
+For licensed local validation, place the license files at
+`neo4j-ee/.licenses/bloom.license` and `neo4j-ee/.licenses/gds.license`;
+`deploy.py` uploads any matching local file to Secrets Manager, installs it on
+each Neo4j node, records the secret ARN in `.deploy/<stack>.txt`, and
+`teardown.sh` removes auto-created license secrets. Use
+`--bloom-license-secret-id` or `--gds-license-secret-id` to reuse existing
+Secrets Manager secrets, or `--no-local-licenses` to skip local file discovery.
 
 ### Look Up Connection Details
 

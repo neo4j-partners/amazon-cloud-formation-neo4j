@@ -31,6 +31,19 @@ References:
 
 All three templates include optional Bolt TLS parameters (`BoltCertificateSecretArn`, `BoltAdvertisedDNS`). When `BoltCertificateSecretArn` is set, Neo4j enables TLS on Bolt port 7687 using the certificate and private key stored in Secrets Manager. Neo4j Browser remains HTTP on port 7474 in the current templates.
 
+### Plugin licenses and default-off contract
+
+Bloom and Graph Data Science are gated behind two CFN parameters each: `InstallBloom` plus `BloomLicenseSecretArn`, and `InstallGDS` plus `GdsLicenseSecretArn`. Both `Install*` parameters default to `false`, and both `*LicenseSecretArn` parameters default to empty, so a default Marketplace launch installs neither plugin and grants no Secrets Manager access for licenses.
+
+Two enforcement layers guard the contract:
+
+- **Parameter-shape failures** are rejected by `AWS::CloudFormation::Rules`. Setting `InstallBloom=true` with an empty `BloomLicenseSecretArn` fails parameter validation before any resource is created, regardless of whether the stack is launched from the console, the API, the CLI, or Service Catalog. The same applies to GDS.
+- **Runtime failures** are rejected by UserData via a `fail()` helper that calls `cfn-signal --success false` directly. Bash's `ERR` trap does not fire on `exit 1`, so any explicit failure path must signal CloudFormation before exiting; without `fail()` the stack would wait out the ASG signal timeout instead of failing fast. Cases covered: ARN pointing at a non-existent secret, ARN in a different region from the stack, secret payload empty or malformed, IAM `secretsmanager:GetSecretValue` denied, plugin JAR missing from the AMI.
+
+The instance role grants `secretsmanager:GetSecretValue` for each license ARN through an `Fn::If` block that resolves to `AWS::NoValue` when the matching `Install*=true AND non-empty *LicenseSecretArn` condition is false. The `AllowedPattern` on each license ARN parameter is `secret:[A-Za-z0-9/_+=.@-]+`, the Secrets Manager secret-name character set; an earlier permissive pattern `secret:.+` admitted `arn:...:secret:*`, which CloudFormation would pass into the IAM `Resource` field and IAM would evaluate as a wildcard, broadening the grant beyond a single secret.
+
+License material is never embedded in template content, parameter values, outputs, metadata, UserData, stack events, or stack drift output. Buyers pass only the ARN; UserData fetches the secret on every boot so license files survive ASG instance replacement on the root volume.
+
 ### AllowedCIDR default
 
 Template 2 defaults `AllowedCIDR` to `10.0.0.0/16` because it creates that VPC. Template 3 has no default. Any CIDR default in Template 3 is likely wrong for most enterprise buyers because their VPC CIDR is unknown to the template. A wrong default silently misconfigures the security group. The parameter description instructs the buyer to enter their VPC CIDR explicitly, with examples (`10.0.0.0/16`, `172.16.0.0/12`).
@@ -73,7 +86,7 @@ EC2 instances must use an IAM role, not long-term access keys. Each permission m
 - CloudFormation signaling: restrict to the current stack ARN using `!Sub`.
 - EBS operations (`ec2:AttachVolume`, `ec2:DescribeVolumes`, `ec2:DescribeInstances`): resource `*` is acceptable because EBS volumes lack ARN-level scoping on all relevant APIs.
 - Auto Scaling discovery (`autoscaling:DescribeAutoScalingGroups`): required for cluster node discovery; resource `*` is unavoidable.
-- Secrets Manager (`secretsmanager:GetSecretValue`): scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`) and, when optional Bolt TLS is configured, the `BoltCertificateSecretArn` secret.
+- Secrets Manager (`secretsmanager:GetSecretValue`): scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`). When optional Bolt TLS is configured, the role gets a second statement scoped to `BoltCertificateSecretArn`. When `InstallBloom=true` and `BloomLicenseSecretArn` is non-empty, an `Fn::If` statement adds a third grant scoped to that ARN; the same pattern applies to GDS via `GdsLicenseSecretArn`. Each license grant collapses to `AWS::NoValue` when the matching plugin is off or the ARN is empty, so a default Marketplace launch grants no Secrets Manager access for licenses.
 
 ### Auto Scaling groups for all topologies
 
@@ -156,6 +169,13 @@ Metadata:
           default: "Network Access"
         Parameters:
           - AllowedCIDR
+      - Label:
+          default: "Plugin licensing (Bloom, GDS)"
+        Parameters:
+          - InstallBloom
+          - BloomLicenseSecretArn
+          - InstallGDS
+          - GdsLicenseSecretArn
       - Label:
           default: "Bolt TLS"
         Parameters:

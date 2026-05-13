@@ -5,6 +5,17 @@ _instance_id=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169
 logicalId=$(aws ec2 describe-tags --region "$region" --filters "Name=resource-id,Values=${_instance_id}" "Name=key,Values=aws:cloudformation:logical-id" --query "Tags[0].Value" --output text 2>/dev/null || true)
 trap 'if [[ -n "${logicalId:-}" ]]; then cfn-signal --success false --stack "$stackName" --resource "$logicalId" --region "$region"; fi' ERR
 
+# Explicit failure path. The ERR trap above only fires on command failures —
+# bare `exit 1` does NOT trigger it, so any explicit exit must signal CFN
+# directly here, otherwise the stack waits out the ASG signal timeout.
+fail() {
+  echo "ERROR: $*" >&2
+  if [[ -n "${logicalId:-}" ]]; then
+    cfn-signal --success false --stack "$stackName" --resource "$logicalId" --region "$region" || true
+  fi
+  exit 1
+}
+
 password=$(aws secretsmanager get-secret-value \
   --secret-id "neo4j/${stackName}/password" \
   --query SecretString --output text \
@@ -13,6 +24,8 @@ password=$(aws secretsmanager get-secret-value \
 # include partials/set-neo4j-conf.sh
 
 # include partials/attach-data-volume.sh
+
+# include partials/install-license.sh
 
 install_neo4j_from_yum() {
   echo "Installing Graph Database..."
@@ -29,8 +42,7 @@ install_bloom() {
   local jar
   jar=$(ls /var/lib/neo4j/products/bloom-plugin-*.jar 2>/dev/null | head -1 || true)
   if [ -z "$jar" ]; then
-    echo "WARNING: Bloom plugin JAR not found in /var/lib/neo4j/products/; skipping install"
-    return 0
+    fail "Bloom plugin JAR not found in /var/lib/neo4j/products/; this AMI does not contain Bloom. Build a Bloom-staged AMI or set InstallBloom=false."
   fi
   echo "Installing Bloom plugin from $jar..."
   cp "$jar" /var/lib/neo4j/plugins/
@@ -40,8 +52,7 @@ install_gds() {
   local jar
   jar=$(ls /var/lib/neo4j/products/neo4j-graph-data-science-*.jar 2>/dev/null | head -1 || true)
   if [ -z "$jar" ]; then
-    echo "WARNING: GDS plugin JAR not found in /var/lib/neo4j/products/; skipping install"
-    return 0
+    fail "GDS plugin JAR not found in /var/lib/neo4j/products/; this AMI does not contain GDS. Build a GDS-staged AMI or set InstallGDS=false."
   fi
   echo "Installing Graph Data Science plugin from $jar..."
   cp "$jar" /var/lib/neo4j/plugins/
@@ -55,9 +66,11 @@ extension_config() {
     # and gds.isLicensed() returns false even when the licence files are on disk.
     # Matches the canonical config keys used by neo4j/docker-neo4j and
     # neo4j/helm-charts (examples/bloom-gds-license/gds-bloom-with-license.yaml).
-    set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
+    if [[ -n "${bloomLicenseSecretArn}" ]]; then
+      set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
+    fi
   fi
-  if [[ "${installGDS}" == "true" ]]; then
+  if [[ "${installGDS}" == "true" && -n "${gdsLicenseSecretArn}" ]]; then
     set_neo4j_conf gds.enterprise.license_file /var/lib/neo4j/licenses/neo4j-gds.license
   fi
   set_neo4j_conf dbms.security.procedures.unrestricted "gds.*,apoc.*,bloom.*"
@@ -97,13 +110,11 @@ build_neo4j_conf_file() {
     TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
     instanceId=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
     if [[ -z "${instanceId}" ]]; then
-      echo "ERROR: Could not read instance ID from IMDSv2. Exiting."
-      exit 1
+      fail "Could not read instance ID from IMDSv2."
     fi
     stackId=$(aws ec2 describe-tags --region "$region" --filters "Name=resource-id,Values=${instanceId}" "Name=key,Values=aws:cloudformation:stack-id" --query "Tags[0].Value" --output text)
     if [[ -z "${stackId}" || "${stackId}" == "None" ]]; then
-      echo "ERROR: Could not read aws:cloudformation:stack-id tag from instance ${instanceId}. Exiting."
-      exit 1
+      fail "Could not read aws:cloudformation:stack-id tag from instance ${instanceId}."
     fi
     coreMembers=""
     for attempt in $(seq 1 30); do
@@ -121,8 +132,7 @@ build_neo4j_conf_file() {
       sleep 10
     done
     if [[ -z "${coreMembers}" ]]; then
-      echo "ERROR: Peer discovery failed after 5 minutes. Exiting."
-      exit 1
+      fail "Peer discovery failed after 5 minutes."
     fi
     echo "CoreMembers = ${coreMembers}"
     set_neo4j_conf dbms.cluster.discovery.resolver_type LIST
@@ -134,8 +144,7 @@ build_neo4j_conf_file() {
     _secret_json=$(aws secretsmanager get-secret-value --region "${region}" \
       --secret-id "${boltCertArn}" --query SecretString --output text)
     if ! echo "${_secret_json}" | jq -e 'has("certificate") and has("private_key")' >/dev/null; then
-      echo "ERROR: Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM). Exiting." >&2
-      exit 1
+      fail "Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM)."
     fi
     umask 077
     echo "${_secret_json}" | jq -r '.private_key' > /var/lib/neo4j/certificates/bolt/private.key
@@ -200,15 +209,27 @@ install_cloudwatch_agent() {
 CWCONFIG
   /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 }
+# Fail fast on plugin-without-license combinations. AWS::CloudFormation::Rules
+# blocks this combination during CloudFormation stack create and update
+# validation; this guard keeps direct UserData execution and future template
+# edits from silently drifting away from the same contract.
+if [[ "${installBloom}" == "true" && -z "${bloomLicenseSecretArn}" ]]; then
+  fail "InstallBloom=true requires BloomLicenseSecretArn to be set."
+fi
+if [[ "${installGDS}" == "true" && -z "${gdsLicenseSecretArn}" ]]; then
+  fail "InstallGDS=true requires GdsLicenseSecretArn to be set."
+fi
 install_cloudwatch_agent
 attach_and_mount_data_volume
 install_neo4j_from_yum
 install_apoc
 if [[ "${installBloom}" == "true" ]]; then
   install_bloom
+  fetch_and_install_license "${bloomLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-bloom.license "Bloom"
 fi
 if [[ "${installGDS}" == "true" ]]; then
   install_gds
+  fetch_and_install_license "${gdsLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-gds.license "GDS"
 fi
 extension_config
 build_neo4j_conf_file

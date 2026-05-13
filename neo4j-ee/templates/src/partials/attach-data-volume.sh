@@ -7,8 +7,7 @@ attach_and_mount_data_volume() {
   local _az
   _az=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169.254/latest/meta-data/placement/availability-zone)
   if [[ -z "${_instance_id}" || -z "${_az}" ]]; then
-    echo "ERROR: Could not read instance metadata from IMDSv2. Exiting."
-    exit 1
+    fail "Could not read instance metadata from IMDSv2."
   fi
   local _stack_id
   _stack_id=$(aws ec2 describe-tags --region "$region" \
@@ -16,8 +15,7 @@ attach_and_mount_data_volume() {
               "Name=key,Values=aws:cloudformation:stack-id" \
     --query "Tags[0].Value" --output text)
   if [[ -z "${_stack_id}" || "${_stack_id}" == "None" ]]; then
-    echo "ERROR: Could not read aws:cloudformation:stack-id tag. Exiting."
-    exit 1
+    fail "Could not read aws:cloudformation:stack-id tag."
   fi
   local _vols _vol_count _data_vol_id
   _vols=$(aws ec2 describe-volumes --region "$region" \
@@ -27,8 +25,7 @@ attach_and_mount_data_volume() {
     --query "Volumes[*].VolumeId" --output text)
   _vol_count=$(echo "${_vols}" | wc -w | xargs)
   if [[ "${_vol_count}" -ne 1 ]]; then
-    echo "ERROR: Expected 1 data volume in AZ ${_az}, found ${_vol_count}. Exiting."
-    exit 1
+    fail "Expected 1 data volume in AZ ${_az}, found ${_vol_count}."
   fi
   _data_vol_id="${_vols}"
   echo "Data volume: ${_data_vol_id} in ${_az}"
@@ -40,8 +37,7 @@ attach_and_mount_data_volume() {
       --query "Volumes[0].State" --output text 2>/dev/null || echo "unknown")
     [[ "${_vol_top_state}" == "available" ]] && break
     if (( _wait_s >= 600 )); then
-      echo "ERROR: Volume ${_data_vol_id} did not become available after 10 min (state=${_vol_top_state}). Exiting."
-      exit 1
+      fail "Volume ${_data_vol_id} did not become available after 10 min (state=${_vol_top_state})."
     fi
     echo "  Volume state: ${_vol_top_state}, waiting 10s... (${_wait_s}s elapsed)"
     sleep 10
@@ -60,8 +56,7 @@ attach_and_mount_data_volume() {
     sleep 5
   done
   if [[ "${_attach_ok}" != "true" ]]; then
-    echo "ERROR: Could not attach volume ${_data_vol_id} to ${_instance_id}. Exiting."
-    exit 1
+    fail "Could not attach volume ${_data_vol_id} to ${_instance_id}."
   fi
   echo "Waiting for volume ${_data_vol_id} to reach 'attached' state (up to 2 min)..."
   local _vol_state=""
@@ -74,8 +69,7 @@ attach_and_mount_data_volume() {
     sleep 5
   done
   if [[ "${_vol_state}" != "attached" ]]; then
-    echo "ERROR: Volume ${_data_vol_id} did not reach 'attached' within 2 minutes. Exiting."
-    exit 1
+    fail "Volume ${_data_vol_id} did not reach 'attached' within 2 minutes."
   fi
   local _vol_serial="${_data_vol_id//-/}"
   local _data_dev=""
@@ -94,8 +88,7 @@ attach_and_mount_data_volume() {
     sleep 2
   done
   if [[ -z "${_data_dev}" || ! -b "${_data_dev}" ]]; then
-    echo "ERROR: Could not resolve NVMe device for volume ${_data_vol_id} after retries. Exiting."
-    exit 1
+    fail "Could not resolve NVMe device for volume ${_data_vol_id} after retries."
   fi
   echo "NVMe device: ${_data_dev}"
   if ! blkid "${_data_dev}" > /dev/null 2>&1; then
@@ -106,8 +99,7 @@ attach_and_mount_data_volume() {
   local _uuid
   _uuid=$(blkid -s UUID -o value "${_data_dev}")
   if [[ -z "${_uuid}" ]]; then
-    echo "ERROR: Could not read UUID from ${_data_dev}. Exiting."
-    exit 1
+    fail "Could not read UUID from ${_data_dev}."
   fi
   mkdir -p /var/lib/neo4j/data
   echo "UUID=${_uuid}  /var/lib/neo4j/data  xfs  defaults,nofail,noatime,x-systemd.device-timeout=30  0 2" >> /etc/fstab

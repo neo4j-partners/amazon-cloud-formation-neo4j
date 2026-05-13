@@ -13,6 +13,13 @@
           - DataDiskSize
           - DataVolumeKmsKeyId
       - Label:
+          default: "Plugin licensing (Bloom, GDS)"
+        Parameters:
+          - InstallBloom
+          - BloomLicenseSecretArn
+          - InstallGDS
+          - GdsLicenseSecretArn
+      - Label:
           default: "Existing VPC"
         Parameters:
           - VpcId
@@ -44,6 +51,14 @@
         default: Data Disk Size (GB)
       DataVolumeKmsKeyId:
         default: Data Volume KMS Key ID
+      InstallBloom:
+        default: Install Bloom Plugin
+      BloomLicenseSecretArn:
+        default: Bloom License Secret ARN
+      InstallGDS:
+        default: Install Graph Data Science Plugin
+      GdsLicenseSecretArn:
+        default: GDS License Secret ARN
       VpcId:
         default: VPC ID
       PrivateSubnet1Id:

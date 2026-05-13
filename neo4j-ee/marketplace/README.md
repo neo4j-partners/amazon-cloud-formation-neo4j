@@ -68,3 +68,24 @@ s3://marketplace-neo4j/neo4j-private-existing-vpc.template.yaml
 The `ImageId` parameter in the templates uses `AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>`.
 AWS Marketplace injects the correct SSM parameter path at subscription time.
 There is no AMI ID to update in the templates themselves.
+
+## Listing Description Updates
+
+When publishing a version that changes the plugin or license contract, edit the
+listing description and "How to Use" / parameter guidance in the AWS Marketplace
+Seller Portal so buyers see the current contract before launch. The templates
+default to:
+
+- `InstallBloom=false` and `InstallGDS=false`. A default launch installs neither
+  plugin and grants no Secrets Manager access for licenses.
+- Enabling Bloom or Graph Data Science requires a Secrets Manager secret
+  created in advance, whose ARN is passed as `BloomLicenseSecretArn` or
+  `GdsLicenseSecretArn`.
+- Stacks that request a plugin without supplying its license ARN are rejected
+  at parameter validation by `AWS::CloudFormation::Rules` before any resource
+  is created. Runtime fetch or install failures cause `CREATE_FAILED` within
+  minutes via `cfn-signal --success false` rather than waiting out the ASG
+  signal timeout.
+
+The Seller Portal description is not generated from the templates; update it
+directly when these defaults change.

@@ -19,7 +19,7 @@
     CreationPolicy:
       ResourceSignal:
         Count: 1
-        Timeout: PT15M
+        Timeout: PT20M
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref Neo4jLaunchTemplate
@@ -32,6 +32,8 @@
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 1200
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -57,7 +59,7 @@
     CreationPolicy:
       ResourceSignal:
         Count: 1
-        Timeout: PT15M
+        Timeout: PT20M
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref Neo4jLaunchTemplate
@@ -70,6 +72,8 @@
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 1200
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'
@@ -95,7 +99,7 @@
     CreationPolicy:
       ResourceSignal:
         Count: 1
-        Timeout: PT15M
+        Timeout: PT20M
     Properties:
       LaunchTemplate:
         LaunchTemplateId: !Ref Neo4jLaunchTemplate
@@ -108,6 +112,8 @@
       TargetGroupARNs:
         - Ref: Neo4jHTTPTargetGroup
         - Ref: Neo4jBoltTargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 1200
       Tags:
         - Key: StackID
           Value: !Ref 'AWS::StackId'

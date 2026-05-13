@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import zipfile
 
 import boto3
@@ -25,6 +26,9 @@ EE_DIR = SCRIPT_DIR.parent
 DEPLOY_DIR = EE_DIR / ".deploy"
 TEMPLATE_FILE = SCRIPT_DIR / "sample-private-app.template.yaml"
 LAMBDA_DIR = SCRIPT_DIR / "lambda"
+
+sys.path.insert(0, str(EE_DIR / "src"))
+from neo4j_ee.outputs import read_outputs, require_field, resolve_outputs_file  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -50,42 +54,6 @@ def parse_args() -> argparse.Namespace:
         help="Deploy the optional stop/start resilience Lambda.",
     )
     return parser.parse_args()
-
-
-def read_outputs_file(path: Path) -> dict[str, str]:
-    fields: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        fields[key.strip()] = value.strip()
-    return fields
-
-
-def resolve_outputs_file(stack_name: str | None) -> Path:
-    if stack_name:
-        path = DEPLOY_DIR / f"{stack_name.removesuffix('.txt')}.txt"
-    else:
-        candidates = sorted(
-            DEPLOY_DIR.glob("*.txt"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        path = candidates[0] if candidates else Path()
-
-    if not path.is_file():
-        raise SystemExit(
-            "ERROR: No EE deployment found. Run ../deploy.py first, then "
-            "uv run deploy-sample-private-app.py [stack-name]."
-        )
-    return path
-
-
-def require_field(fields: dict[str, str], key: str, source: Path) -> str:
-    value = fields.get(key, "")
-    if not value:
-        raise SystemExit(f"ERROR: Could not read {key} from {source}.")
-    return value
 
 
 def require_ssm(ssm, name: str) -> str:
@@ -411,10 +379,16 @@ def main() -> None:
     args = parse_args()
     suffix = f"-{args.suffix}" if args.suffix else ""
 
-    outputs_file = resolve_outputs_file(args.stack_name)
-    fields = read_outputs_file(outputs_file)
-    neo4j_stack = require_field(fields, "StackName", outputs_file)
-    region = require_field(fields, "Region", outputs_file)
+    try:
+        outputs_file = resolve_outputs_file(DEPLOY_DIR, args.stack_name)
+        fields = read_outputs(outputs_file)
+        neo4j_stack = require_field(fields, "StackName", outputs_file)
+        region = require_field(fields, "Region", outputs_file)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(
+            "ERROR: No EE deployment found. Run ../deploy.py first, then "
+            "uv run deploy-sample-private-app.py [stack-name]."
+        ) from exc
     deployment_mode = fields.get("DeploymentMode", "")
     number_of_servers = fields.get("NumberOfServers", "1")
     bolt_tls_enabled = bool(fields.get("BoltTlsSecretArn"))

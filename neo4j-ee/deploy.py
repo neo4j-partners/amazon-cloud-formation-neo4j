@@ -15,7 +15,6 @@ import secrets
 import string
 import sys
 import time
-import urllib.parse
 import urllib.request
 
 import boto3
@@ -25,6 +24,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, str(Path(SCRIPT_DIR) / "src"))
+from neo4j_ee.amis import resolve_ami  # noqa: E402
+from neo4j_ee.cloudformation import (  # noqa: E402
+    create_stack_and_wait,
+    nlb_dns_from_outputs,
+    upload_template_to_s3,
+)
+from neo4j_ee.licenses import resolve_license_secret_arns  # noqa: E402
+from neo4j_ee.outputs import parse_key_value_text  # noqa: E402
+
 SOURCE_REGION = "us-east-1"
 SUPPORTED_REGIONS = [
     "us-east-1", "us-east-2", "us-west-2",
@@ -139,12 +148,7 @@ def _resolve_vpc_file(explicit: str | None, deploy_dir: str) -> str | None:
 
 
 def _parse_vpc_file(path: str) -> dict[str, str]:
-    fields: dict[str, str] = {}
-    for line in Path(path).read_text().splitlines():
-        if "=" in line:
-            k, _, v = line.partition("=")
-            fields[k.strip()] = v.strip()
-    return fields
+    return parse_key_value_text(Path(path).read_text())
 
 
 def generate_password():
@@ -185,95 +189,6 @@ def generate_tls_cert(nlb_dns):
         serialization.NoEncryption(),
     ).decode()
     return cert_pem, key_pem
-
-
-def describe_stack_outputs(cfn, stack_name: str) -> dict[str, str]:
-    stack = cfn.describe_stacks(StackName=stack_name)["Stacks"][0]
-    return {
-        output["OutputKey"]: output["OutputValue"]
-        for output in stack.get("Outputs", [])
-    }
-
-
-def _create_local_license_secret(sm, stack_name: str, product: str, path: Path) -> str:
-    license_text = path.read_text().strip()
-    if not license_text:
-        sys.exit(f"ERROR: Local {product} licence file is empty: {path}")
-
-    secret_name = f"neo4j/{stack_name}/licenses/{product}"
-    response = sm.create_secret(
-        Name=secret_name,
-        Description=(
-            f"Temporary Neo4j {product.upper()} licence for deploy.py stack "
-            f"{stack_name}. Created from {path.name}."
-        ),
-        SecretString=license_text,
-        Tags=[
-            {"Key": "StackName", "Value": stack_name},
-            {"Key": "CreatedBy", "Value": "neo4j-ee/deploy.py"},
-            {"Key": "LicenseProduct", "Value": product},
-        ],
-    )
-    return response["ARN"]
-
-
-def resolve_license_secret_arns(args, region: str, stack_name: str):
-    """Resolve explicit or local licence inputs to Secrets Manager ARNs.
-
-    The ARNs are passed to CloudFormation as BloomLicenseSecretArn /
-    GdsLicenseSecretArn. The stack's instance role is granted
-    secretsmanager:GetSecretValue scoped to those exact ARNs (see iam.yaml),
-    and UserData fetches them on first boot and on instance replacement.
-    """
-    sm = boto3.client("secretsmanager", region_name=region)
-    bloom_input = args.bloom_license_secret_id
-    gds_input = args.gds_license_secret_id
-    created_secret_arns: list[str] = []
-
-    if not args.no_local_licenses:
-        local_specs = [
-            ("bloom", LOCAL_LICENSE_FILES["bloom"], bloom_input, not args.no_bloom),
-            ("gds", LOCAL_LICENSE_FILES["gds"], gds_input, not args.no_gds),
-        ]
-        for product, path, explicit_secret, install_enabled in local_specs:
-            if explicit_secret or not path.exists():
-                continue
-            if not install_enabled:
-                print(f"Local {product.upper()} licence present but ignored because the plugin is disabled.")
-                continue
-            secret_arn = _create_local_license_secret(sm, stack_name, product, path)
-            created_secret_arns.append(secret_arn)
-            if product == "bloom":
-                bloom_input = secret_arn
-            else:
-                gds_input = secret_arn
-            print(f"Local {product.upper()} licence uploaded to Secrets Manager: {secret_arn}")
-
-    def _to_arn(secret_input: str | None) -> str:
-        if not secret_input:
-            return ""
-        return sm.describe_secret(SecretId=secret_input)["ARN"]
-
-    return _to_arn(bloom_input), _to_arn(gds_input), created_secret_arns
-
-
-def nlb_dns_from_outputs(cfn, stack_name: str) -> str:
-    outputs = describe_stack_outputs(cfn, stack_name)
-    if outputs.get("Neo4jInternalDNS"):
-        return outputs["Neo4jInternalDNS"]
-
-    for key in ("Neo4jURI", "Neo4jBrowserURL"):
-        value = outputs.get(key, "")
-        if not value:
-            continue
-        hostname = urllib.parse.urlparse(value).hostname
-        if hostname:
-            return hostname
-
-    sys.exit(
-        "ERROR: Could not resolve the NLB DNS name from stack outputs. "
-        "Expected Neo4jInternalDNS, Neo4jURI, or Neo4jBrowserURL."
-    )
 
 
 def main():
@@ -371,88 +286,21 @@ def main():
 
     atexit.register(cleanup)
 
-    ssm_param_path = ""
-    ami_id = ""
-    source_ami_id = ""
-    ami_source = "marketplace"
-
-    if not args.marketplace:
-        ami_source = "local"
-        ami_id_file = os.path.join(SCRIPT_DIR, "marketplace", "ami-id.txt")
-        if not os.path.exists(ami_id_file):
-            sys.exit(
-                f"ERROR: {ami_id_file} not found. Run marketplace/create-ami.sh first,\n"
-                "       or use --marketplace to deploy from the live Marketplace listing."
-            )
-        source_ami_id = Path(ami_id_file).read_text().strip()
-        ec2 = boto3.client("ec2", region_name=region)
-
-        if region != SOURCE_REGION:
-            existing = ec2.describe_images(
-                Owners=["self"],
-                Filters=[{"Name": "description", "Values": [f"Copied from {source_ami_id} in {SOURCE_REGION}"]}],
-            )["Images"]
-            available = sorted(
-                [img for img in existing if img["State"] == "available"],
-                key=lambda img: img["CreationDate"], reverse=True,
-            )
-            pending = [img for img in existing if img["State"] == "pending"]
-            if available:
-                copied_ami_id = available[0]["ImageId"]
-                print(f"Reusing existing copied AMI {copied_ami_id} in {region}.")
-                cleanup_state["copied_ami_id"] = copied_ami_id
-            elif pending:
-                copied_ami_id = pending[0]["ImageId"]
-                print(f"Found in-progress AMI copy {copied_ami_id} in {region} — waiting for it to become available...")
-                ec2.get_waiter("image_available").wait(
-                    ImageIds=[copied_ami_id],
-                    WaiterConfig={"Delay": 30, "MaxAttempts": 60},
-                )
-                print(f"AMI available in {region}.")
-                cleanup_state["copied_ami_id"] = copied_ami_id
-            else:
-                print(f"Copying AMI {source_ami_id} from {SOURCE_REGION} to {region}...")
-                resp = ec2.copy_image(
-                    SourceRegion=SOURCE_REGION,
-                    SourceImageId=source_ami_id,
-                    Name=f"neo4j-ee-copy-{source_ami_id}",
-                    Description=f"Copied from {source_ami_id} in {SOURCE_REGION}",
-                )
-                copied_ami_id = resp["ImageId"]
-                cleanup_state["copied_ami_id"] = copied_ami_id
-                print(f"Copied AMI: {copied_ami_id} — waiting for it to become available...")
-                ec2.get_waiter("image_available").wait(
-                    ImageIds=[copied_ami_id],
-                    WaiterConfig={"Delay": 30, "MaxAttempts": 60},
-                )
-                print(f"AMI available in {region}.")
-            # Tag the copy with the source AMI/region so downstream tooling
-            # (the G6 build-mode tag check, future audits) does not have to
-            # parse the Description string. copy_image does not propagate
-            # source tags, so we set them explicitly after the copy becomes
-            # available. Best-effort: log and continue if tagging fails.
-            try:
-                ec2.create_tags(
-                    Resources=[copied_ami_id],
-                    Tags=[
-                        {"Key": "SourceAmiId", "Value": source_ami_id},
-                        {"Key": "SourceRegion", "Value": SOURCE_REGION},
-                    ],
-                )
-            except Exception as exc:
-                print(f"Warning: could not tag copied AMI {copied_ami_id}: {exc}")
-            ami_id = copied_ami_id
-        else:
-            ami_id = source_ami_id
-
-        ssm_param_path = f"/neo4j-ee/test/{stack_name}/ami-id"
-        print(f"Creating SSM parameter {ssm_param_path} -> {ami_id}...")
-        boto3.client("ssm", region_name=region).put_parameter(
-            Name=ssm_param_path, Type="String", Value=ami_id, Overwrite=True,
-        )
+    ami_info = resolve_ami(
+        args,
+        region=region,
+        stack_name=stack_name,
+        script_dir=Path(SCRIPT_DIR),
+        source_region=SOURCE_REGION,
+    )
+    ami_id = ami_info.ami_id
+    source_ami_id = ami_info.source_ami_id
+    ami_source = ami_info.source
+    ssm_param_path = ami_info.ssm_param_path
+    cleanup_state["copied_ami_id"] = ami_info.copied_ami_id
 
     bloom_license_secret_arn, gds_license_secret_arn, created_license_secret_arns = (
-        resolve_license_secret_arns(args, region, stack_name)
+        resolve_license_secret_arns(args, region, stack_name, LOCAL_LICENSE_FILES)
     )
     cleanup_state["license_secret_arns"] = created_license_secret_arns
 
@@ -501,23 +349,14 @@ def main():
     print("=============================================")
     print()
 
-    # Upload template to S3 (template exceeds 51,200-byte inline CFN limit)
-    account_id = boto3.client("sts", region_name=region).get_caller_identity()["Account"]
-    bucket_name = f"neo4j-ee-cfn-{account_id}-{region}-{ts}"
-    print(f"Uploading template to s3://{bucket_name}...")
-    s3 = boto3.client("s3", region_name=region)
-    if region == "us-east-1":
-        s3.create_bucket(Bucket=bucket_name)
-    else:
-        s3.create_bucket(
-            Bucket=bucket_name,
-            CreateBucketConfiguration={"LocationConstraint": region},
-        )
-    cleanup_state["cfn_bucket"] = bucket_name
     template_file = TEMPLATE_MAP[args.mode]
-    template_key = os.path.basename(template_file)
-    s3.upload_file(os.path.join(SCRIPT_DIR, template_file), bucket_name, template_key)
-    template_url = f"https://{bucket_name}.s3.{region}.amazonaws.com/{template_key}"
+    bucket_name, template_url = upload_template_to_s3(
+        script_dir=Path(SCRIPT_DIR),
+        template_file=template_file,
+        region=region,
+        timestamp=ts,
+    )
+    cleanup_state["cfn_bucket"] = bucket_name
 
     cfn_params = [
         {"ParameterKey": "Password", "ParameterValue": password},
@@ -549,19 +388,7 @@ def main():
             cfn_params.append({"ParameterKey": "ExistingEndpointSgId", "ParameterValue": args.existing_endpoint_sg_id})
 
     cfn = boto3.client("cloudformation", region_name=region)
-    print(f"Creating stack {stack_name}...")
-    cfn.create_stack(
-        StackName=stack_name,
-        TemplateURL=template_url,
-        Capabilities=["CAPABILITY_IAM"],
-        DisableRollback=True,
-        Parameters=cfn_params,
-    )
-    print("Waiting for stack to complete (this takes a few minutes)...")
-    cfn.get_waiter("stack_create_complete").wait(
-        StackName=stack_name,
-        WaiterConfig={"Delay": 15, "MaxAttempts": 120},
-    )
+    create_stack_and_wait(cfn, stack_name, template_url, cfn_params)
 
     bolt_tls_secret_arn = ""
     if args.tls:

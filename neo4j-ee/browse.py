@@ -12,11 +12,20 @@ import argparse
 import os
 from pathlib import Path
 import subprocess
+import sys
 import time
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEPLOY_DIR = SCRIPT_DIR / ".deploy"
+
+sys.path.insert(0, str(SCRIPT_DIR / "src"))
+from neo4j_ee.outputs import (  # noqa: E402
+    read_outputs,
+    require_field,
+    resolve_bolt_scheme,
+    resolve_outputs_file,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,49 +34,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("stack_name", nargs="?", help="EE stack name.")
     return parser.parse_args()
-
-
-def read_outputs(path: Path) -> dict[str, str]:
-    fields: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        fields[key.strip()] = value.strip()
-    return fields
-
-
-def resolve_outputs_file(stack_name: str | None) -> Path:
-    if stack_name:
-        path = DEPLOY_DIR / f"{stack_name.removesuffix('.txt')}.txt"
-    elif DEPLOY_DIR.is_dir():
-        candidates = sorted(
-            DEPLOY_DIR.glob("*.txt"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        path = candidates[0] if candidates else Path()
-    else:
-        path = Path()
-
-    if not path.is_file():
-        if stack_name:
-            raise SystemExit(f"ERROR: File not found: {path}")
-        raise SystemExit(f"ERROR: No .txt files in {DEPLOY_DIR}/")
-    return path
-
-
-def require_field(fields: dict[str, str], key: str, source: Path) -> str:
-    value = fields.get(key, "")
-    if not value:
-        raise SystemExit(f"ERROR: Could not read {key} from {source}.")
-    return value
-
-
-def resolve_bolt_scheme(fields: dict[str, str]) -> str:
-    if fields.get("BoltTlsSecretArn", ""):
-        return "bolt+ssc"
-    return "bolt"
 
 
 def start_tunnel(
@@ -106,15 +72,17 @@ def stop_process(process: subprocess.Popen | None) -> None:
 def main() -> None:
     os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
-    outputs_file = resolve_outputs_file(args.stack_name)
-    fields = read_outputs(outputs_file)
-
-    region = require_field(fields, "Region", outputs_file)
-    bastion_id = require_field(fields, "Neo4jOperatorBastionId", outputs_file)
-    nlb_host = require_field(fields, "Neo4jInternalDNS", outputs_file)
+    try:
+        outputs_file = resolve_outputs_file(DEPLOY_DIR, args.stack_name)
+        fields = read_outputs(outputs_file)
+        region = require_field(fields, "Region", outputs_file)
+        bastion_id = require_field(fields, "Neo4jOperatorBastionId", outputs_file)
+        nlb_host = require_field(fields, "Neo4jInternalDNS", outputs_file)
+        password = require_field(fields, "Password", outputs_file)
+        stack_name = require_field(fields, "StackName", outputs_file)
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(f"ERROR: {exc}") from exc
     username = fields.get("Username", "neo4j")
-    password = require_field(fields, "Password", outputs_file)
-    stack_name = require_field(fields, "StackName", outputs_file)
     bolt_scheme = resolve_bolt_scheme(fields)
 
     print(f"Stack:         {stack_name}")

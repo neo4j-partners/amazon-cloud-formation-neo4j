@@ -100,9 +100,9 @@ def _inline_partials(content: str, source_name: str) -> str:
     return rendered
 
 
-def _userdata_block(topology: str, base_indent: int = 8) -> str:
+def _userdata_block(base_indent: int = 8) -> str:
     """Return the UserData: Fn::Base64: !Join [...] block as YAML text."""
-    source_name = f"userdata-{topology}.sh"
+    source_name = "userdata.sh"
     sh_content = _inline_partials((SRC / source_name).read_text(), source_name)
 
     p = " " * base_indent         # UserData: level
@@ -142,7 +142,7 @@ def _read(filename: str) -> str:
 
 def _assemble_private() -> str:
     asg_content = _read("asg.yaml")
-    userdata = _userdata_block("private")
+    userdata = _userdata_block()
     placeholder = "        # __USERDATA__\n"
     if placeholder not in asg_content:
         print("ERROR: # __USERDATA__ placeholder not found in src/asg.yaml", file=sys.stderr)
@@ -191,7 +191,7 @@ def _assemble_private() -> str:
 
 def _assemble_public() -> str:
     asg_content = _read("asg-public.yaml")
-    userdata = _userdata_block("public")
+    userdata = _userdata_block()
     placeholder = "        # __USERDATA__\n"
     if placeholder not in asg_content:
         print("ERROR: # __USERDATA__ placeholder not found in src/asg-public.yaml", file=sys.stderr)
@@ -240,7 +240,7 @@ def _assemble_public() -> str:
 
 def _assemble_existing_vpc() -> str:
     asg_content = _read("asg-existing-vpc.yaml")
-    userdata = _userdata_block("existing-vpc")
+    userdata = _userdata_block()
     placeholder = "        # __USERDATA__\n"
     if placeholder not in asg_content:
         print("ERROR: # __USERDATA__ placeholder not found in src/asg-existing-vpc.yaml", file=sys.stderr)
@@ -288,30 +288,6 @@ def _assemble_existing_vpc() -> str:
     ])
 
 
-def _diff_userdata_scripts() -> None:
-    """Print a diff of the three UserData scripts; runs on every build."""
-    scripts = {
-        "private": (SRC / "userdata-private.sh").read_text().splitlines(),
-        "public": (SRC / "userdata-public.sh").read_text().splitlines(),
-        "existing-vpc": (SRC / "userdata-existing-vpc.sh").read_text().splitlines(),
-    }
-    for a, b in [("private", "public"), ("private", "existing-vpc")]:
-        diff = list(difflib.unified_diff(
-            scripts[a], scripts[b],
-            fromfile=f"userdata-{a}.sh",
-            tofile=f"userdata-{b}.sh",
-            lineterm="",
-        ))
-        if diff:
-            print(f"\nUserData diff ({a} vs {b}):")
-            for line in diff[:60]:
-                print(line)
-            if len(diff) > 60:
-                print(f"  ... ({len(diff) - 60} more lines)")
-        else:
-            print(f"UserData: {a} and {b} are identical")
-
-
 _TEMPLATES = [
     ("neo4j-private.template.yaml", _assemble_private),
     ("neo4j-public.template.yaml", _assemble_public),
@@ -324,9 +300,6 @@ def _build() -> None:
         out_path = OUT / filename
         out_path.write_text(assembler())
         print(f"wrote {out_path.relative_to(OUT.parent)}")
-
-    print()
-    _diff_userdata_scripts()
 
 
 def _verify() -> None:

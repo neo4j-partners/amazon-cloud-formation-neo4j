@@ -9,6 +9,10 @@ from pathlib import Path
 
 import boto3
 
+_NEO4J_EE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.insert(0, str(_NEO4J_EE_DIR / "src"))
+from neo4j_ee.outputs import read_outputs, resolve_bolt_scheme, truthy  # noqa: E402
+
 
 _REQUIRED_FIELDS = ("StackName", "Region", "Neo4jOperatorBastionId", "Neo4jInternalDNS")
 
@@ -25,26 +29,9 @@ class StackConfig:
     install_gds: bool
 
 
-def _parse_outputs(path: Path) -> dict[str, str]:
-    fields: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        fields[key.strip()] = value.strip()
-    return fields
-
-
 def _fetch_secret(secret_name: str, region: str) -> str:
     sm = boto3.client("secretsmanager", region_name=region)
     return sm.get_secret_value(SecretId=secret_name)["SecretString"]
-
-
-def _bolt_scheme(fields: dict[str, str]) -> str:
-    base = "bolt" if fields.get("NumberOfServers", "3") == "1" else "neo4j"
-    if fields.get("BoltTlsSecretArn", ""):
-        return f"{base}+ssc"
-    return base
 
 
 def load_config(
@@ -56,7 +43,7 @@ def load_config(
             f"{outputs_path} not found. Run deploy.py first to create a stack."
         )
 
-    fields = _parse_outputs(outputs_path)
+    fields = read_outputs(outputs_path)
 
     missing = [f for f in _REQUIRED_FIELDS if f not in fields]
     if missing:
@@ -81,7 +68,7 @@ def load_config(
     stack_name = fields["StackName"]
     region = fields["Region"]
     secret_name = f"neo4j/{stack_name}/password"
-    bolt_scheme = _bolt_scheme(fields)
+    bolt_scheme = resolve_bolt_scheme(fields)
 
     if password_override is not None:
         password = password_override
@@ -106,6 +93,6 @@ def load_config(
         nlb_dns=fields["Neo4jInternalDNS"],
         bolt_scheme=bolt_scheme,
         password=password,
-        install_apoc=fields.get("InstallAPOC", "no").lower() == "yes",
-        install_gds=fields.get("InstallGDS", "false").lower() == "true",
+        install_apoc=truthy(fields.get("InstallAPOC")),
+        install_gds=truthy(fields.get("InstallGDS")),
     )

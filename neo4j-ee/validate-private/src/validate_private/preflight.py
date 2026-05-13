@@ -20,6 +20,12 @@ log = logging.getLogger(__name__)
 
 _NEO4J_EE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 _DEPLOY_DIR = _NEO4J_EE_DIR / ".deploy"
+sys.path.insert(0, str(_NEO4J_EE_DIR / "src"))
+from neo4j_ee.outputs import (  # noqa: E402
+    read_outputs,
+    require_field,
+    resolve_outputs_file,
+)
 _RETRY_CFG = Config(retries={"mode": "standard"})
 
 _CONTRACT_PARAMS = (
@@ -49,43 +55,18 @@ class CheckResult:
     detail: str
 
 
-def _parse_outputs(path: Path) -> dict[str, str]:
-    fields: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        fields[key.strip()] = value.strip()
-    return fields
-
-
 def _resolve_outputs_path(stack: str | None) -> Path:
-    if stack:
-        return _DEPLOY_DIR / f"{stack.removesuffix('.txt')}.txt"
-    if _DEPLOY_DIR.is_dir():
-        txt_files = sorted(
-            _DEPLOY_DIR.glob("*.txt"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        if txt_files:
-            return txt_files[0]
-    raise FileNotFoundError(
-        f"No deployment found in {_DEPLOY_DIR}. "
-        "Run deploy.py first, or pass a stack name."
-    )
-
-
-def _require_field(fields: dict[str, str], key: str, source: Path) -> str:
-    value = fields.get(key, "")
-    if not value:
-        raise ValueError(f"Could not read {key} from {source}.")
-    return value
+    try:
+        return resolve_outputs_file(_DEPLOY_DIR, stack)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"{exc}. Run deploy.py first, or pass a stack name."
+        ) from exc
 
 
 def _load_context(stack: str | None) -> PreflightContext:
     outputs_path = _resolve_outputs_path(stack)
-    fields = _parse_outputs(outputs_path)
+    fields = read_outputs(outputs_path)
 
     mode = fields.get("DeploymentMode", "Public")
     if mode not in {"Private", "ExistingVpc"}:
@@ -98,9 +79,9 @@ def _load_context(stack: str | None) -> PreflightContext:
     return PreflightContext(
         outputs_path=outputs_path,
         fields=fields,
-        stack_name=_require_field(fields, "StackName", outputs_path),
-        region=_require_field(fields, "Region", outputs_path),
-        bastion_id=_require_field(fields, "Neo4jOperatorBastionId", outputs_path),
+        stack_name=require_field(fields, "StackName", outputs_path),
+        region=require_field(fields, "Region", outputs_path),
+        bastion_id=require_field(fields, "Neo4jOperatorBastionId", outputs_path),
         number_of_servers=fields.get("NumberOfServers", "3"),
     )
 

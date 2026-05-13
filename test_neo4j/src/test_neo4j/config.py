@@ -12,6 +12,10 @@ from urllib.parse import urlparse
 
 from neo4j import Driver, GraphDatabase
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.insert(0, str(_REPO_ROOT / "neo4j-ee" / "src"))
+from neo4j_ee.outputs import read_outputs, truthy  # noqa: E402
+
 
 _REQUIRED_FIELDS_CE = (
     "Neo4jBrowserURL",
@@ -85,21 +89,6 @@ class StackConfig:
             drv.close()
 
 
-def _parse_outputs(path: Path) -> dict[str, str]:
-    """Read a 'Key = Value' file into a dict, stripping whitespace."""
-    fields: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        fields[key.strip()] = value.strip()
-    return fields
-
-
-def _truthy(value: str | None) -> bool:
-    return (value or "").lower() in {"1", "true", "yes", "y"}
-
-
 def load_config(
     outputs_path: Path,
     password_override: str | None = None,
@@ -109,7 +98,7 @@ def load_config(
             f"{outputs_path} not found. Run deploy.sh first to create a stack."
         )
 
-    fields = _parse_outputs(outputs_path)
+    fields = read_outputs(outputs_path)
 
     edition = fields.get("Edition", "ce").lower()
     number_of_servers = int(fields.get("NumberOfServers", "1"))
@@ -171,8 +160,8 @@ def load_config(
         number_of_servers=number_of_servers,
         bloom_licensed=bool(fields.get("BloomLicenseSecretArn")),
         gds_licensed=bool(fields.get("GdsLicenseSecretArn")),
-        bloom_expected=_truthy(fields.get("BloomExpected", fields.get("InstallBloom"))),
-        gds_expected=_truthy(fields.get("InstallGDS")),
+        bloom_expected=truthy(fields.get("BloomExpected", fields.get("InstallBloom"))),
+        gds_expected=truthy(fields.get("InstallGDS")),
         bolt_tls_enabled=bolt_tls_enabled,
         ami_id=fields.get("AmiId", ""),
         ami_source=fields.get("AmiSource", ""),

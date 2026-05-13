@@ -24,3 +24,5 @@ python templates/build.py
 ## Source partials (src/)
 
 Each output template is assembled by `build.py` from a fixed list of partials in `src/` (parameter blocks, conditions, IAM, security groups, networking, observability, ASG, userdata). Edit the partials and regenerate; do not edit the output templates directly.
+
+All three templates share `src/userdata.sh`. Boot-time helper functions live in `src/partials/` and are inlined into the generated CloudFormation UserData block.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from test_neo4j.config import StackConfig
@@ -14,6 +15,14 @@ if TYPE_CHECKING:
     import boto3
 
 log = logging.getLogger(__name__)
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_EE_TEMPLATE_DIR = _REPO_ROOT / "neo4j-ee" / "templates"
+_EE_RENDERED_TEMPLATES = (
+    "neo4j-public.template.yaml",
+    "neo4j-private.template.yaml",
+    "neo4j-private-existing-vpc.template.yaml",
+)
 
 
 def check_stack_status(
@@ -645,9 +654,14 @@ def check_neo4j_conf_keys(
         required_nonempty: list[str] = [
             "internal.dbms.cypher_ip_blocklist",
         ]
-        if config.bloom_expected:
+        # The license_file keys are part of the licensed contract, not just the
+        # install contract. CloudFormation Rules reject InstallBloom=true with
+        # an empty BloomLicenseSecretArn, and runtime secret/JAR failures never
+        # reach a healthy node, so the audit should key on the recorded license
+        # state from the deploy outputs.
+        if config.bloom_expected and config.bloom_licensed:
             required_exact["dbms.bloom.license_file"] = bloom_license_path
-        if config.gds_expected:
+        if config.gds_expected and config.gds_licensed:
             required_exact["gds.enterprise.license_file"] = gds_license_path
 
         # Grep only the keys we care about so the SSM response stays well under
@@ -697,6 +711,120 @@ def check_neo4j_conf_keys(
         else:
             ctx.pass_(
                 f"All required keys present on {len(passes)} node(s): "
+                + ", ".join(passes)
+            )
+
+
+def _template_contract_issues(template_name: str, text: str) -> list[str]:
+    """Return rendered-template issues for the plugin/licence contract."""
+    checks = {
+        "BloomLicenseSecretArn parameter": "BloomLicenseSecretArn:" in text,
+        "GdsLicenseSecretArn parameter": "GdsLicenseSecretArn:" in text,
+        "Bloom rule assertion": "BloomLicenseSecretArn must be provided when InstallBloom is true." in text,
+        "GDS rule assertion": "GdsLicenseSecretArn must be provided when InstallGDS is true." in text,
+        "Bloom condition": "BloomEnabledAndLicensed:" in text
+        and "- !Equals [!Ref InstallBloom, 'true']" in text
+        and "- !Not [!Equals [!Ref BloomLicenseSecretArn, '']]" in text,
+        "GDS condition": "GdsEnabledAndLicensed:" in text
+        and "- !Equals [!Ref InstallGDS, 'true']" in text
+        and "- !Not [!Equals [!Ref GdsLicenseSecretArn, '']]" in text,
+        "Bloom IAM Fn::If": "- !If\n                - BloomEnabledAndLicensed\n                - Effect: Allow" in text
+        and "Resource: !Ref BloomLicenseSecretArn\n                - !Ref AWS::NoValue" in text,
+        "GDS IAM Fn::If": "- !If\n                - GdsEnabledAndLicensed\n                - Effect: Allow" in text
+        and "Resource: !Ref GdsLicenseSecretArn\n                - !Ref AWS::NoValue" in text,
+        "Bloom conf gate": 'if [[ "${installBloom}" == "true" ]]; then' in text
+        and 'if [[ -n "${bloomLicenseSecretArn}" ]]; then' in text
+        and "set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license" in text,
+        "GDS conf gate": 'if [[ "${installGDS}" == "true" && -n "${gdsLicenseSecretArn}" ]]; then' in text
+        and "set_neo4j_conf gds.enterprise.license_file /var/lib/neo4j/licenses/neo4j-gds.license" in text,
+        "Bloom runtime missing-ARN fail": 'fail "InstallBloom=true requires BloomLicenseSecretArn to be set."' in text,
+        "GDS runtime missing-ARN fail": 'fail "InstallGDS=true requires GdsLicenseSecretArn to be set."' in text,
+        "No legacy inline policy": "Neo4jLicenseSecretsRead" not in text,
+    }
+    return [f"{template_name}: {name}" for name, ok in checks.items() if not ok]
+
+
+def check_template_plugin_license_contract(reporter: TestReporter) -> None:
+    """Validate the rendered EE templates encode the default-off licence contract."""
+    with reporter.test("Rendered template plugin/licence contract") as ctx:
+        issues: list[str] = []
+        for template_name in _EE_RENDERED_TEMPLATES:
+            path = _EE_TEMPLATE_DIR / template_name
+            if not path.exists():
+                issues.append(f"{template_name}: file missing at {path}")
+                continue
+            issues.extend(_template_contract_issues(template_name, path.read_text()))
+        if issues:
+            ctx.fail("; ".join(issues))
+        else:
+            ctx.pass_(
+                "All rendered EE templates gate licence IAM, UserData fetch, "
+                "and neo4j.conf licence keys on the matching install+ARN predicate"
+            )
+
+
+def check_license_files_on_disk(
+    session: boto3.Session,
+    config: StackConfig,
+    reporter: TestReporter,
+    resource_map: dict[str, str],
+) -> None:
+    """Verify expected Neo4j plugin licence files exist and no extras are present."""
+    with reporter.test("Neo4j licence files on disk") as ctx:
+        try:
+            pairs = _edition_instance_pairs(session, config, resource_map)
+        except Exception as exc:
+            ctx.fail(f"Could not resolve cluster instance IDs: {exc}")
+            return
+
+        bloom_license_path = "/var/lib/neo4j/licenses/neo4j-bloom.license"
+        gds_license_path = "/var/lib/neo4j/licenses/neo4j-gds.license"
+        expected: set[str] = set()
+        if config.bloom_expected and config.bloom_licensed:
+            expected.add(bloom_license_path)
+        if config.gds_expected and config.gds_licensed:
+            expected.add(gds_license_path)
+
+        failures: list[str] = []
+        passes: list[str] = []
+        for logical_id, instance_id in pairs:
+            try:
+                status, stdout, stderr = _run_ssm_shell(
+                    session,
+                    instance_id,
+                    [
+                        "find /var/lib/neo4j/licenses -maxdepth 1 "
+                        "-type f -print 2>/dev/null | sort || true"
+                    ],
+                    timeout_seconds=45,
+                )
+            except Exception as exc:
+                failures.append(f"{logical_id} ({instance_id}): SSM error: {exc}")
+                continue
+            if status != "Success":
+                failures.append(
+                    f"{logical_id} ({instance_id}): SSM status={status} stderr={stderr!r}"
+                )
+                continue
+            found = {line.strip() for line in stdout.splitlines() if line.strip()}
+            missing = sorted(expected - found)
+            unexpected = sorted(found - expected)
+            if missing or unexpected:
+                detail = []
+                if missing:
+                    detail.append(f"missing={missing}")
+                if unexpected:
+                    detail.append(f"unexpected={unexpected}")
+                failures.append(f"{logical_id} ({instance_id}): " + ", ".join(detail))
+            else:
+                passes.append(logical_id)
+
+        if failures:
+            ctx.fail("; ".join(failures))
+        else:
+            expected_label = ", ".join(sorted(expected)) if expected else "no licence files"
+            ctx.pass_(
+                f"{expected_label} present on {len(passes)} node(s): "
                 + ", ".join(passes)
             )
 
@@ -1019,8 +1147,10 @@ def run_robust_tests_checks(
     resource_map: dict[str, str],
 ) -> None:
     """Run the gap-closure checks introduced by the robust-tests plan."""
+    check_template_plugin_license_contract(reporter)
     check_launch_template_amis_exist(session, config, reporter, resource_map)
     check_neo4j_conf_keys(session, config, reporter, resource_map)
+    check_license_files_on_disk(session, config, reporter, resource_map)
     check_nlb_dns_matches_outputs(session, config, reporter, resource_map)
     check_cloudwatch_log_delivery(session, config, reporter, resource_map)
     check_ami_build_mode_tag(session, config, reporter, resource_map)

@@ -248,6 +248,9 @@ def run_ee_cluster_resilience_tests(
         time.sleep(10)
 
     check_cluster_topology(config, reporter)
+    from test_neo4j.infra_checks import check_license_files_on_disk  # noqa: PLC0415
+
+    check_license_files_on_disk(session, config, reporter, resource_map)
     _verify_sentinel(config, reporter, test_run_id)
     _cleanup_sentinel(config, test_run_id)
 
@@ -277,6 +280,9 @@ def run_resilience_tests(
         return
 
     run_simple_tests(config, reporter)
+    from test_neo4j.infra_checks import check_license_files_on_disk  # noqa: PLC0415
+
+    check_license_files_on_disk(session, config, reporter, resource_map)
 
     _verify_sentinel(config, reporter, test_run_id)
     verify_movies_dataset(config, reporter)

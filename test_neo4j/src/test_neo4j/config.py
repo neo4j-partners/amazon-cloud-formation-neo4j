@@ -50,14 +50,14 @@ class StackConfig:
     host: str         # bare hostname extracted from browser_url
     edition: str      # "ce" or "ee"
     number_of_servers: int  # 1 or 3 for EE
-    # Set when deploy.py installed a licence via --bloom-license-secret-id /
+    # Set when deploy.py passed a licence ARN via --bloom-license-secret-id /
     # --gds-license-secret-id; absence means the licence checks are skipped.
     bloom_licensed: bool
     gds_licensed: bool
-    # Bloom plugin is installed unconditionally on the EE templates' UserData,
-    # so this is expected to be True on every EE deploy; the field exists so
-    # CE deploys can opt out and so future template changes that drop Bloom
-    # can be reflected by deploy.py without touching the test runner.
+    # bloom_expected mirrors the InstallBloom template parameter recorded by
+    # deploy.py. The install gate is `InstallBloom=true AND BloomLicenseSecretArn`
+    # non-empty; license-file conf-key and license-on-disk checks key on both
+    # bloom_expected and bloom_licensed.
     bloom_expected: bool
     # gds_expected mirrors the InstallGDS template parameter recorded by
     # deploy.py; the GDS plugin install is gated on this in the UserData.
@@ -94,6 +94,10 @@ def _parse_outputs(path: Path) -> dict[str, str]:
         key, _, value = line.partition("=")
         fields[key.strip()] = value.strip()
     return fields
+
+
+def _truthy(value: str | None) -> bool:
+    return (value or "").lower() in {"1", "true", "yes", "y"}
 
 
 def load_config(
@@ -165,10 +169,10 @@ def load_config(
         host=host,
         edition=edition,
         number_of_servers=number_of_servers,
-        bloom_licensed=bool(fields.get("BloomLicenseSecretId")),
-        gds_licensed=bool(fields.get("GdsLicenseSecretId")),
-        bloom_expected=fields.get("BloomExpected", "yes" if edition == "ee" else "no").lower() == "yes",
-        gds_expected=fields.get("InstallGDS", "false").lower() == "true",
+        bloom_licensed=bool(fields.get("BloomLicenseSecretArn")),
+        gds_licensed=bool(fields.get("GdsLicenseSecretArn")),
+        bloom_expected=_truthy(fields.get("BloomExpected", fields.get("InstallBloom"))),
+        gds_expected=_truthy(fields.get("InstallGDS")),
         bolt_tls_enabled=bolt_tls_enabled,
         ami_id=fields.get("AmiId", ""),
         ami_source=fields.get("AmiSource", ""),

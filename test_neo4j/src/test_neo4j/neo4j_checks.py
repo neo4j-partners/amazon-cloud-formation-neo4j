@@ -94,11 +94,10 @@ def check_apoc(config: StackConfig, reporter: TestReporter) -> None:
 def check_bloom_plugin_loaded(config: StackConfig, reporter: TestReporter) -> None:
     """Assert the Bloom plugin JAR is loaded and procedures are registered.
 
-    Independent of licensing: if InstallBloom was requested but the AMI was
-    missing the JAR, install_bloom in UserData emits a WARNING and continues,
-    leaving Bloom procedures unregistered. The license check would then be
-    skipped (no license secret) and the regression would land silently. This
-    check fails loudly in that case.
+    Independent of licensing: if InstallBloom was requested, the plugin should
+    be loaded before Neo4j starts. UserData now fails the stack when the AMI is
+    missing the JAR; this check still catches any runtime drift where the
+    service becomes reachable without registered Bloom procedures.
     """
     if not config.bloom_expected:
         return

@@ -95,6 +95,8 @@ def parse_args():
     p.add_argument("--subnet-1", metavar="SUBNET_ID")
     p.add_argument("--subnet-2", metavar="SUBNET_ID", default="")
     p.add_argument("--subnet-3", metavar="SUBNET_ID", default="")
+    p.add_argument("--private-route-table-1", metavar="RTB_ID", default="",
+                   help="Route table ID for PrivateSubnet1Id (required for ExistingVpc).")
     p.add_argument("--create-vpc-endpoints", default="true", choices=["true", "false"])
     p.add_argument("--existing-endpoint-sg-id", metavar="SG_ID", default="")
     p.add_argument("--disk-size", type=int, metavar="GB", help="Data volume size in GB (default: 100, min: 100, max: 65536)")
@@ -218,6 +220,11 @@ def main():
             args.region_override = vpc_fields.get("Region", "")
         if not args.existing_endpoint_sg_id and "EndpointSgId" in vpc_fields:
             args.existing_endpoint_sg_id = vpc_fields["EndpointSgId"]
+        if not args.private_route_table_1:
+            args.private_route_table_1 = vpc_fields.get("RouteTable1Id", "")
+        # When the VPC file declares pre-existing endpoints, default to reusing them.
+        if vpc_fields.get("WithEndpoints", "").lower() == "true" and args.create_vpc_endpoints == "true":
+            args.create_vpc_endpoints = "false"
 
     if args.mode == "ExistingVpc":
         if not args.vpc_id or not args.subnet_1:
@@ -380,6 +387,7 @@ def main():
         cfn_params += [
             {"ParameterKey": "VpcId",            "ParameterValue": args.vpc_id},
             {"ParameterKey": "PrivateSubnet1Id", "ParameterValue": args.subnet_1},
+            {"ParameterKey": "PrivateRouteTable1Id", "ParameterValue": args.private_route_table_1},
             {"ParameterKey": "PrivateSubnet2Id", "ParameterValue": args.subnet_2},
             {"ParameterKey": "PrivateSubnet3Id", "ParameterValue": args.subnet_3},
             {"ParameterKey": "CreateVpcEndpoints", "ParameterValue": args.create_vpc_endpoints},

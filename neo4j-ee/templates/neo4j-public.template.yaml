@@ -750,7 +750,8 @@ Resources:
                 }
                 attach_and_mount_data_volume() {
                   echo "Attaching data volume..."
-                  local vols vc vid dev uuid
+                  local vols vc vid uuid
+                  local dev=""
                   vols=$(aws ec2 describe-volumes --region "$region" \
                     --filters "Name=tag:StackID,Values=${_stack_id}" "Name=tag:Role,Values=neo4j-cluster-data" "Name=availability-zone,Values=${_az}" \
                     --query "Volumes[*].VolumeId" --output text)
@@ -781,10 +782,14 @@ Resources:
                     sleep 5
                   done
                   [[ "${astate}" == "attached" ]] || fail "Volume ${vid} not attached in 2m."
+                  local vid_serial
+                  vid_serial=$(echo "${vid}" | tr -d '-')
                   for t in 1 2 3 4 5 6; do
-                    for d in /dev/nvme*n1; do
+                    for d in /dev/nvme?n1; do
                       [[ -b "$d" ]] || continue
-                      if /sbin/ebsnvme-id -u "$d" 2>/dev/null | grep -q "${vid}"; then
+                      local d_serial
+                      d_serial=$(lsblk -no SERIAL "$d" 2>/dev/null | tr -d ' ')
+                      if [[ "$d_serial" == "$vid_serial" ]]; then
                         dev="$d"; break 2
                       fi
                     done

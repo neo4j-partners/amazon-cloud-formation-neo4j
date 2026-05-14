@@ -47,10 +47,12 @@ install_neo4j_from_yum
 install_apoc
 if [[ "${installBloom}" == "true" ]]; then
   install_plugin Bloom "bloom-plugin-*.jar"
+  [[ -n "${bloomLicenseSecretArn}" ]] || fail "InstallBloom=true requires BloomLicenseSecretArn to be set."
   fetch_and_install_license "${bloomLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-bloom.license "Bloom"
 fi
 if [[ "${installGDS}" == "true" ]]; then
   install_plugin GDS "neo4j-graph-data-science-*.jar"
+  [[ -n "${gdsLicenseSecretArn}" ]] || fail "InstallGDS=true requires GdsLicenseSecretArn to be set."
   fetch_and_install_license "${gdsLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-gds.license "GDS"
 fi
 extension_config

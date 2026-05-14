@@ -44,8 +44,14 @@ def upload_template_to_s3(
     template_file: str,
     region: str,
     timestamp: int,
+    on_bucket_created=None,
 ) -> tuple[str, str]:
-    """Upload a generated template to a temporary S3 bucket."""
+    """Upload a generated template to a temporary S3 bucket.
+
+    on_bucket_created: optional callback invoked with the bucket name as soon as
+    create_bucket succeeds, so the caller can register cleanup before any
+    follow-on call (upload_file, etc.) can fail and leak the bucket.
+    """
     account_id = boto3.client("sts", region_name=region).get_caller_identity()["Account"]
     bucket_name = f"neo4j-ee-cfn-{account_id}-{region}-{timestamp}"
     print(f"Uploading template to s3://{bucket_name}...")
@@ -57,6 +63,8 @@ def upload_template_to_s3(
             Bucket=bucket_name,
             CreateBucketConfiguration={"LocationConstraint": region},
         )
+    if on_bucket_created is not None:
+        on_bucket_created(bucket_name)
     template_path = script_dir / template_file
     template_key = template_path.name
     s3.upload_file(str(template_path), bucket_name, template_key)

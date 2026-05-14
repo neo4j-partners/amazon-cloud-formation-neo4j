@@ -45,7 +45,7 @@
     Default: 100
     MinValue: 100
     MaxValue: 16384
-    ConstraintDescription: gp3 volumes are capped at 16,384 GiB.
+    ConstraintDescription: DataDiskSize must be between 100 and 16,384 GiB.
   DataVolumeKmsKeyId:
     Description: >-
       Optional. KMS key ID or ARN for data volume encryption. Leave blank to

@@ -13,8 +13,10 @@ from pathlib import Path
 import random
 import secrets
 import string
+import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 import boto3
@@ -23,8 +25,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, str(Path(SCRIPT_DIR) / "src"))
+SCRIPT_DIR = Path(__file__).parent
+sys.path.insert(0, str(SCRIPT_DIR / "src"))
 from neo4j_ee.amis import resolve_ami  # noqa: E402
 from neo4j_ee.cloudformation import (  # noqa: E402
     create_stack_and_wait,
@@ -62,7 +64,7 @@ TEMPLATE_MAP = {
     "Public":      "templates/neo4j-public.template.yaml",
     "ExistingVpc": "templates/neo4j-private-existing-vpc.template.yaml",
 }
-LOCAL_LICENSE_DIR = Path(SCRIPT_DIR) / ".licenses"
+LOCAL_LICENSE_DIR = SCRIPT_DIR / ".licenses"
 LOCAL_LICENSE_FILES = {
     "bloom": LOCAL_LICENSE_DIR / "bloom.license",
     "gds": LOCAL_LICENSE_DIR / "gds.license",
@@ -97,7 +99,7 @@ def parse_args():
     p.add_argument("--subnet-3", metavar="SUBNET_ID", default="")
     p.add_argument("--private-route-table-1", metavar="RTB_ID", default="",
                    help="Route table ID for PrivateSubnet1Id (required for ExistingVpc).")
-    p.add_argument("--create-vpc-endpoints", default="true", choices=["true", "false"])
+    p.add_argument("--create-vpc-endpoints", choices=["true", "false"])
     p.add_argument("--existing-endpoint-sg-id", metavar="SG_ID", default="")
     p.add_argument("--disk-size", type=int, metavar="GB", help="Data volume size in GB (default: 100, min: 100, max: 65536)")
     p.add_argument("--snapshot-id", metavar="SNAPSHOT_ID", help="Snapshot ID to restore Node 1 data volume from (must match --disk-size)")
@@ -158,6 +160,18 @@ def generate_password():
     return "".join(secrets.choice(alphabet) for _ in range(16))
 
 
+def verify_rendered_templates() -> None:
+    build_script = Path(SCRIPT_DIR) / "templates" / "build.py"
+    print("Verifying rendered CloudFormation templates...")
+    try:
+        subprocess.run([sys.executable, str(build_script), "--verify"], check=True)
+    except subprocess.CalledProcessError:
+        sys.exit(
+            "ERROR: rendered templates are out of sync with templates/src/. "
+            "Run neo4j-ee/templates/build.py and retry deploy."
+        )
+
+
 def detect_public_ip():
     try:
         with urllib.request.urlopen("https://checkip.amazonaws.com", timeout=5) as r:
@@ -196,39 +210,50 @@ def generate_tls_cert(nlb_dns):
 def main():
     os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
+    verify_rendered_templates()
 
-    if args.mode == "ExistingVpc" and not args.vpc_id:
+    if args.mode == "ExistingVpc":
         deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
-        vpc_file_path = _resolve_vpc_file(args.vpc_file, deploy_dir)
-        if not vpc_file_path:
+        vpc_file_path = (
+            _resolve_vpc_file(args.vpc_file, deploy_dir)
+            if args.vpc_file or not args.vpc_id
+            else None
+        )
+        if not vpc_file_path and not args.vpc_id:
             sys.exit(
                 "ERROR: --mode ExistingVpc requires --vpc-id and --subnet-1, "
                 "or a vpc-*.txt file from scripts/create-test-vpc.py in .deploy/"
             )
-        vpc_fields = _parse_vpc_file(vpc_file_path)
-        print(f"VPC config from: {os.path.basename(vpc_file_path)}")
-        args.vpc_id = vpc_fields.get("VpcId", "")
-        if not args.subnet_1:
-            args.subnet_1 = vpc_fields.get("Subnet1Id", "")
-        if not args.subnet_2:
-            args.subnet_2 = vpc_fields.get("Subnet2Id", "")
-        if not args.subnet_3:
-            args.subnet_3 = vpc_fields.get("Subnet3Id", "")
-        if not args.allowed_cidr:
-            args.allowed_cidr = vpc_fields.get("VpcCidr", "")
-        if not args.region_override:
-            args.region_override = vpc_fields.get("Region", "")
-        if not args.existing_endpoint_sg_id and "EndpointSgId" in vpc_fields:
-            args.existing_endpoint_sg_id = vpc_fields["EndpointSgId"]
-        if not args.private_route_table_1:
-            args.private_route_table_1 = vpc_fields.get("RouteTable1Id", "")
-        # When the VPC file declares pre-existing endpoints, default to reusing them.
-        if vpc_fields.get("WithEndpoints", "").lower() == "true" and args.create_vpc_endpoints == "true":
-            args.create_vpc_endpoints = "false"
+        if vpc_file_path:
+            vpc_fields = _parse_vpc_file(vpc_file_path)
+            print(f"VPC config from: {os.path.basename(vpc_file_path)}")
+            if not args.vpc_id:
+                args.vpc_id = vpc_fields.get("VpcId", "")
+            if not args.subnet_1:
+                args.subnet_1 = vpc_fields.get("Subnet1Id", "")
+            if not args.subnet_2:
+                args.subnet_2 = vpc_fields.get("Subnet2Id", "")
+            if not args.subnet_3:
+                args.subnet_3 = vpc_fields.get("Subnet3Id", "")
+            if not args.allowed_cidr:
+                args.allowed_cidr = vpc_fields.get("VpcCidr", "")
+            if not args.region_override:
+                args.region_override = vpc_fields.get("Region", "")
+            if not args.existing_endpoint_sg_id and "EndpointSgId" in vpc_fields:
+                args.existing_endpoint_sg_id = vpc_fields["EndpointSgId"]
+            if not args.private_route_table_1:
+                args.private_route_table_1 = vpc_fields.get("RouteTable1Id", "")
+            # When the VPC file declares pre-existing endpoints, default to reusing them.
+            if vpc_fields.get("WithEndpoints", "").lower() == "true" and args.create_vpc_endpoints is None:
+                args.create_vpc_endpoints = "false"
 
     if args.mode == "ExistingVpc":
+        if args.create_vpc_endpoints is None:
+            args.create_vpc_endpoints = "true"
         if not args.vpc_id or not args.subnet_1:
             sys.exit("ERROR: --mode ExistingVpc requires --vpc-id and --subnet-1 (--subnet-2 and --subnet-3 required for 3-node).")
+        if not args.private_route_table_1:
+            sys.exit("ERROR: --mode ExistingVpc requires --private-route-table-1 or a vpc-*.txt file with RouteTable1Id.")
         if args.number_of_servers == 3 and not (args.subnet_2 and args.subnet_3):
             sys.exit("ERROR: --mode ExistingVpc with 3 servers requires --subnet-2 and --subnet-3.")
         if args.create_vpc_endpoints == "false" and not args.existing_endpoint_sg_id:
@@ -357,13 +382,16 @@ def main():
     print()
 
     template_file = TEMPLATE_MAP[args.mode]
+    def _register_bucket(name: str) -> None:
+        cleanup_state["cfn_bucket"] = name
+
     bucket_name, template_url = upload_template_to_s3(
         script_dir=Path(SCRIPT_DIR),
         template_file=template_file,
         region=region,
         timestamp=ts,
+        on_bucket_created=_register_bucket,
     )
-    cleanup_state["cfn_bucket"] = bucket_name
 
     cfn_params = [
         {"ParameterKey": "Password", "ParameterValue": password},

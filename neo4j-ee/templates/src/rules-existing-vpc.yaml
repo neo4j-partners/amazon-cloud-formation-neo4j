@@ -1,6 +1,7 @@
   ExistingEndpointSgIdRequired:
-    RuleCondition: !Equals [!Ref CreateVpcEndpoints, 'false']
     Assertions:
-      - Assert: !Not [!Equals [!Ref ExistingEndpointSgId, '']]
+      - Assert: !Or
+          - !Equals [!Ref CreateVpcEndpoints, 'true']
+          - !Not [!Equals [!Ref ExistingEndpointSgId, '']]
         AssertDescription: >-
           ExistingEndpointSgId must be provided when CreateVpcEndpoints is false.

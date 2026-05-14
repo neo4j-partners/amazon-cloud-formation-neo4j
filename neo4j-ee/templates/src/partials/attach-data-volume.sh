@@ -34,7 +34,8 @@ attach_and_mount_data_volume() {
   [[ "${astate}" == "attached" ]] || fail "Volume ${vid} not attached in 2m."
   local vid_serial
   vid_serial=$(echo "${vid}" | tr -d '-')
-  for t in 1 2 3 4 5 6; do
+  udevadm settle --timeout=30 || true
+  for t in $(seq 1 15); do
     for d in /dev/nvme?n1; do
       [[ -b "$d" ]] || continue
       local d_serial

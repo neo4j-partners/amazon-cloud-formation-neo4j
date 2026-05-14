@@ -47,6 +47,11 @@ ami-id.txt
 deploy-values.md
 worklog/
 
+# Neo4j licence files (Bloom, GDS, etc.) — never commit
+*.license
+.licenses/
+sample-licenses/
+
 # Self-signed CA bundle staged by deploy.sh --tls; removed by teardown.sh
 neo4j-ee/sample-private-app/lambda/neo4j-ca.crt
 

@@ -109,7 +109,7 @@ Parameters:
     Default: 100
     MinValue: 100
     MaxValue: 16384
-    ConstraintDescription: gp3 volumes are capped at 16,384 GiB.
+    ConstraintDescription: DataDiskSize must be between 100 and 16,384 GiB.
   DataVolumeKmsKeyId:
     Description: >-
       Optional. KMS key ID or ARN for data volume encryption. Leave blank to
@@ -205,17 +205,19 @@ Parameters:
 
 Rules:
   BloomLicenseRequiredWhenInstalled:
-    RuleCondition: !Equals [!Ref InstallBloom, 'true']
     Assertions:
-      - Assert: !Not [!Equals [!Ref BloomLicenseSecretArn, '']]
+      - Assert: !Or
+          - !Equals [!Ref InstallBloom, 'false']
+          - !Not [!Equals [!Ref BloomLicenseSecretArn, '']]
         AssertDescription: >-
           BloomLicenseSecretArn must be provided when InstallBloom is true.
           This Rule fires during CloudFormation stack create and update
           parameter validation.
   GdsLicenseRequiredWhenInstalled:
-    RuleCondition: !Equals [!Ref InstallGDS, 'true']
     Assertions:
-      - Assert: !Not [!Equals [!Ref GdsLicenseSecretArn, '']]
+      - Assert: !Or
+          - !Equals [!Ref InstallGDS, 'false']
+          - !Not [!Equals [!Ref GdsLicenseSecretArn, '']]
         AssertDescription: >-
           GdsLicenseSecretArn must be provided when InstallGDS is true.
           This Rule fires during CloudFormation stack create and update
@@ -860,7 +862,8 @@ Resources:
                   [[ "${astate}" == "attached" ]] || fail "Volume ${vid} not attached in 2m."
                   local vid_serial
                   vid_serial=$(echo "${vid}" | tr -d '-')
-                  for t in 1 2 3 4 5 6; do
+                  udevadm settle --timeout=30 || true
+                  for t in $(seq 1 15); do
                     for d in /dev/nvme?n1; do
                       [[ -b "$d" ]] || continue
                       local d_serial
@@ -921,8 +924,14 @@ Resources:
                   fi
                 }
                 install_apoc() {
+                  local jar
+                  jar=$(ls /var/lib/neo4j/labs/apoc-*-core.jar 2>/dev/null | head -1 || true)
+                  if [ -z "$jar" ]; then
+                    fail "APOC core JAR not found in /var/lib/neo4j/labs after installing neo4j-enterprise."
+                  fi
                   echo "Installing APOC plugin..."
-                  cp /var/lib/neo4j/products/apoc-*-core.jar /var/lib/neo4j/plugins/ 2>/dev/null || true
+                  cp "$jar" /var/lib/neo4j/plugins/
+                  chown neo4j:neo4j /var/lib/neo4j/plugins/$(basename "$jar")
                 }
                 install_plugin() {
                   local label="$1" pattern="$2"
@@ -1040,10 +1049,12 @@ Resources:
                 install_apoc
                 if [[ "${installBloom}" == "true" ]]; then
                   install_plugin Bloom "bloom-plugin-*.jar"
+                  [[ -n "${bloomLicenseSecretArn}" ]] || fail "InstallBloom=true requires BloomLicenseSecretArn to be set."
                   fetch_and_install_license "${bloomLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-bloom.license "Bloom"
                 fi
                 if [[ "${installGDS}" == "true" ]]; then
                   install_plugin GDS "neo4j-graph-data-science-*.jar"
+                  [[ -n "${gdsLicenseSecretArn}" ]] || fail "InstallGDS=true requires GdsLicenseSecretArn to be set."
                   fetch_and_install_license "${gdsLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-gds.license "GDS"
                 fi
                 extension_config

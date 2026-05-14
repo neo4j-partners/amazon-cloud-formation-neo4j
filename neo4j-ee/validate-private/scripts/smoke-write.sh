@@ -25,7 +25,7 @@ ITERATIONS="${2:-20}"
 STACK_NAME=$(read_field "$OUTPUTS_FILE" "StackName")
 REGION=$(read_field "$OUTPUTS_FILE" "Region")
 BASTION_ID=$(read_field "$OUTPUTS_FILE" "Neo4jOperatorBastionId")
-BOLT_TLS_ARN=$(read_field "$OUTPUTS_FILE" "BoltTlsSecretArn")
+BOLT_TLS_ARN=$(read_field "$OUTPUTS_FILE" "BoltTlsSecretArn" || true)
 
 echo "=== Smoke Write Test ==="
 echo ""

@@ -25,6 +25,7 @@ from cryptography.x509.oid import NameOID
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SOURCE_REGION = "us-east-1"
+MARKETPLACE_PRODUCT_CODE = "4t4a9h39qkq4tbo3n9zd51p25"
 SUPPORTED_REGIONS = [
     "us-east-1", "us-east-2", "us-west-2",
     "eu-west-1", "eu-central-1",
@@ -72,6 +73,14 @@ def parse_args():
     p.add_argument("--region", dest="region_override", metavar="REGION")
     p.add_argument("--number-of-servers", type=int, default=3, choices=[1, 3])
     p.add_argument("--marketplace", action="store_true")
+    p.add_argument(
+        "--marketplace-product-code",
+        default=MARKETPLACE_PRODUCT_CODE,
+        help=(
+            "AWS Marketplace product code used with --marketplace to resolve "
+            f"the region-local AMI (default: {MARKETPLACE_PRODUCT_CODE})."
+        ),
+    )
     p.add_argument("--tls", action="store_true")
     p.add_argument("--alert-email", metavar="EMAIL")
     p.add_argument("--mode", default="Private", choices=["Public", "Private", "ExistingVpc"])
@@ -164,6 +173,25 @@ def generate_tls_cert(nlb_dns):
         serialization.NoEncryption(),
     ).decode()
     return cert_pem, key_pem
+
+
+def resolve_marketplace_ami(region: str, product_code: str) -> dict:
+    ec2 = boto3.client("ec2", region_name=region)
+    images = ec2.describe_images(
+        Owners=["aws-marketplace"],
+        Filters=[
+            {"Name": "product-code", "Values": [product_code]},
+            {"Name": "state", "Values": ["available"]},
+        ],
+    )["Images"]
+    if not images:
+        sys.exit(
+            "ERROR: Could not find an available AWS Marketplace AMI for "
+            f"product code {product_code!r} in {region}. Confirm the account "
+            "is subscribed to the Marketplace listing and that the product is "
+            "available in the selected region."
+        )
+    return max(images, key=lambda img: img["CreationDate"])
 
 
 def install_licenses(stack_name, region, bloom_secret, gds_secret):
@@ -431,9 +459,21 @@ def main():
     ssm_param_path = ""
     ami_id = ""
     source_ami_id = ""
+    marketplace_product_code = args.marketplace_product_code if args.marketplace else ""
+    marketplace_ami_owner = ""
+    marketplace_ami_name = ""
     ami_source = "marketplace"
 
-    if not args.marketplace:
+    if args.marketplace:
+        marketplace_image = resolve_marketplace_ami(region, marketplace_product_code)
+        ami_id = marketplace_image["ImageId"]
+        marketplace_ami_owner = marketplace_image.get("OwnerId", "")
+        marketplace_ami_name = marketplace_image.get("Name", "")
+        print(
+            "Resolved Marketplace AMI "
+            f"{ami_id} in {region} from product code {marketplace_product_code}."
+        )
+    else:
         ami_source = "local"
         ami_id_file = os.path.join(SCRIPT_DIR, "marketplace", "ami-id.txt")
         if not os.path.exists(ami_id_file):
@@ -487,11 +527,11 @@ def main():
         else:
             ami_id = source_ami_id
 
-        ssm_param_path = f"/neo4j-ee/test/{stack_name}/ami-id"
-        print(f"Creating SSM parameter {ssm_param_path} -> {ami_id}...")
-        boto3.client("ssm", region_name=region).put_parameter(
-            Name=ssm_param_path, Type="String", Value=ami_id, Overwrite=True,
-        )
+    ssm_param_path = f"/neo4j-ee/test/{stack_name}/ami-id"
+    print(f"Creating SSM parameter {ssm_param_path} -> {ami_id}...")
+    boto3.client("ssm", region_name=region).put_parameter(
+        Name=ssm_param_path, Type="String", Value=ami_id, Overwrite=True,
+    )
 
     print()
     print("=============================================")
@@ -505,10 +545,15 @@ def main():
     print(f"  AllowedCIDR:    {allowed_cidr}")
     print(f"  TLS:            {args.tls}")
     print(f"  AMI source:     {ami_source}")
-    if not args.marketplace:
-        print(f"  AMI:            {ami_id}")
-        if cleanup_state["copied_ami_id"]:
-            print(f"  AMI original:   {source_ami_id} (copied from {SOURCE_REGION})")
+    print(f"  AMI:            {ami_id}")
+    if args.marketplace:
+        print(f"  Product code:   {marketplace_product_code}")
+    if marketplace_ami_name:
+        print(f"  AMI name:       {marketplace_ami_name}")
+    if marketplace_ami_owner:
+        print(f"  AMI owner:      {marketplace_ami_owner}")
+    if cleanup_state["copied_ami_id"]:
+        print(f"  AMI original:   {source_ami_id} (copied from {SOURCE_REGION})")
     if args.alert_email:
         print(f"  Alert email:    {args.alert_email}")
     print("=============================================")
@@ -698,6 +743,12 @@ def main():
             extra.append(("ExistingEndpointSgId", args.existing_endpoint_sg_id))
     if ssm_param_path:
         extra.extend([("SSMParamPath", ssm_param_path), ("AmiId", ami_id)])
+    if marketplace_product_code:
+        extra.append(("MarketplaceProductCode", marketplace_product_code))
+    if marketplace_ami_name:
+        extra.append(("MarketplaceAmiName", marketplace_ami_name))
+    if marketplace_ami_owner:
+        extra.append(("MarketplaceAmiOwner", marketplace_ami_owner))
     if cleanup_state["copied_ami_id"]:
         extra.extend([("CopiedAmiId", cleanup_state["copied_ami_id"]), ("SourceRegion", SOURCE_REGION)])
     if bolt_tls_secret_arn:

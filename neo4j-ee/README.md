@@ -59,6 +59,12 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ./deploy.py --alert-email you@example.com   # enable CloudWatch alarm emails
 ```
 
+`--marketplace` uses the region-local AWS Marketplace AMI for the live Neo4j EE
+listing, resolved by Marketplace product code, with this repo's selected
+template. It does not launch through the live Marketplace CloudFormation
+delivery option, so it can test repo-only topologies such as Private before
+those templates are published on the listing.
+
 ### Look Up Connection Details
 
 ```bash

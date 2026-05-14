@@ -69,9 +69,10 @@ LOCAL_LICENSE_FILES = {
     "bloom": LOCAL_LICENSE_DIR / "bloom.license",
     "gds": LOCAL_LICENSE_DIR / "gds.license",
 }
+_REFRESH_TERMINAL_FAIL = {"Failed", "Cancelled", "RollbackSuccessful", "RollbackFailed"}
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Deploy Neo4j Enterprise Edition CloudFormation stack for local testing.",
     )
@@ -140,11 +141,11 @@ def parse_args():
     return p.parse_args()
 
 
-def _resolve_vpc_file(explicit: str | None, deploy_dir: str) -> str | None:
+def _resolve_vpc_file(explicit: str | None, deploy_dir: Path) -> str | None:
     if explicit:
         return explicit
     vpc_files = sorted(
-        Path(deploy_dir).glob("vpc-*.txt"),
+        deploy_dir.glob("vpc-*.txt"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -155,13 +156,13 @@ def _parse_vpc_file(path: str) -> dict[str, str]:
     return parse_key_value_text(Path(path).read_text())
 
 
-def generate_password():
+def generate_password() -> str:
     alphabet = string.ascii_letters + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(16))
 
 
 def verify_rendered_templates() -> None:
-    build_script = Path(SCRIPT_DIR) / "templates" / "build.py"
+    build_script = SCRIPT_DIR / "templates" / "build.py"
     print("Verifying rendered CloudFormation templates...")
     try:
         subprocess.run([sys.executable, str(build_script), "--verify"], check=True)
@@ -172,15 +173,15 @@ def verify_rendered_templates() -> None:
         )
 
 
-def detect_public_ip():
+def detect_public_ip() -> str | None:
     try:
         with urllib.request.urlopen("https://checkip.amazonaws.com", timeout=5) as r:
             return r.read().decode().strip()
-    except Exception:
+    except (urllib.error.URLError, OSError):
         return None
 
 
-def generate_tls_cert(nlb_dns):
+def generate_tls_cert(nlb_dns: str) -> tuple[str, str]:
     key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
     now = datetime.datetime.now(datetime.timezone.utc)
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "neo4j-bolt")])
@@ -207,13 +208,13 @@ def generate_tls_cert(nlb_dns):
     return cert_pem, key_pem
 
 
-def main():
+def main() -> None:
     os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
     verify_rendered_templates()
 
     if args.mode == "ExistingVpc":
-        deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
+        deploy_dir = SCRIPT_DIR / ".deploy"
         vpc_file_path = (
             _resolve_vpc_file(args.vpc_file, deploy_dir)
             if args.vpc_file or not args.vpc_id
@@ -275,8 +276,8 @@ def main():
     ts = int(time.time())
     stack_name = f"test-ee-{ts}"
     password = generate_password()
-    install_bloom = "false" if getattr(args, "no_bloom", False) else "true"
-    install_gds = "false" if getattr(args, "no_gds", False) else "true"
+    install_bloom = "false" if args.no_bloom else "true"
+    install_gds = "false" if args.no_gds else "true"
 
     cleanup_state = {
         "cfn_bucket": None,
@@ -322,7 +323,7 @@ def main():
         args,
         region=region,
         stack_name=stack_name,
-        script_dir=Path(SCRIPT_DIR),
+        script_dir=SCRIPT_DIR,
         source_region=SOURCE_REGION,
     )
     ami_id = ami_info.ami_id
@@ -386,7 +387,7 @@ def main():
         cleanup_state["cfn_bucket"] = name
 
     bucket_name, template_url = upload_template_to_s3(
-        script_dir=Path(SCRIPT_DIR),
+        script_dir=SCRIPT_DIR,
         template_file=template_file,
         region=region,
         timestamp=ts,
@@ -483,7 +484,6 @@ def main():
             print(f"Instance refresh started: {refresh_id}")
             refresh_ids[asg_name] = refresh_id
         print("Waiting for instance refresh to complete (EE 3-node: ~5-10 min)...")
-        _REFRESH_TERMINAL_FAIL = {"Failed", "Cancelled", "RollbackSuccessful", "RollbackFailed"}
         while refresh_ids:
             time.sleep(60)
             for asg_name, refresh_id in list(refresh_ids.items()):
@@ -506,9 +506,9 @@ def main():
             "when BoltTlsSecretArn is present."
         )
 
-    deploy_dir = os.path.join(SCRIPT_DIR, ".deploy")
-    os.makedirs(deploy_dir, exist_ok=True)
-    outputs_file = os.path.join(deploy_dir, f"{stack_name}.txt")
+    deploy_dir = SCRIPT_DIR / ".deploy"
+    deploy_dir.mkdir(parents=True, exist_ok=True)
+    outputs_file = deploy_dir / f"{stack_name}.txt"
 
     print(f"Stack created. Writing outputs to {outputs_file}...")
     stack_data = cfn.describe_stacks(StackName=stack_name)["Stacks"][0]
@@ -560,8 +560,7 @@ def main():
     lines += [f"{k:<20} = {v}" for k, v in extra]
     output = "\n".join(lines) + "\n"
     print(output, end="")
-    with open(outputs_file, "w") as f:
-        f.write(output)
+    outputs_file.write_text(output)
     cleanup_state["license_secret_arns"] = []
 
     print()

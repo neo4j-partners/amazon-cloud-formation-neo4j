@@ -55,8 +55,15 @@ if [[ "${installGDS}" == "true" ]]; then
   [[ -n "${gdsLicenseSecretArn}" ]] || fail "InstallGDS=true requires GdsLicenseSecretArn to be set."
   fetch_and_install_license "${gdsLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-gds.license "GDS"
 fi
-extension_config
-build_neo4j_conf_file
+# embed-conf neo4j-base.conf
+apply_base_conf
+configure_network_advertised_addresses "${loadBalancerDNSName}" "${boltAdvertisedDNS}"
+configure_memory_recommendation
+configure_cluster "${nodeCount}" "${region}" "${_stack_id}"
+configure_bolt_tls "${boltCertArn}" "${region}"
+configure_plugin_settings "${installBloom}" "${bloomLicenseSecretArn}" "${installGDS}" "${gdsLicenseSecretArn}"
+remove_jdwp_default
+assert_security_invariant
 start_neo4j
 # cfn-signal shebang (#!/usr/bin/python3 -s) requires cfnbootstrap under python3.9;
 # switch the default only after signaling so cfn-signal can find its dependencies.

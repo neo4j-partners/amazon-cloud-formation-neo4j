@@ -238,7 +238,10 @@ COMMAND_ID=$(aws ssm send-command \
     "echo \"\"",
     "echo \"=== CHECK 9: Volume helper prerequisites ===\"",
     "test -x /sbin/ebsnvme-id && echo PASS: ebsnvme-id present",
-    "command -v mkfs.xfs && echo PASS: mkfs.xfs present"
+    "command -v mkfs.xfs && echo PASS: mkfs.xfs present",
+    "echo \"\"",
+    "echo \"=== CHECK 10: No Neo4j configuration baked in AMI ===\"",
+    "test ! -e /etc/neo4j/neo4j.conf && test ! -e /var/lib/neo4j/neo4j-base.conf && echo PASS: No Neo4j config on AMI || echo FAIL: Neo4j config present on AMI"
   ]' \
   --query "Command.CommandId" \
   --output text)
@@ -356,6 +359,13 @@ for expected in \
     FAILURES=$((FAILURES + 1))
   fi
 done
+
+if echo "${COMMAND_OUTPUT}" | grep -q "PASS: No Neo4j config on AMI"; then
+  echo "  PASS: No Neo4j configuration is baked into the AMI"
+else
+  echo "  FAIL: Neo4j configuration found on the AMI (NFR-3 violation)"
+  FAILURES=$((FAILURES + 1))
+fi
 
 for tool in jq python3.11 unzip; do
   if echo "${COMMAND_OUTPUT}" | grep -q "/${tool}"; then

@@ -20,15 +20,6 @@ assert_security_invariant() {
   fi
 }
 
-configure_network_advertised_addresses() {
-  local loadBalancerDNSName="$1"
-  local boltAdvertisedDNS="$2"
-  echo "Configuring advertised addresses in neo4j.conf..."
-  set_neo4j_conf server.default_advertised_address "${loadBalancerDNSName}"
-  set_neo4j_conf server.bolt.advertised_address "${boltAdvertisedDNS:-${loadBalancerDNSName}}:7687"
-  set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
-}
-
 configure_memory_recommendation() {
   local recommendation line
   local applied=false
@@ -84,35 +75,6 @@ configure_cluster() {
   echo "CoreMembers = ${coreMembers}"
   set_neo4j_conf dbms.cluster.discovery.resolver_type LIST
   set_neo4j_conf dbms.cluster.endpoints "${coreMembers}"
-}
-
-configure_bolt_tls() {
-  local boltCertArn="$1"
-  local region="$2"
-  [[ -n "${boltCertArn}" ]] || return 0
-  local neo4j_home="${NEO4J_HOME:-/var/lib/neo4j}"
-  local cert_dir="${NEO4J_CERT_DIR:-${neo4j_home}/certificates/bolt}"
-  mkdir -p "${cert_dir}"
-  local _secret_json
-  _secret_json=$(aws secretsmanager get-secret-value --region "${region}" \
-    --secret-id "${boltCertArn}" --query SecretString --output text)
-  if ! echo "${_secret_json}" | jq -e 'has("certificate") and has("private_key")' >/dev/null; then
-    fail "Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM)."
-  fi
-  umask 077
-  echo "${_secret_json}" | jq -r '.private_key' > "${cert_dir}/private.key"
-  echo "${_secret_json}" | jq -r '.certificate' > "${cert_dir}/public.crt"
-  umask 022
-  unset _secret_json
-  chown -R neo4j:neo4j "$(dirname "${cert_dir}")"
-  chmod 600 "${cert_dir}/private.key"
-  chmod 644 "${cert_dir}/public.crt"
-  set_neo4j_conf dbms.ssl.policy.bolt.enabled true
-  set_neo4j_conf dbms.ssl.policy.bolt.base_directory "${cert_dir}"
-  set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key
-  set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt
-  set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE
-  set_neo4j_conf server.bolt.tls_level REQUIRED
 }
 
 configure_plugin_settings() {

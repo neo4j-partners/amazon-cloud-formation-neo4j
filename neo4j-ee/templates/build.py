@@ -69,14 +69,12 @@ _PREAMBLE_COMMON = [
     '"\\n"',
 ]
 
-# Present in all three templates — Bolt over an internet-facing NLB must be
-# encryptable, so the public template carries TLS parameters too.
+# Present in all three templates. The instance only needs the advertised
+# hostname (for its self-signed cert advertised_address); the ACM certificate
+# is terminated at the NLB, so CertificateArn is never passed to the instance.
 _PREAMBLE_TLS = [
-    '"boltCertArn="',
-    "Ref: BoltCertificateSecretArn",
-    '"\\n"',
-    '"boltAdvertisedDNS="',
-    "Ref: BoltAdvertisedDNS",
+    '"advertisedDNS="',
+    "Ref: AdvertisedDNS",
     '"\\n"',
 ]
 
@@ -294,7 +292,7 @@ _PRIVATE_SPEC = TemplateSpec(
         "parameters-tls.yaml",
         "parameters-private.yaml",
     ),
-    rule_partials=("rules-common.yaml",),
+    rule_partials=("rules-common.yaml", "rules-tls-required.yaml"),
     conditions_partial="conditions-private.yaml",
     resource_partials=(
         "iam.yaml",
@@ -342,7 +340,7 @@ _EXISTING_VPC_SPEC = TemplateSpec(
         "parameters-tls.yaml",
         "parameters-existing-vpc.yaml",
     ),
-    rule_partials=("rules-common.yaml", "rules-existing-vpc.yaml"),
+    rule_partials=("rules-common.yaml", "rules-existing-vpc.yaml", "rules-tls-required.yaml"),
     conditions_partial="conditions-existing-vpc.yaml",
     resource_partials=(
         "iam.yaml",

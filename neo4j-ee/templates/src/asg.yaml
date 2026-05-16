@@ -30,7 +30,7 @@
       VPCZoneIdentifier:
         - !Ref Neo4jPrivateSubnet1
       TargetGroupARNs:
-        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       HealthCheckType: ELB
       HealthCheckGracePeriod: 1200
@@ -70,7 +70,7 @@
       VPCZoneIdentifier:
         - !Ref Neo4jPrivateSubnet2
       TargetGroupARNs:
-        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       HealthCheckType: ELB
       HealthCheckGracePeriod: 1200
@@ -110,7 +110,7 @@
       VPCZoneIdentifier:
         - !Ref Neo4jPrivateSubnet3
       TargetGroupARNs:
-        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       HealthCheckType: ELB
       HealthCheckGracePeriod: 1200

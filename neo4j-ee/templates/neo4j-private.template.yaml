@@ -1034,16 +1034,15 @@ Resources:
                   local bloomLicenseSecretArn="$2"
                   local installGDS="$3"
                   local gdsLicenseSecretArn="$4"
-                  local neo4j_home="${NEO4J_HOME:-/var/lib/neo4j}"
                   echo "Configuring plugin settings in neo4j.conf..."
                   if [[ "${installBloom}" == "true" ]]; then
                     set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
                     if [[ -n "${bloomLicenseSecretArn}" ]]; then
-                      set_neo4j_conf dbms.bloom.license_file "${neo4j_home}/licenses/neo4j-bloom.license"
+                      set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
                     fi
                   fi
                   if [[ "${installGDS}" == "true" && -n "${gdsLicenseSecretArn}" ]]; then
-                    set_neo4j_conf gds.enterprise.license_file "${neo4j_home}/licenses/neo4j-gds.license"
+                    set_neo4j_conf gds.enterprise.license_file /var/lib/neo4j/licenses/neo4j-gds.license
                   fi
                 }
 

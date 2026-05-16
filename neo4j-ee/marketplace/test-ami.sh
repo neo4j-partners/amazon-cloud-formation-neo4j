@@ -237,7 +237,7 @@ COMMAND_ID=$(aws ssm send-command \
     "getent group neo4j",
     "echo \"\"",
     "echo \"=== CHECK 9: Volume helper prerequisites ===\"",
-    "test -x /sbin/ebsnvme-id && echo PASS: ebsnvme-id present",
+    "command -v lsblk && echo PASS: lsblk present",
     "command -v mkfs.xfs && echo PASS: mkfs.xfs present",
     "echo \"\"",
     "echo \"=== CHECK 10: No Neo4j configuration or bootstrap baked in AMI ===\"",
@@ -354,7 +354,7 @@ for expected in \
   "PASS: Neo4j repo present" \
   "neo4j:x:500:500" \
   "neo4j:x:500:" \
-  "PASS: ebsnvme-id present" \
+  "PASS: lsblk present" \
   "PASS: mkfs.xfs present"; do
   if echo "${COMMAND_OUTPUT}" | grep -q "${expected}"; then
     echo "  PASS: ${expected#PASS: }"

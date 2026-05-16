@@ -30,8 +30,16 @@ configure_network_advertised_addresses() {
 }
 
 configure_memory_recommendation() {
-  local conf="${NEO4J_CONF:-/etc/neo4j/neo4j.conf}"
-  neo4j-admin server memory-recommendation >> "${conf}"
+  local recommendation line
+  local applied=false
+  recommendation=$(neo4j-admin server memory-recommendation)
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+    [[ "${line}" == *=* && "${line}" != =* ]] || continue
+    set_neo4j_conf "${line%%=*}" "${line#*=}"
+    applied=true
+  done <<< "${recommendation}"
+  [[ "${applied}" == "true" ]] || fail "Neo4j memory recommendation returned no configuration keys."
 }
 
 configure_cluster() {

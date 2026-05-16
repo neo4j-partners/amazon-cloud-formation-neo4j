@@ -98,6 +98,8 @@ Multiple deployments can coexist; each gets its own file in `.deploy/`.
 
 ## Modifying Templates
 
+> **Required reading before changing any template, the AMI, UserData, or Neo4j config:** [docs/architecture/template-architecture.md](docs/architecture/template-architecture.md). It is the finalized architecture contract. Place every new config value or boot logic by its Placement Decision Rule, and treat its Prohibitions as binding.
+
 The three output templates are assembled from source partials in `templates/src/`. Edit the partials, then regenerate:
 
 ```bash

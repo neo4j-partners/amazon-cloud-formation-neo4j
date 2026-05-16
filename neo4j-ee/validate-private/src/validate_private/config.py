@@ -27,6 +27,7 @@ class StackConfig:
     password: str
     install_apoc: bool
     install_gds: bool
+    install_bloom: bool
 
 
 def _fetch_secret(secret_name: str, region: str) -> str:
@@ -95,4 +96,5 @@ def load_config(
         password=password,
         install_apoc=truthy(fields.get("InstallAPOC")),
         install_gds=truthy(fields.get("InstallGDS")),
+        install_bloom=truthy(fields.get("InstallBloom")),
     )

@@ -10,8 +10,8 @@
 #   - A key pair is NOT required — there is no SSH step
 #
 # Usage:
-#   AWS_PROFILE=marketplace ./create-ami.sh
-#   AMI_BUILD_MODE=iteration AWS_PROFILE=default ./create-ami.sh
+#   AWS_PROFILE=marketplace ./create-ami.sh   # Marketplace account: marketplace mode
+#   ./create-ami.sh                            # any other account: iteration mode
 #
 # The AMI is a base OS image with SSH hardening, OS patches, and static
 # deployment tooling pre-baked.
@@ -26,24 +26,12 @@ set -euo pipefail
 REGION="us-east-1"
 AMI_NAME="neo4j-ee-base-$(date +%Y%m%d)"
 INSTANCE_TYPE="t3.medium"
-AMI_BUILD_MODE="${AMI_BUILD_MODE:-marketplace}"
 MARKETPLACE_ACCOUNT_ID="385155106615"
 
-case "${AMI_BUILD_MODE}" in
-  marketplace|iteration)
-    ;;
-  *)
-    echo "ERROR: AMI_BUILD_MODE must be 'marketplace' or 'iteration'."
-    exit 1
-    ;;
-esac
-
-BUILD_PURPOSE="marketplace-ami-build"
-if [ "${AMI_BUILD_MODE}" = "iteration" ]; then
-  BUILD_PURPOSE="default-account-ami-iteration"
-fi
-
-TAGS="ResourceType=instance,Tags=[{Key=Name,Value=neo4j-ee-ami-build},{Key=Purpose,Value=${BUILD_PURPOSE}}]"
+# AMI_BUILD_MODE defaults from the caller's account: 'marketplace' only in the
+# Marketplace account, 'iteration' everywhere else. The single hard guard is
+# that marketplace mode must run in the Marketplace account; iteration builds
+# just run. Mode and tags are resolved below, once the account is known.
 
 # ---------------------------------------------------------------------------
 # Preflight: verify we're in the correct AWS account
@@ -61,6 +49,28 @@ CALLER_IDENTITY=$(aws sts get-caller-identity --output json 2>&1) || {
 ACCOUNT_ID=$(echo "${CALLER_IDENTITY}" | grep -o '"Account": "[^"]*"' | cut -d'"' -f4)
 CALLER_ARN=$(echo "${CALLER_IDENTITY}" | grep -o '"Arn": "[^"]*"' | cut -d'"' -f4)
 
+if [ "${ACCOUNT_ID}" = "${MARKETPLACE_ACCOUNT_ID}" ]; then
+  AMI_BUILD_MODE="${AMI_BUILD_MODE:-marketplace}"
+else
+  AMI_BUILD_MODE="${AMI_BUILD_MODE:-iteration}"
+fi
+
+case "${AMI_BUILD_MODE}" in
+  marketplace|iteration)
+    ;;
+  *)
+    echo "ERROR: AMI_BUILD_MODE must be 'marketplace' or 'iteration'."
+    exit 1
+    ;;
+esac
+
+BUILD_PURPOSE="marketplace-ami-build"
+if [ "${AMI_BUILD_MODE}" = "iteration" ]; then
+  BUILD_PURPOSE="default-account-ami-iteration"
+fi
+
+TAGS="ResourceType=instance,Tags=[{Key=Name,Value=neo4j-ee-ami-build},{Key=Purpose,Value=${BUILD_PURPOSE}}]"
+
 echo "  Account:  ${ACCOUNT_ID}"
 echo "  Identity: ${CALLER_ARN}"
 echo "  Profile:  ${AWS_PROFILE:-default credential chain}"
@@ -72,24 +82,12 @@ echo ""
 
 if [ "${AMI_BUILD_MODE}" = "marketplace" ] && [ "${ACCOUNT_ID}" != "${MARKETPLACE_ACCOUNT_ID}" ]; then
   echo "ERROR: Marketplace mode must run in account ${MARKETPLACE_ACCOUNT_ID}."
-  echo "For local/default-account iteration, run:"
-  echo "  AMI_BUILD_MODE=iteration AWS_PROFILE=default ./marketplace/create-ami.sh"
+  echo "Omit AMI_BUILD_MODE to build an iteration AMI in this account instead."
   exit 1
 fi
 
 if [ "${AMI_BUILD_MODE}" = "iteration" ]; then
-  if [ "${AWS_PROFILE:-}" != "default" ]; then
-    echo "ERROR: Iteration mode must be explicit and use AWS_PROFILE=default."
-    echo "Run:"
-    echo "  AMI_BUILD_MODE=iteration AWS_PROFILE=default ./marketplace/create-ami.sh"
-    exit 1
-  fi
-  if [ "${ACCOUNT_ID}" = "${MARKETPLACE_ACCOUNT_ID}" ]; then
-    echo "ERROR: Iteration mode is for non-Marketplace/default-account builds only."
-    exit 1
-  fi
-  echo "Non-Marketplace iteration mode selected."
-  echo "This build will write the resulting AMI ID to marketplace/ami-id.txt."
+  echo "Iteration mode: writing the resulting AMI ID to marketplace/ami-id.txt."
   echo ""
 fi
 

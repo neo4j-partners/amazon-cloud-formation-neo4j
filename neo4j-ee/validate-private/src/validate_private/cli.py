@@ -118,6 +118,13 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--expected-cypher-default",
+        help=(
+            "Expected effective db.query.default_language for --suite release. "
+            "Required for the release suite so Cypher default drift is asserted."
+        ),
+    )
+    parser.add_argument(
         "--timeout",
         type=int,
         help="Override the ASG replacement timeout in seconds (resilience cases only; "
@@ -169,12 +176,18 @@ def main() -> None:
                 run_total_loss(config, reporter, timeout=args.timeout or 1200)
     elif args.suite:
         if args.suite == "release":
+            if not args.expected_cypher_default:
+                log.error(
+                    "ERROR: --expected-cypher-default is required with --suite release"
+                )
+                sys.exit(1)
             from validate_private.checks import run_release_gate  # noqa: PLC0415
             run_release_gate(
                 config,
                 reporter,
                 expected_neo4j_version=args.expected_neo4j_version,
                 min_java_major=args.min_java_major,
+                expected_cypher_default=args.expected_cypher_default,
             )
             exit_code = reporter.summary(
                 stack_name=config.stack_name,

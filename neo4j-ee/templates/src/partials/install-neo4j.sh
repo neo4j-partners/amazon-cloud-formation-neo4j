@@ -6,9 +6,10 @@ install_neo4j_from_yum() {
 }
 start_neo4j() {
   local initialPassword="$1"
+  local isFirstBoot="$2"
   echo "Starting Neo4j..."
   service neo4j start
-  if [[ "${IS_FIRST_BOOT}" == "true" ]]; then
+  if [[ "${isFirstBoot}" == "true" ]]; then
     neo4j-admin dbms set-initial-password "${initialPassword}"
   fi
 }

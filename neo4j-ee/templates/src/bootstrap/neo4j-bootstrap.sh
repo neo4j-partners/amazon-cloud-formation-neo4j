@@ -24,7 +24,7 @@ done
 
 initialPassword="${password}"
 unset password
-export IS_FIRST_BOOT=false
+isFirstBoot=false
 
 # include partials/set-neo4j-conf.sh
 
@@ -41,7 +41,7 @@ export IS_FIRST_BOOT=false
 # include partials/configure-cloudwatch.sh
 
 install_cloudwatch_agent "${stackName}"
-attach_and_mount_data_volume "${region}" "${_stack_id}" "${_az}" "${_instance_id}"
+attach_and_mount_data_volume "${region}" "${_stack_id}" "${_az}" "${_instance_id}" isFirstBoot
 install_neo4j_from_yum
 install_apoc
 if [[ "${installBloom}" == "true" ]]; then
@@ -62,4 +62,4 @@ configure_bolt_tls "${boltCertArn}" "${region}"
 configure_plugin_settings "${installBloom}" "${bloomLicenseSecretArn}" "${installGDS}" "${gdsLicenseSecretArn}"
 remove_jdwp_default
 assert_security_invariant
-start_neo4j "${initialPassword}"
+start_neo4j "${initialPassword}" "${isFirstBoot}"

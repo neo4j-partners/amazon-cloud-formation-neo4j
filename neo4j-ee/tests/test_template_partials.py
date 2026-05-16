@@ -377,22 +377,51 @@ class ShellPartialTests(unittest.TestCase):
             set_log.read_text(),
         )
 
-    def test_configure_memory_recommendation_appends_admin_output(self) -> None:
-        self.write_stub("neo4j-admin", "echo 'server.memory.heap.max_size=4g'\n")
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("existing=keep\n")
+    def test_configure_memory_recommendation_applies_admin_output_safely(self) -> None:
+        self.write_stub(
+            "neo4j-admin",
+            "printf '%s\\n' '# comment' 'server.memory.heap.initial_size=4g' "
+            "'not an assignment' 'server.memory.heap.max_size=4g'\n",
+        )
+        set_log = self.tmp / "set-conf.log"
         result = self.run_shell(
             f"""
             set -euo pipefail
-            export NEO4J_CONF="{conf}"
             source "{PARTIALS / 'configure-neo4j.sh'}"
+            {self.fail_function()}
+            set_neo4j_conf() {{
+              echo "$1=$2" >> "{set_log}"
+            }}
             configure_memory_recommendation
             """
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        text = conf.read_text()
-        self.assertIn("existing=keep", text)
-        self.assertIn("server.memory.heap.max_size=4g", text)
+        self.assertEqual(
+            set_log.read_text().splitlines(),
+            [
+                "server.memory.heap.initial_size=4g",
+                "server.memory.heap.max_size=4g",
+            ],
+        )
+
+    def test_configure_memory_recommendation_fails_without_config_keys(self) -> None:
+        self.write_stub("neo4j-admin", "printf '%s\\n' '# comment' 'no keys here'\n")
+        result = self.run_shell(
+            f"""
+            set -euo pipefail
+            source "{PARTIALS / 'configure-neo4j.sh'}"
+            {self.fail_function()}
+            set_neo4j_conf() {{
+              :
+            }}
+            configure_memory_recommendation
+            """
+        )
+        self.assertEqual(result.returncode, 42, result.stderr)
+        self.assertIn(
+            "memory recommendation returned no configuration keys",
+            self.fail_log.read_text(),
+        )
 
     def test_configure_cluster_single_node_writes_nothing(self) -> None:
         set_log = self.tmp / "set-conf.log"
@@ -601,9 +630,8 @@ class ShellPartialTests(unittest.TestCase):
             f"""
             set -euo pipefail
             source "{PARTIALS / 'install-neo4j.sh'}"
-            IS_FIRST_BOOT=true
             install_neo4j_from_yum
-            start_neo4j secret
+            start_neo4j secret true
             """
         )
 
@@ -619,8 +647,7 @@ class ShellPartialTests(unittest.TestCase):
             f"""
             set -euo pipefail
             source "{PARTIALS / 'install-neo4j.sh'}"
-            IS_FIRST_BOOT=false
-            start_neo4j secret
+            start_neo4j secret false
             """
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -722,9 +749,9 @@ class ShellPartialTests(unittest.TestCase):
             set -euo pipefail
             source "{PARTIALS / 'attach-data-volume.sh'}"
             {self.fail_function()}
-            IS_FIRST_BOOT=false
-            attach_and_mount_data_volume us-east-1 stack-arn us-east-1a i-123
-            echo "IS_FIRST_BOOT=$IS_FIRST_BOOT" > "{self.tmp / 'first-boot-state'}"
+            first_boot=false
+            attach_and_mount_data_volume us-east-1 stack-arn us-east-1a i-123 first_boot
+            echo "first_boot=$first_boot" > "{self.tmp / 'first-boot-state'}"
             """,
             env=run_env,
         )
@@ -760,7 +787,7 @@ class ShellPartialTests(unittest.TestCase):
         self.assertIn(f"mount {self.tmp / 'data'}", log)
         self.assertNotIn("mkfs.xfs", log)
         self.assertIn(f"UUID=uuid-1234  {self.tmp / 'data'}  xfs", (self.tmp / "fstab").read_text())
-        self.assertEqual((self.tmp / "first-boot-state").read_text().strip(), "IS_FIRST_BOOT=false")
+        self.assertEqual((self.tmp / "first-boot-state").read_text().strip(), "first_boot=false")
 
     def test_attach_data_volume_fails_after_attach_retry_exhaustion(self) -> None:
         self.write_attach_stubs()
@@ -787,7 +814,7 @@ class ShellPartialTests(unittest.TestCase):
         log = self.command_log.read_text()
         self.assertIn(f"mkfs.xfs {self.tmp / 'nvme1n1'}", log)
         self.assertIn(f"chown neo4j:neo4j {self.tmp / 'data'}", log)
-        self.assertEqual((self.tmp / "first-boot-state").read_text().strip(), "IS_FIRST_BOOT=true")
+        self.assertEqual((self.tmp / "first-boot-state").read_text().strip(), "first_boot=true")
 
     def test_attach_data_volume_fails_when_nvme_device_cannot_be_resolved(self) -> None:
         self.write_attach_stubs()
@@ -1327,9 +1354,7 @@ class RenderedTemplateContractTests(unittest.TestCase):
                 unset_pos = boot.index("unset password")
                 first_external_pos = min(
                     boot.index('install_cloudwatch_agent "${stackName}"'),
-                    boot.index(
-                        'attach_and_mount_data_volume "${region}"'
-                    ),
+                    boot.index('attach_and_mount_data_volume "${region}"'),
                 )
                 self.assertLess(copy_pos, unset_pos)
                 self.assertLess(unset_pos, first_external_pos)
@@ -1417,14 +1442,14 @@ class RenderedTemplateContractTests(unittest.TestCase):
     def test_runtime_overlay_functions_called_with_expected_arguments(self) -> None:
         patterns = (
             r'install_cloudwatch_agent\s+"\$\{stackName\}"',
-            r'attach_and_mount_data_volume\s+"\$\{region\}"\s+"\$\{_stack_id\}"\s+"\$\{_az\}"\s+"\$\{_instance_id\}"',
+            r'attach_and_mount_data_volume\s+"\$\{region\}"\s+"\$\{_stack_id\}"\s+"\$\{_az\}"\s+"\$\{_instance_id\}"\s+isFirstBoot',
             r'fetch_and_install_license\s+"\$\{bloomLicenseSecretArn\}"\s+/var/lib/neo4j/licenses/neo4j-bloom\.license\s+"Bloom"\s+"\$\{region\}"',
             r'fetch_and_install_license\s+"\$\{gdsLicenseSecretArn\}"\s+/var/lib/neo4j/licenses/neo4j-gds\.license\s+"GDS"\s+"\$\{region\}"',
             r'configure_network_advertised_addresses\s+"\$\{loadBalancerDNSName\}"\s+"\$\{boltAdvertisedDNS\}"',
             r'configure_cluster\s+"\$\{nodeCount\}"\s+"\$\{region\}"\s+"\$\{_stack_id\}"',
             r'configure_bolt_tls\s+"\$\{boltCertArn\}"\s+"\$\{region\}"',
             r'configure_plugin_settings\s+"\$\{installBloom\}"\s+"\$\{bloomLicenseSecretArn\}"\s+"\$\{installGDS\}"\s+"\$\{gdsLicenseSecretArn\}"',
-            r'start_neo4j\s+"\$\{initialPassword\}"',
+            r'start_neo4j\s+"\$\{initialPassword\}"\s+"\$\{isFirstBoot\}"',
         )
         for name, template in self.templates.items():
             with self.subTest(template=name):

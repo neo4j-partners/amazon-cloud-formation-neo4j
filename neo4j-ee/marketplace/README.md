@@ -22,15 +22,18 @@ The script resolves the latest Amazon Linux 2023 AMI from SSM, patches it with
 AMI in `us-east-1`, enforces IMDSv2, and writes the new AMI ID to
 `marketplace/ami-id.txt`.
 
-For default-account iteration before Marketplace submission, run the explicit
-guarded mode:
+For default-account iteration before Marketplace submission, just run the
+script against any non-Marketplace account:
 
 ```bash
-AMI_BUILD_MODE=iteration AWS_PROFILE=default ./marketplace/create-ami.sh
+./marketplace/create-ami.sh
 ```
 
-Marketplace mode refuses to run outside account `385155106615`; iteration mode
-refuses to run in that Marketplace account.
+The build mode defaults from the caller's account: `marketplace` only in
+account `385155106615`, `iteration` everywhere else. The single guard is that
+`marketplace` mode refuses to run outside that account; iteration builds just
+run. Set `AMI_BUILD_MODE` explicitly only to override the account-derived
+default.
 
 Then test it:
 

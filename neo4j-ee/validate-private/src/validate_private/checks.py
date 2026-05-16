@@ -119,6 +119,25 @@ def check_gds(config: "StackConfig", reporter: "TestReporter") -> None:
     _run(config, reporter, "GDS plugin", cypher, _check)
 
 
+def check_bloom(config: "StackConfig", reporter: "TestReporter") -> None:
+    if not config.install_bloom:
+        return
+
+    cypher = "CALL bloom.checkLicenseCompliance() YIELD success, status, daysLeft RETURN success, status, daysLeft"
+
+    def _check(rows):
+        if not rows:
+            return False, "no result"
+        r = rows[0]
+        success = r.get("success", False)
+        status = r.get("status", "")
+        days_left = r.get("daysLeft", 0)
+        passed = success is True and status == "valid"
+        return passed, f"Bloom license {status} ({days_left:.0f} days remaining)"
+
+    _run(config, reporter, "Bloom license", cypher, _check)
+
+
 def check_cluster_roles(config: "StackConfig", reporter: "TestReporter") -> None:
     """Verify SHOW DATABASE returns per-node serverId with exactly one writer."""
     start = time.monotonic()
@@ -345,8 +364,9 @@ def run_version_inventory(
     *,
     expected_neo4j_version: str | None = None,
     min_java_major: int | None = None,
+    expected_cypher_default: str,
 ) -> None:
-    """Record and optionally assert the deployed Neo4j and Java versions."""
+    """Record and optionally assert deployed Neo4j, Java, and Cypher versions."""
     import boto3
 
     from botocore.config import Config as BotocoreConfig
@@ -378,6 +398,25 @@ def run_version_inventory(
             reporter.record("Neo4j component version", passed, detail, time.monotonic() - start)
     except Exception as exc:
         reporter.record("Neo4j component version", False, str(exc), time.monotonic() - start)
+
+    start = time.monotonic()
+    try:
+        rows = run_cypher_on_bastion(
+            config,
+            "CALL dbms.listConfig('db.query.default_language') "
+            "YIELD name, value RETURN value",
+        )
+        cypher_default = rows[0].get("value", "") if rows else ""
+        passed = cypher_default == expected_cypher_default
+        reporter.record(
+            "Cypher default language",
+            passed,
+            f"db.query.default_language={cypher_default or 'unset'}; "
+            f"expected {expected_cypher_default}",
+            time.monotonic() - start,
+        )
+    except Exception as exc:
+        reporter.record("Cypher default language", False, str(exc), time.monotonic() - start)
 
     retry_cfg = BotocoreConfig(retries={"mode": "standard"})
     cfn = boto3.client("cloudformation", region_name=config.region, config=retry_cfg)
@@ -466,6 +505,7 @@ def run_release_gate(
     *,
     expected_neo4j_version: str | None = None,
     min_java_major: int | None = None,
+    expected_cypher_default: str,
 ) -> None:
     """Run the deploy-time release checks for a Private EE stack."""
     run_checks(config, reporter)
@@ -474,6 +514,7 @@ def run_release_gate(
         reporter,
         expected_neo4j_version=expected_neo4j_version,
         min_java_major=min_java_major,
+        expected_cypher_default=expected_cypher_default,
     )
 
 
@@ -485,5 +526,6 @@ def run_checks(config: "StackConfig", reporter: "TestReporter") -> None:
     check_data_directory(config, reporter)
     check_apoc(config, reporter)
     check_gds(config, reporter)
+    check_bloom(config, reporter)
     check_cluster_roles(config, reporter)
     run_blocklist_check(config, reporter)

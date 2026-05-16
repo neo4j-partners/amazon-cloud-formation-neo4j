@@ -3,6 +3,8 @@ attach_and_mount_data_volume() {
   local _stack_id="$2"
   local _az="$3"
   local _instance_id="$4"
+  local first_boot_var="$5"
+  printf -v "${first_boot_var}" "%s" "false"
   echo "Attaching data volume..."
   local data_dir="${NEO4J_DATA_DIR:-/var/lib/neo4j/data}"
   local fstab_path="${FSTAB_PATH:-/etc/fstab}"
@@ -57,12 +59,12 @@ attach_and_mount_data_volume() {
   [[ -n "${dev}" && ( -b "${dev}" || ( "${allow_regular_devices}" == "true" && -e "${dev}" ) ) ]] || fail "Could not resolve NVMe device for ${vid}."
   if ! blkid "${dev}" > /dev/null 2>&1; then
     mkfs.xfs "${dev}"
-    IS_FIRST_BOOT=true
+    printf -v "${first_boot_var}" "%s" "true"
   fi
   uuid=$(blkid -s UUID -o value "${dev}")
   [[ -n "${uuid}" ]] || fail "No UUID on ${dev}."
   mkdir -p "${data_dir}"
   echo "UUID=${uuid}  ${data_dir}  xfs  defaults,nofail,noatime,x-systemd.device-timeout=30  0 2" >> "${fstab_path}"
   mount "${data_dir}"
-  [[ "${IS_FIRST_BOOT}" != "true" ]] || chown neo4j:neo4j "${data_dir}"
+  [[ "${!first_boot_var}" != "true" ]] || chown neo4j:neo4j "${data_dir}"
 }

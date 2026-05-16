@@ -764,7 +764,7 @@ Resources:
 
                 initialPassword="${password}"
                 unset password
-                export IS_FIRST_BOOT=false
+                isFirstBoot=false
 
                 set_neo4j_conf() {
                   local key="$1"
@@ -784,6 +784,8 @@ Resources:
                   local _stack_id="$2"
                   local _az="$3"
                   local _instance_id="$4"
+                  local first_boot_var="$5"
+                  printf -v "${first_boot_var}" "%s" "false"
                   echo "Attaching data volume..."
                   local data_dir="${NEO4J_DATA_DIR:-/var/lib/neo4j/data}"
                   local fstab_path="${FSTAB_PATH:-/etc/fstab}"
@@ -838,14 +840,14 @@ Resources:
                   [[ -n "${dev}" && ( -b "${dev}" || ( "${allow_regular_devices}" == "true" && -e "${dev}" ) ) ]] || fail "Could not resolve NVMe device for ${vid}."
                   if ! blkid "${dev}" > /dev/null 2>&1; then
                     mkfs.xfs "${dev}"
-                    IS_FIRST_BOOT=true
+                    printf -v "${first_boot_var}" "%s" "true"
                   fi
                   uuid=$(blkid -s UUID -o value "${dev}")
                   [[ -n "${uuid}" ]] || fail "No UUID on ${dev}."
                   mkdir -p "${data_dir}"
                   echo "UUID=${uuid}  ${data_dir}  xfs  defaults,nofail,noatime,x-systemd.device-timeout=30  0 2" >> "${fstab_path}"
                   mount "${data_dir}"
-                  [[ "${IS_FIRST_BOOT}" != "true" ]] || chown neo4j:neo4j "${data_dir}"
+                  [[ "${!first_boot_var}" != "true" ]] || chown neo4j:neo4j "${data_dir}"
                 }
                 fetch_and_install_license() {
                   local _arn="$1"
@@ -880,9 +882,10 @@ Resources:
                 }
                 start_neo4j() {
                   local initialPassword="$1"
+                  local isFirstBoot="$2"
                   echo "Starting Neo4j..."
                   service neo4j start
-                  if [[ "${IS_FIRST_BOOT}" == "true" ]]; then
+                  if [[ "${isFirstBoot}" == "true" ]]; then
                     neo4j-admin dbms set-initial-password "${initialPassword}"
                   fi
                 }
@@ -941,8 +944,16 @@ Resources:
                 }
 
                 configure_memory_recommendation() {
-                  local conf="${NEO4J_CONF:-/etc/neo4j/neo4j.conf}"
-                  neo4j-admin server memory-recommendation >> "${conf}"
+                  local recommendation line
+                  local applied=false
+                  recommendation=$(neo4j-admin server memory-recommendation)
+                  while IFS= read -r line || [[ -n "${line}" ]]; do
+                    [[ -z "${line}" || "${line}" == \#* ]] && continue
+                    [[ "${line}" == *=* && "${line}" != =* ]] || continue
+                    set_neo4j_conf "${line%%=*}" "${line#*=}"
+                    applied=true
+                  done <<< "${recommendation}"
+                  [[ "${applied}" == "true" ]] || fail "Neo4j memory recommendation returned no configuration keys."
                 }
 
                 configure_cluster() {
@@ -1079,7 +1090,7 @@ Resources:
                   "${ctl_path}" -a fetch-config -m ec2 -s -c "file:${config_path}"
                 }
                 install_cloudwatch_agent "${stackName}"
-                attach_and_mount_data_volume "${region}" "${_stack_id}" "${_az}" "${_instance_id}"
+                attach_and_mount_data_volume "${region}" "${_stack_id}" "${_az}" "${_instance_id}" isFirstBoot
                 install_neo4j_from_yum
                 install_apoc
                 if [[ "${installBloom}" == "true" ]]; then
@@ -1100,7 +1111,7 @@ Resources:
                 configure_plugin_settings "${installBloom}" "${bloomLicenseSecretArn}" "${installGDS}" "${gdsLicenseSecretArn}"
                 remove_jdwp_default
                 assert_security_invariant
-                start_neo4j "${initialPassword}"
+                start_neo4j "${initialPassword}" "${isFirstBoot}"
             /opt/neo4j/conf/neo4j-base.conf:
               mode: '000644'
               owner: root

@@ -1,21 +1,26 @@
 extension_config() {
+  local neo4j_home="${NEO4J_HOME:-/var/lib/neo4j}"
   echo Configuring extensions and security in neo4j.conf...
   set_neo4j_conf internal.dbms.cypher_ip_blocklist "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8"
   if [[ "${installBloom}" == "true" ]]; then
     set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
     if [[ -n "${bloomLicenseSecretArn}" ]]; then
-      set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
+      set_neo4j_conf dbms.bloom.license_file "${neo4j_home}/licenses/neo4j-bloom.license"
     fi
   fi
   if [[ "${installGDS}" == "true" && -n "${gdsLicenseSecretArn}" ]]; then
-    set_neo4j_conf gds.enterprise.license_file /var/lib/neo4j/licenses/neo4j-gds.license
+    set_neo4j_conf gds.enterprise.license_file "${neo4j_home}/licenses/neo4j-gds.license"
   fi
   set_neo4j_conf dbms.security.procedures.unrestricted "gds.*,apoc.*,bloom.*"
   set_neo4j_conf dbms.security.http_auth_allowlist "/,/browser.*,/bloom.*"
   set_neo4j_conf dbms.security.procedures.allowlist "apoc.*,gds.*,bloom.*"
-  sed -i '/jdwp/d' /etc/neo4j/neo4j.conf
+  local conf="${NEO4J_CONF:-/etc/neo4j/neo4j.conf}"
+  sed -i.bak '/jdwp/d' "${conf}"
+  rm -f "${conf}.bak"
 }
 build_neo4j_conf_file() {
+  local neo4j_home="${NEO4J_HOME:-/var/lib/neo4j}"
+  local conf="${NEO4J_CONF:-/etc/neo4j/neo4j.conf}"
   local -r privateIP="$(hostname -i | awk '{print $NF}')"
   echo "Configuring network in neo4j.conf..."
   set_neo4j_conf server.default_listen_address 0.0.0.0
@@ -24,7 +29,7 @@ build_neo4j_conf_file() {
   set_neo4j_conf server.bolt.advertised_address "${boltAdvertisedDNS:-${loadBalancerDNSName}}:7687"
   set_neo4j_conf server.http.listen_address 0.0.0.0:7474
   set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
-  neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
+  neo4j-admin server memory-recommendation >> "${conf}"
   set_neo4j_conf server.metrics.enabled true
   set_neo4j_conf server.metrics.jmx.enabled true
   set_neo4j_conf server.metrics.prefix neo4j
@@ -50,7 +55,7 @@ build_neo4j_conf_file() {
       if [[ -n "${asgNames}" ]]; then
         instanceIds=$(aws autoscaling describe-auto-scaling-groups --region "$region" --auto-scaling-group-names ${asgNames} --query "AutoScalingGroups[].Instances[].InstanceId" --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' | grep -v '^None$' | xargs || true)
         if [[ -n "${instanceIds}" ]]; then
-          coreMembers=$(aws ec2 describe-instances --region "$region" --instance-ids ${instanceIds} --query "Reservations[].Instances[].PrivateIpAddress" --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' | grep -v '^None$' | awk '{print $1":6000"}' | paste -sd, || true)
+          coreMembers=$(aws ec2 describe-instances --region "$region" --instance-ids ${instanceIds} --query "Reservations[].Instances[].PrivateIpAddress" --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' | grep -v '^None$' | awk '{print $1":6000"}' | paste -sd, - || true)
         fi
       fi
       foundCount=0
@@ -67,7 +72,8 @@ build_neo4j_conf_file() {
     set_neo4j_conf dbms.cluster.endpoints "${coreMembers}"
   fi
   if [ -n "${boltCertArn}" ]; then
-    mkdir -p /var/lib/neo4j/certificates/bolt
+    local cert_dir="${NEO4J_CERT_DIR:-${neo4j_home}/certificates/bolt}"
+    mkdir -p "${cert_dir}"
     local _secret_json
     _secret_json=$(aws secretsmanager get-secret-value --region "${region}" \
       --secret-id "${boltCertArn}" --query SecretString --output text)
@@ -75,15 +81,15 @@ build_neo4j_conf_file() {
       fail "Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM)."
     fi
     umask 077
-    echo "${_secret_json}" | jq -r '.private_key' > /var/lib/neo4j/certificates/bolt/private.key
-    echo "${_secret_json}" | jq -r '.certificate' > /var/lib/neo4j/certificates/bolt/public.crt
+    echo "${_secret_json}" | jq -r '.private_key' > "${cert_dir}/private.key"
+    echo "${_secret_json}" | jq -r '.certificate' > "${cert_dir}/public.crt"
     umask 022
     unset _secret_json
-    chown -R neo4j:neo4j /var/lib/neo4j/certificates
-    chmod 600 /var/lib/neo4j/certificates/bolt/private.key
-    chmod 644 /var/lib/neo4j/certificates/bolt/public.crt
+    chown -R neo4j:neo4j "$(dirname "${cert_dir}")"
+    chmod 600 "${cert_dir}/private.key"
+    chmod 644 "${cert_dir}/public.crt"
     set_neo4j_conf dbms.ssl.policy.bolt.enabled true
-    set_neo4j_conf dbms.ssl.policy.bolt.base_directory /var/lib/neo4j/certificates/bolt
+    set_neo4j_conf dbms.ssl.policy.bolt.base_directory "${cert_dir}"
     set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key
     set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt
     set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE

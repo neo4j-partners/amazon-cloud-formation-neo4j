@@ -64,7 +64,9 @@ build_neo4j_conf_file() {
       echo "Peer discovery attempt ${attempt}/30: found ${foundCount}/${nodeCount} members, retrying in 10s..."
       sleep 10
     done
-    if [[ -z "${coreMembers}" ]]; then
+    foundCount=0
+    [[ -n "${coreMembers}" ]] && foundCount=$(echo "${coreMembers}" | awk -F, '{print NF}')
+    if [[ -z "${coreMembers}" || ${foundCount} -lt ${nodeCount} ]]; then
       fail "Peer discovery failed after 5 minutes."
     fi
     echo "CoreMembers = ${coreMembers}"

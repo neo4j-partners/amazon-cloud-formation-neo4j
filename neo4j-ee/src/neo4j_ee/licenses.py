@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import sys
 
@@ -37,7 +38,7 @@ def create_local_license_secret(
 
 
 def resolve_license_secret_arns(
-    args,
+    args: argparse.Namespace,
     region: str,
     stack_name: str,
     local_license_files: dict[str, Path],

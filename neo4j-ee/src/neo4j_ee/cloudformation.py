@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 import sys
 import urllib.parse
@@ -44,7 +45,7 @@ def upload_template_to_s3(
     template_file: str,
     region: str,
     timestamp: int,
-    on_bucket_created=None,
+    on_bucket_created: Callable[[str], None] | None = None,
 ) -> tuple[str, str]:
     """Upload a generated template to a temporary S3 bucket.
 

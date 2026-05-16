@@ -53,7 +53,7 @@ Lambda Function URL  (HTTPS, AWS_IAM auth)
            |  NEO4J_SSM_NLB_PATH       -> /neo4j-ee/<stack>/nlb-dns
            |  NEO4J_SECRET_ARN         -> neo4j/<stack>/password
            |  NEO4J_NUMBER_OF_SERVERS  -> 1 or 3
-           |  NEO4J_BOLT_TLS           -> true only for deploy.py --tls stacks
+           |  NEO4J_BOLT_TLS           -> true when the stack sets AdvertisedDNS (TLS at the NLB)
            v
     Internal NLB  (<scheme>://<nlb-dns>:7687)
            |
@@ -91,7 +91,7 @@ The deployer passes two topology fields:
 
 - `NumberOfServers=1` uses direct `bolt://`
 - `NumberOfServers=3` uses routed `neo4j://`
-- If the parent EE stack output contains `BoltTlsSecretArn`, the Lambda uses the `+ssc` variant for the optional self-signed `deploy.py --tls` flow
+- If the parent EE stack output sets a non-empty `AdvertisedDNS` (TLS terminated at the NLB), the Lambda uses the `+ssc` variant so the driver tolerates the self-signed test certificate
 
 The driver is created lazily on first invocation and cached across warm starts. If the cached driver hits an `AuthError`, the handler closes it, rebuilds a fresh driver, and retries once.
 

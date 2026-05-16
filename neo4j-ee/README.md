@@ -1,6 +1,6 @@
 # Neo4j Enterprise Edition: AWS CloudFormation
 
-CloudFormation templates and operator tooling for the Neo4j Enterprise Edition AWS Marketplace listing. Each template deploys a one or three-node Neo4j cluster fronted by a Network Load Balancer. Every node runs in a dedicated Auto Scaling group for self-healing, with a GP3 EBS data volume that is retained across stack deletion. Bolt TLS is optional on all three templates. Three topologies are available to match different infrastructure requirements: a public new-VPC deployment for evaluation, a private new-VPC deployment for production, and a private deployment into an existing VPC for environments with pre-existing network infrastructure.
+CloudFormation templates and operator tooling for the Neo4j Enterprise Edition AWS Marketplace listing. Each template deploys a one or three-node Neo4j cluster fronted by a Network Load Balancer. Every node runs in a dedicated Auto Scaling group for self-healing, with a GP3 EBS data volume that is retained across stack deletion. The Private and Private Existing VPC templates terminate TLS at the NLB by default (HTTPS Browser on 7473, Bolt on 7687); the Public template is plain TCP unless `--enable-public-tls` is set with a certificate. Three topologies are available to match different infrastructure requirements: a public new-VPC deployment for evaluation, a private new-VPC deployment for production, and a private deployment into an existing VPC for environments with pre-existing network infrastructure.
 
 ---
 
@@ -59,7 +59,11 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ./deploy.py r8i.xlarge                      # memory-optimized instance type
 ./deploy.py --marketplace                   # use the published Marketplace AMI
 ./deploy.py --alert-email you@example.com   # enable CloudWatch alarm emails
-./deploy.py --tls                           # optional self-signed Bolt TLS test flow
+
+# Private/ExistingVpc terminate TLS at the NLB by default: with no --cert-arn a
+# self-signed ACM cert is auto-imported so tooling connects with neo4j+ssc://.
+# Public is plain TCP unless TLS is opted in:
+./deploy.py --mode Public --enable-public-tls --cert-arn <acm-arn> --advertised-dns <dns>
 ```
 
 > **`deploy.py` defaults differ from Marketplace template defaults.** `deploy.py` installs both Bloom and Graph Data Science by default so local validation exercises the same plugin surface customers tend to enable. The Marketplace templates default `InstallBloom=false` and `InstallGDS=false`. The buyer-facing flow is covered in the topology guides ([Public](docs/PUBLIC.md#prerequisites), [Private](docs/PRIVATE.md#prerequisites), [Private Existing VPC](docs/PRIVATE-EXISTING-VPC.md#prerequisites)).

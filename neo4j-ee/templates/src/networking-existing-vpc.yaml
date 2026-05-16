@@ -120,6 +120,17 @@
 
   Neo4jNetworkLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    # PrivateSubnet2Id/3Id are optional String params (Default '') used only by
+    # the CreateCluster branch of Subnets below. cfn-lint resolves the empty
+    # default into a subnet-typed slot and emits W1030 even though the single
+    # node branch never references them and the ClusterSubnetsRequired Rule
+    # guarantees real subnet IDs whenever NumberOfServers != 1. Scope the
+    # suppression to this resource.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W1030
     Properties:
       IpAddressType: ipv4
       Name: !Join

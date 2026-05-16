@@ -66,9 +66,9 @@ class StackConfig:
     # gds_expected mirrors the InstallGDS template parameter recorded by
     # deploy.py; the GDS plugin install is gated on this in the UserData.
     gds_expected: bool
-    # bolt_tls_enabled is True when deploy.py installed a Bolt TLS certificate
-    # (recorded as BoltTlsSecretArn). When True the runner uses the +ssc Bolt
-    # scheme so the Neo4j driver tolerates the self-signed cert.
+    # bolt_tls_enabled is True when the stack terminates TLS at the NLB,
+    # signalled by a non-empty AdvertisedDNS output. When True the runner uses
+    # the +ssc Bolt scheme so the Neo4j driver tolerates the self-signed cert.
     bolt_tls_enabled: bool
     # AMI used by the running cluster instances; "local" when built by
     # marketplace/create-ami.sh (Marketplace or iteration mode), "marketplace"
@@ -127,10 +127,11 @@ def load_config(
 
     install_apoc = fields.get("InstallAPOC", "no").lower() == "yes"
 
-    # deploy.py records BoltTlsSecretArn when --tls was used; in that mode the
-    # stack enforces server.bolt.tls_level=REQUIRED so the runner has to use the
-    # +ssc scheme to tolerate the self-signed cert generated at deploy time.
-    bolt_tls_enabled = bool(fields.get("BoltTlsSecretArn"))
+    # TLS is signalled by a non-empty AdvertisedDNS (the NLB terminates TLS and
+    # the stack enforces server.bolt.tls_level=REQUIRED), so the runner uses the
+    # +ssc scheme to tolerate the self-signed cert imported at deploy time. This
+    # mirrors neo4j_ee.outputs.resolve_bolt_scheme.
+    bolt_tls_enabled = bool(fields.get("AdvertisedDNS"))
     if bolt_tls_enabled and neo4j_uri.startswith("neo4j://"):
         neo4j_uri = "neo4j+ssc://" + neo4j_uri[len("neo4j://"):]
 

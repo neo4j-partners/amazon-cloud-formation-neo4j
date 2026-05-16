@@ -478,9 +478,11 @@ class ShellPartialTests(unittest.TestCase):
 
     def test_configure_tls_generates_certs_and_sets_keys(self) -> None:
         self.write_stub("chown", 'echo "chown $*" >> "$COMMAND_LOG"\n')
+        openssl_log = self.tmp / "openssl.log"
         self.write_stub(
             "openssl",
-            """
+            f"""
+            echo "$*" >> "{openssl_log}"
             out="" key=""
             while [[ $# -gt 0 ]]; do
               case "$1" in
@@ -520,6 +522,14 @@ class ShellPartialTests(unittest.TestCase):
         self.assertIn(f"dbms.ssl.policy.bolt.base_directory={certs}/bolt", calls)
         self.assertIn(f"dbms.ssl.policy.https.base_directory={certs}/https", calls)
         self.assertIn("server.bolt.tls_level=REQUIRED", calls)
+        # Both certs must carry CN + SAN = AdvertisedDNS so Neo4j's Jetty
+        # sniHostCheck accepts the NLB-re-encrypted HTTPS request (else the
+        # browser fails with 400 Invalid SNI). One openssl call per proto.
+        openssl_calls = openssl_log.read_text().splitlines()
+        self.assertEqual(len(openssl_calls), 2, openssl_calls)
+        for call in openssl_calls:
+            self.assertIn("-subj /CN=neo4j.example.com", call)
+            self.assertIn("subjectAltName=DNS:neo4j.example.com", call)
 
     def test_configure_tls_reuses_existing_certs(self) -> None:
         self.write_stub("chown", 'echo "chown $*" >> "$COMMAND_LOG"\n')
@@ -1148,8 +1158,13 @@ class RenderedTemplateContractTests(unittest.TestCase):
                 self.assertIn("attach_and_mount_data_volume", template)
                 self.assertIn("apply_base_conf", template)
                 self.assertIn("configure_cluster", template)
-                self.assertIn("configure_bolt_tls", template)
-                self.assertIn("configure_network_advertised_addresses", template)
+                # TLS partial (replaces configure_bolt_tls +
+                # configure_network_advertised_addresses): its definition and a
+                # distinctive runtime key must be embedded in the bootstrap.
+                self.assertIn("configure_tls()", template)
+                self.assertIn("dbms.ssl.policy.bolt.enabled", template)
+                self.assertNotIn("configure_bolt_tls", template)
+                self.assertNotIn("configure_network_advertised_addresses", template)
                 self.assertIn("start_neo4j", template)
                 self.assertLess(template.index("start_neo4j"), template.index("cfn-signal --success true"))
                 self.assertIn('secret-id "neo4j/${stackName}/password"', template)
@@ -1169,10 +1184,9 @@ class RenderedTemplateContractTests(unittest.TestCase):
             "install_cloudwatch_agent",
             "apply_base_conf",
             "assert_security_invariant",
-            "configure_network_advertised_addresses",
+            "configure_tls",
             "configure_memory_recommendation",
             "configure_cluster",
-            "configure_bolt_tls",
             "configure_plugin_settings",
             "remove_jdwp_default",
         )
@@ -1371,10 +1385,9 @@ class RenderedTemplateContractTests(unittest.TestCase):
     def test_security_invariant_asserted_after_config_before_signal(self) -> None:
         overlay_fns = (
             "apply_base_conf",
-            "configure_network_advertised_addresses",
+            "configure_tls",
             "configure_memory_recommendation",
             "configure_cluster",
-            "configure_bolt_tls",
             "configure_plugin_settings",
             "remove_jdwp_default",
         )
@@ -1401,9 +1414,8 @@ class RenderedTemplateContractTests(unittest.TestCase):
             r'attach_and_mount_data_volume\s+"\$\{region\}"\s+"\$\{_stack_id\}"\s+"\$\{_az\}"\s+"\$\{_instance_id\}"\s+isFirstBoot',
             r'fetch_and_install_license\s+"\$\{bloomLicenseSecretArn\}"\s+/var/lib/neo4j/licenses/neo4j-bloom\.license\s+"Bloom"\s+"\$\{region\}"',
             r'fetch_and_install_license\s+"\$\{gdsLicenseSecretArn\}"\s+/var/lib/neo4j/licenses/neo4j-gds\.license\s+"GDS"\s+"\$\{region\}"',
-            r'configure_network_advertised_addresses\s+"\$\{loadBalancerDNSName\}"\s+"\$\{boltAdvertisedDNS\}"',
+            r'configure_tls\s+"\$\{advertisedDNS:-\}"\s+"\$\{loadBalancerDNSName\}"',
             r'configure_cluster\s+"\$\{nodeCount\}"\s+"\$\{region\}"\s+"\$\{_stack_id\}"',
-            r'configure_bolt_tls\s+"\$\{boltCertArn\}"\s+"\$\{region\}"',
             r'configure_plugin_settings\s+"\$\{installBloom\}"\s+"\$\{bloomLicenseSecretArn\}"\s+"\$\{installGDS\}"\s+"\$\{gdsLicenseSecretArn\}"',
             r'start_neo4j\s+"\$\{initialPassword\}"\s+"\$\{isFirstBoot\}"',
         )
@@ -1485,15 +1497,40 @@ class RenderedTemplateSecurityTests(unittest.TestCase):
                     )
                     self.assertEqual(meta.get("HttpTokens"), "required")
 
+    @staticmethod
+    def _expand_if_rules(rules: list) -> list[dict]:
+        # Public's NLB ingress wraps the Browser port in
+        # !If [UsePublicTLS, {..7473..}, {..7474..}]; evaluate both branches
+        # so the CIDR/port assertions see the concrete rule dicts.
+        out: list[dict] = []
+        for rule in rules:
+            if isinstance(rule, dict) and set(rule) == {"Fn::If"}:
+                _cond, t_branch, f_branch = rule["Fn::If"]
+                for branch in (t_branch, f_branch):
+                    if isinstance(branch, dict):
+                        out.append(branch)
+            elif isinstance(rule, dict):
+                out.append(rule)
+        return out
+
     def test_security_groups_only_expose_neo4j_ports_to_allowed_cidr(self) -> None:
+        # TLS: Browser moved 7474->7473. Private/ExistingVpc expose 7473+7687;
+        # Public exposes 7473 (TLS branch), 7474 (non-TLS branch), and 7687.
+        expected_cidr_ports = {
+            "private": {7473, 7687},
+            "existing_vpc": {7473, 7687},
+            "public": {7473, 7474, 7687},
+        }
         for name in self.docs:
             with self.subTest(template=name):
                 cidr_exposed_ports = set()
                 for rname, resource in self._resources(name).items():
-                    for rule in collect_ingress_rules(resource):
+                    for rule in self._expand_if_rules(
+                        collect_ingress_rules(resource)
+                    ):
                         from_port = rule.get("FromPort")
                         to_port = rule.get("ToPort", from_port)
-                        if from_port is not None:
+                        if isinstance(from_port, int):
                             self.assertFalse(
                                 from_port <= 22 <= to_port,
                                 f"{name}:{rname} exposes port 22",
@@ -1506,7 +1543,7 @@ class RenderedTemplateSecurityTests(unittest.TestCase):
                             )
                             self.assertIn(
                                 from_port,
-                                (7474, 7687),
+                                (7473, 7474, 7687),
                                 f"{name}:{rname} opens unexpected port to a CIDR",
                             )
                             cidr_exposed_ports.add(from_port)
@@ -1517,13 +1554,13 @@ class RenderedTemplateSecurityTests(unittest.TestCase):
                                 f"{name}:{rname} ingress has neither CidrIp "
                                 "nor SourceSecurityGroupId",
                             )
-                # Non-vacuity guard: every template must actually expose the
-                # two Neo4j ports to AllowedCIDR somewhere, so the positive
-                # path above is genuinely exercised.
+                # Non-vacuity guard: every template must expose exactly the
+                # expected Neo4j ports to AllowedCIDR, so the positive path
+                # above is genuinely exercised and no extra port leaks.
                 self.assertEqual(
                     cidr_exposed_ports,
-                    {7474, 7687},
-                    f"{name}: expected 7474+7687 exposed to AllowedCIDR",
+                    expected_cidr_ports[name],
+                    f"{name}: unexpected CIDR-exposed port set",
                 )
 
     def test_iam_policies_are_least_privilege(self) -> None:
@@ -1587,12 +1624,15 @@ class RenderedTemplateSecurityTests(unittest.TestCase):
                     for item in statements
                     if isinstance(item, dict) and set(item) == {"Fn::If"}
                 }
+                # BoltTLSEnabled was removed with the Secrets-Manager-PEM Bolt
+                # grant (TLS now terminates ACM at the NLB). Only the Bloom/GDS
+                # licence-secret grants remain conditional.
                 for expected in (
-                    "BoltTLSEnabled",
                     "BloomEnabledAndLicensed",
                     "GdsEnabledAndLicensed",
                 ):
                     self.assertIn(expected, if_conditions)
+                self.assertNotIn("BoltTLSEnabled", if_conditions)
                 for item in statements:
                     if isinstance(item, dict) and set(item) == {"Fn::If"}:
                         self.assertEqual(
@@ -1717,10 +1757,114 @@ class RenderedTemplateReferenceIntegrityTests(unittest.TestCase):
 class NlbAndRoutingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        cls.text = _assemble_all_templates()
         cls.docs = {
-            name: load_cfn(body)
-            for name, body in _assemble_all_templates().items()
+            name: load_cfn(body) for name, body in cls.text.items()
         }
+
+    def _by_type(self, name: str, rtype: str) -> dict:
+        return {
+            rn: r
+            for rn, r in self.docs[name]["Resources"].items()
+            if r.get("Type") == rtype
+        }
+
+    def test_private_existing_listeners_and_tgs_are_tls(self) -> None:
+        # TLS is mandatory for Private/ExistingVpc: Browser 7473 and Bolt 7687
+        # listeners are Protocol TLS with the ACM cert + modern SslPolicy, and
+        # both target groups are Protocol TLS. No plain 7474 anywhere.
+        for name in ("private", "existing_vpc"):
+            with self.subTest(template=name):
+                listeners = self._by_type(
+                    name, "AWS::ElasticLoadBalancingV2::Listener"
+                )
+                ports = {}
+                for r in listeners.values():
+                    p = r["Properties"]
+                    ports[p["Port"]] = p
+                    self.assertEqual(p["Protocol"], "TLS")
+                    self.assertEqual(
+                        p["Certificates"],
+                        [{"CertificateArn": {"Ref": "CertificateArn"}}],
+                    )
+                    self.assertEqual(
+                        p["SslPolicy"], "ELBSecurityPolicy-TLS13-1-2-2021-06"
+                    )
+                self.assertEqual(set(ports), {7473, 7687})
+
+                tgs = self._by_type(
+                    name, "AWS::ElasticLoadBalancingV2::TargetGroup"
+                )
+                tg_ports = set()
+                for r in tgs.values():
+                    p = r["Properties"]
+                    self.assertEqual(p["Protocol"], "TLS")
+                    self.assertEqual(p["HealthCheckProtocol"], "TCP")
+                    tg_ports.add(p["Port"])
+                self.assertEqual(tg_ports, {7473, 7687})
+                # No plain-HTTP listener/target group: the {7473,7687} port
+                # sets above already prove 7474 is absent from the data path
+                # (test_security_groups_* covers the SG side).
+
+    def test_public_listeners_are_tls_conditional(self) -> None:
+        # Public TLS is opt-in: the Browser listener Port/Protocol and the
+        # Certificates/SslPolicy are gated on the UsePublicTLS condition.
+        listeners = self._by_type(
+            "public", "AWS::ElasticLoadBalancingV2::Listener"
+        )
+        browser = next(
+            r
+            for r in listeners.values()
+            if r["Properties"]["Port"]
+            == {"Fn::If": ["UsePublicTLS", 7473, 7474]}
+        )
+        bp = browser["Properties"]
+        self.assertEqual(
+            bp["Protocol"], {"Fn::If": ["UsePublicTLS", "TLS", "TCP"]}
+        )
+        self.assertEqual(bp["Certificates"]["Fn::If"][0], "UsePublicTLS")
+        self.assertEqual(bp["SslPolicy"]["Fn::If"][0], "UsePublicTLS")
+        bolt = next(
+            r for r in listeners.values() if r["Properties"]["Port"] == 7687
+        )
+        self.assertEqual(
+            bolt["Properties"]["Protocol"],
+            {"Fn::If": ["UsePublicTLS", "TLS", "TCP"]},
+        )
+
+    def test_route53_private_dns_is_conditional_and_private_only(self) -> None:
+        for name in ("private", "existing_vpc"):
+            with self.subTest(template=name):
+                zones = self._by_type(name, "AWS::Route53::HostedZone")
+                records = self._by_type(name, "AWS::Route53::RecordSet")
+                self.assertEqual(
+                    [z.get("Condition") for z in zones.values()],
+                    ["CreatePrivateDnsHostedZone"],
+                )
+                self.assertEqual(
+                    [r.get("Condition") for r in records.values()],
+                    ["CreatePrivateDns"],
+                )
+        self.assertFalse(self._by_type("public", "AWS::Route53::HostedZone"))
+        self.assertFalse(self._by_type("public", "AWS::Route53::RecordSet"))
+
+    def test_outputs_use_tls_form(self) -> None:
+        for name in ("private", "existing_vpc"):
+            with self.subTest(template=name):
+                outputs = self.docs[name]["Outputs"]
+                self.assertIn("Neo4jSSMHTTPSCommand", outputs)
+                self.assertNotIn("Neo4jSSMHTTPCommand", outputs)
+                self.assertIn(
+                    "portNumber=7473",
+                    outputs["Neo4jSSMHTTPSCommand"]["Value"]["Fn::Sub"],
+                )
+                for key in ("Neo4jPrivateDnsHostedZoneId", "Neo4jPrivateDnsRecord"):
+                    self.assertEqual(
+                        outputs[key].get("Condition"), "CreatePrivateDns"
+                    )
+        pub = self.docs["public"]["Outputs"]
+        self.assertEqual(pub["Neo4jBrowserURL"]["Value"]["Fn::If"][0], "UsePublicTLS")
+        self.assertEqual(pub["Neo4jURI"]["Value"]["Fn::If"][0], "UsePublicTLS")
 
     def test_nlb_scheme_matches_template_exposure(self) -> None:
         expected = {

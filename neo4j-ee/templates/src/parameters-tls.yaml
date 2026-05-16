@@ -11,7 +11,7 @@
     ConstraintDescription: Must be blank or a valid ACM certificate ARN.
   AdvertisedDNS:
     Description: >-
-      Public DNS name that resolves to this NLB. Used as the certificate SAN
+      Advertised DNS name that resolves to this NLB. Used as the certificate SAN
       and as the host placed in server.bolt.advertised_address and
       server.http.advertised_address. Map this name to the NLB DNS via Route 53
       or operator-managed DNS before clients connect. Required for Private and

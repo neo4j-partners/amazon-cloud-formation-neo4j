@@ -32,7 +32,7 @@ Operator helper scripts. Run Python helpers with `uv run <script>.py`; they use 
 | `scripts/get-password.sh [stack]` | Print the Neo4j password from Secrets Manager to stdout | <5s |
 | `uv run scripts/preflight.py [stack]` | Direct script form of `uv run preflight`. | 45–75s |
 | `uv run scripts/smoke-write.py [stack] [N=20]` | Run N `CREATE ... DELETE` write operations through the cluster. Fails if any iteration fails. | ~60s at N=20 |
-| `uv run scripts/browser-tunnel.py [stack]` | Open a port-forward tunnel to the NLB on port 7474 (HTTP). Open `http://localhost:7474` once the tunnel starts. | Interactive |
+| `uv run scripts/browser-tunnel.py [stack]` | Open a port-forward tunnel to the NLB on port 7473 (HTTPS). Open `https://localhost:7473` once the tunnel starts. | Interactive |
 | `uv run scripts/bolt-tunnel.py [stack]` | Open a port-forward tunnel to the NLB on port 7687 (Bolt). Connect a local driver or client to the URI printed by the script. | Interactive |
 | `uv run scripts/ssm_check_sessions.py [stack]` | Direct script form of `uv run ssm-check-sessions`. | <5s |
 | `uv run scripts/ssm_tunnel_test.py --stack-file ../.deploy/<stack>.txt --combo 0` | Diagnostic: test the production SSM port-forward subprocess settings against the bastion. Omit `--combo` to run the full flag matrix. | Varies |

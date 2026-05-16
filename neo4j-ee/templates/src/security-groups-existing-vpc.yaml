@@ -149,6 +149,16 @@
   ExistingEndpointSgBastionIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Condition: UseExistingVpcEndpoints
+    # ExistingEndpointSgId is an optional String param (Default '') because it
+    # only applies when reusing pre-existing VPC endpoints. cfn-lint resolves
+    # the empty default and emits W1030 even though this resource only exists
+    # under UseExistingVpcEndpoints, where the ExistingEndpointSgIdRequired
+    # Rule guarantees a real sg- value. Scope the suppression to this resource.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W1030
     Properties:
       GroupId: !Ref ExistingEndpointSgId
       IpProtocol: tcp
@@ -159,6 +169,14 @@
   ExistingEndpointSgNeo4jIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Condition: UseExistingVpcEndpoints
+    # See ExistingEndpointSgBastionIngress: same optional-param W1030 case,
+    # guarded by Condition UseExistingVpcEndpoints and the
+    # ExistingEndpointSgIdRequired Rule.
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - W1030
     Properties:
       GroupId: !Ref ExistingEndpointSgId
       IpProtocol: tcp

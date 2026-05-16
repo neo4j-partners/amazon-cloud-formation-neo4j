@@ -47,7 +47,7 @@ python build.py --verify    # CI/pre-commit check: committed output is byte-iden
 python -m unittest discover -s tests          # contract + partial unit tests
 python -m unittest tests.test_template_partials.ShellPartialTests   # one test class
 cfn-lint templates/neo4j-private.template.yaml
-cfn-lint templates/neo4j-private-existing-vpc.template.yaml --ignore-checks W1030
+cfn-lint templates/neo4j-private-existing-vpc.template.yaml   # clean; W1030 scoped per-resource in source
 
 # Deploy (deploy.py defaults to Private, 3-node, t3.medium; installs Bloom+GDS — differs from Marketplace defaults of false/false)
 ./deploy.py --region us-east-1
@@ -55,7 +55,9 @@ cfn-lint templates/neo4j-private-existing-vpc.template.yaml --ignore-checks W103
 ./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx
 ./deploy.py --number-of-servers 1            # single node
 ./deploy.py --marketplace                    # use published Marketplace AMI
-./deploy.py --tls                            # self-signed Bolt TLS test flow
+# Private/ExistingVpc terminate TLS at the NLB by default: with no --cert-arn a
+# self-signed ACM cert is auto-imported (clients use neo4j+ssc://). Public is
+# plain TCP unless: ./deploy.py --mode Public --enable-public-tls --cert-arn <arn> --advertised-dns <dns>
 
 # Tear down (EBS data volumes are DeletionPolicy: Retain by design)
 ./teardown.sh                    # most recent deployment

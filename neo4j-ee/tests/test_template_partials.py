@@ -270,9 +270,8 @@ class ShellPartialTests(unittest.TestCase):
                 self.assertIn(expected, self.fail_log.read_text())
 
     def test_configure_plugin_settings_covers_four_flag_combinations(self) -> None:
-        home = self.tmp / "neo4j"
-        bloom_lic = home / "licenses" / "neo4j-bloom.license"
-        gds_lic = home / "licenses" / "neo4j-gds.license"
+        bloom_lic = "/var/lib/neo4j/licenses/neo4j-bloom.license"
+        gds_lic = "/var/lib/neo4j/licenses/neo4j-gds.license"
         cases = [
             # installBloom, bloomArn, installGDS, gdsArn,
             # expect_bloom_class, expect_bloom_lic, expect_gds_lic
@@ -296,7 +295,6 @@ class ShellPartialTests(unittest.TestCase):
                 result = self.run_shell(
                     f"""
                     set -euo pipefail
-                    export NEO4J_HOME="{home}"
                     source "{PARTIALS / 'configure-neo4j.sh'}"
                     set_neo4j_conf() {{
                       echo "$1=$2" >> "{set_log}"

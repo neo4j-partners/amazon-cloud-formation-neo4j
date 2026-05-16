@@ -10,6 +10,7 @@ import unittest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "neo4j-ee" / "src"))
+sys.path.insert(0, str(REPO_ROOT / "neo4j-ee" / "validate-private" / "src"))
 
 from neo4j_ee.amis import resolve_ami
 from neo4j_ee.cloudformation import create_stack_and_wait, nlb_dns_from_outputs
@@ -22,6 +23,7 @@ from neo4j_ee.outputs import (
     resolve_outputs_file,
     truthy,
 )
+from validate_private.checks import _java_major, _parse_key_value_lines
 
 
 class OutputHelperTests(unittest.TestCase):
@@ -87,6 +89,24 @@ class AmiHelperTests(unittest.TestCase):
         self.assertEqual(info.ami_id, "")
         self.assertEqual(info.ssm_param_path, "")
         self.assertIsNone(info.copied_ami_id)
+
+
+class ValidatePrivateHelperTests(unittest.TestCase):
+    def test_java_major_parses_modern_and_legacy_version_lines(self) -> None:
+        self.assertEqual(_java_major('openjdk version "21.0.6" 2025-01-21 LTS'), 21)
+        self.assertEqual(_java_major('java version "1.8.0_412"'), 8)
+        self.assertIsNone(_java_major("not a java version line"))
+
+    def test_parse_key_value_lines_ignores_non_key_value_output(self) -> None:
+        values = _parse_key_value_lines(
+            "neo4j_rpm_version=2025.04.0\n"
+            "noise\n"
+            "java_version=openjdk version \"21.0.6\" 2025-01-21 LTS\n"
+        )
+
+        self.assertEqual(values["neo4j_rpm_version"], "2025.04.0")
+        self.assertEqual(values["java_version"], 'openjdk version "21.0.6" 2025-01-21 LTS')
+        self.assertNotIn("noise", values)
 
 
 class CloudFormationHelperTests(unittest.TestCase):

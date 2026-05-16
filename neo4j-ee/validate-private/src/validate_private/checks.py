@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import TYPE_CHECKING
 
@@ -170,6 +171,29 @@ def check_cluster_roles(config: "StackConfig", reporter: "TestReporter") -> None
 _ASG_LOGICAL_IDS = ("Neo4jNode1ASG", "Neo4jNode2ASG", "Neo4jNode3ASG")
 
 
+def _java_major(version_line: str) -> int | None:
+    """Return the Java major version from a java -version first line."""
+    match = re.search(r'version "([^"]+)"', version_line)
+    if not match:
+        return None
+    version = match.group(1)
+    if version.startswith("1."):
+        parts = version.split(".")
+        return int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+    major = version.split(".", 1)[0]
+    return int(major) if major.isdigit() else None
+
+
+def _parse_key_value_lines(text: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
 def run_server_id_check(config: "StackConfig", reporter: "TestReporter") -> None:
     """Verify each cluster node's server_id binary file decodes to the UUID SHOW SERVERS reports."""
     import boto3
@@ -313,6 +337,144 @@ def run_blocklist_check(config: "StackConfig", reporter: "TestReporter") -> None
         )
 
     log.info("")
+
+
+def run_version_inventory(
+    config: "StackConfig",
+    reporter: "TestReporter",
+    *,
+    expected_neo4j_version: str | None = None,
+    min_java_major: int | None = None,
+) -> None:
+    """Record and optionally assert the deployed Neo4j and Java versions."""
+    import boto3
+
+    from botocore.config import Config as BotocoreConfig
+    from validate_private.aws_helpers import asg_instances, stack_resources
+    from validate_private.runner import run_shell_on_instance
+
+    log.info("")
+    log.info("=== Release version inventory ===")
+
+    start = time.monotonic()
+    try:
+        rows = run_cypher_on_bastion(
+            config,
+            "CALL dbms.components() YIELD name, versions, edition "
+            "RETURN name, versions[0] AS version, edition",
+        )
+        if not rows:
+            reporter.record("Neo4j component version", False, "No rows returned", time.monotonic() - start)
+        else:
+            row = rows[0]
+            version = row.get("version", "unknown")
+            edition = row.get("edition", "unknown")
+            passed = edition == "enterprise"
+            if expected_neo4j_version:
+                passed = passed and version == expected_neo4j_version
+            detail = f"Neo4j Kernel {version} ({edition})"
+            if expected_neo4j_version:
+                detail += f"; expected {expected_neo4j_version}"
+            reporter.record("Neo4j component version", passed, detail, time.monotonic() - start)
+    except Exception as exc:
+        reporter.record("Neo4j component version", False, str(exc), time.monotonic() - start)
+
+    retry_cfg = BotocoreConfig(retries={"mode": "standard"})
+    cfn = boto3.client("cloudformation", region_name=config.region, config=retry_cfg)
+    asg = boto3.client("autoscaling", region_name=config.region, config=retry_cfg)
+    ssm = boto3.client("ssm", region_name=config.region, config=retry_cfg)
+
+    start = time.monotonic()
+    try:
+        resources = stack_resources(cfn, config.stack_name)
+    except Exception as exc:
+        reporter.record("Version inventory: discover instances", False, str(exc), time.monotonic() - start)
+        return
+
+    instance_ids: list[str] = []
+    for logical in _ASG_LOGICAL_IDS:
+        asg_name = resources.get(logical)
+        if asg_name:
+            instance_ids.extend(asg_instances(asg, asg_name))
+
+    if not instance_ids:
+        reporter.record(
+            "Version inventory: discover instances",
+            False,
+            f"No running instances found for ASGs {_ASG_LOGICAL_IDS} in stack {config.stack_name}",
+            time.monotonic() - start,
+        )
+        return
+
+    reporter.record(
+        "Version inventory: discover instances",
+        True,
+        f"Found {len(instance_ids)} instance(s): {', '.join(instance_ids)}",
+        time.monotonic() - start,
+    )
+
+    inventory_cmd = "\n".join([
+        "printf 'neo4j_rpm_version=%s\\n' \"$(rpm -q --qf '%{VERSION}' neo4j-enterprise 2>/dev/null || true)\"",
+        "printf 'neo4j_rpm_release=%s\\n' \"$(rpm -q --qf '%{RELEASE}' neo4j-enterprise 2>/dev/null || true)\"",
+        "printf 'java_version=%s\\n' \"$(java -version 2>&1 | head -n 1)\"",
+        "printf 'cypher_default=%s\\n' \"$(awk -F= '/^db.query.default_language=/ {sub(/^[^=]*=/, \"\"); print; exit}' /etc/neo4j/neo4j.conf)\"",
+    ])
+
+    for iid in instance_ids:
+        start = time.monotonic()
+        ok, stdout, stderr = run_shell_on_instance(ssm, iid, inventory_cmd)
+        if not ok:
+            reporter.record(
+                f"Version inventory ({iid})",
+                False,
+                f"SSM command failed: {stderr.strip() or 'unknown error'}",
+                time.monotonic() - start,
+            )
+            continue
+
+        values = _parse_key_value_lines(stdout)
+        rpm_version = values.get("neo4j_rpm_version", "")
+        java_line = values.get("java_version", "")
+        cypher_default = values.get("cypher_default", "")
+
+        issues = []
+        if not rpm_version:
+            issues.append("neo4j-enterprise RPM version unavailable")
+        if expected_neo4j_version and rpm_version != expected_neo4j_version:
+            issues.append(f"rpm version {rpm_version!r} != expected {expected_neo4j_version!r}")
+        java_major = _java_major(java_line)
+        if java_major is None:
+            issues.append(f"could not parse Java major from {java_line!r}")
+        elif min_java_major is not None and java_major < min_java_major:
+            issues.append(f"Java major {java_major} < required {min_java_major}")
+
+        detail = (
+            f"rpm={rpm_version}-{values.get('neo4j_rpm_release', '')}; "
+            f"java={java_line or 'unknown'}; "
+            f"db.query.default_language={cypher_default or 'unset'}"
+        )
+        if issues:
+            detail = "; ".join(issues) + f"; {detail}"
+        reporter.record(f"Version inventory ({iid})", not issues, detail, time.monotonic() - start)
+
+    log.info("")
+
+
+def run_release_gate(
+    config: "StackConfig",
+    reporter: "TestReporter",
+    *,
+    expected_neo4j_version: str | None = None,
+    min_java_major: int | None = None,
+) -> None:
+    """Run the deploy-time release checks for a Private EE stack."""
+    run_checks(config, reporter)
+    run_version_inventory(
+        config,
+        reporter,
+        expected_neo4j_version=expected_neo4j_version,
+        min_java_major=min_java_major,
+    )
 
 
 def run_checks(config: "StackConfig", reporter: "TestReporter") -> None:

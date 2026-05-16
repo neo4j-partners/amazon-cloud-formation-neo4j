@@ -653,95 +653,42 @@ Resources:
 
   Neo4jLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
-    Properties:
-      LaunchTemplateData:
-        ImageId: !Ref ImageId
-        InstanceType:
-          Ref: InstanceType
-        SecurityGroupIds:
-          - Ref: Neo4jExternalSecurityGroup
-          - Ref: Neo4jInternalSecurityGroup
-        EbsOptimized: true
-        IamInstanceProfile:
-          Arn: !GetAtt Neo4jInstanceProfile.Arn
-        BlockDeviceMappings:
-          # Root volume: OS + Neo4j binaries + plugins + logs + metrics.
-          # Neo4j data lives on a separate per-node EBS volume attached at boot.
-          - DeviceName: /dev/xvda
-            Ebs:
-              VolumeSize: 20
-              VolumeType: gp3
-              Encrypted: true
-              DeleteOnTermination: true
-        MetadataOptions:
-          HttpTokens: required
-          HttpEndpoint: enabled
-        UserData:
-          Fn::Base64:
-            !Join
-            - ''
-            - - "#!/bin/bash\n"
-              - "set -euo pipefail\n"
-              - "echo Running startup script...\n"
-              - "nodeCount="
-              - Ref: NumberOfServers
-              - "\n"
-              - "loadBalancerDNSName="
-              - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
-              - "\n"
-              - "stackName="
-              - Ref: AWS::StackName
-              - "\n"
-              - "region="
-              - Ref: AWS::Region
-              - "\n"
-              - "installGDS="
-              - Ref: InstallGDS
-              - "\n"
-              - "installBloom="
-              - Ref: InstallBloom
-              - "\n"
-              - "bloomLicenseSecretArn="
-              - Ref: BloomLicenseSecretArn
-              - "\n"
-              - "gdsLicenseSecretArn="
-              - Ref: GdsLicenseSecretArn
-              - "\n"
-              - "boltCertArn="
-              - Ref: BoltCertificateSecretArn
-              - "\n"
-              - "boltAdvertisedDNS="
-              - Ref: BoltAdvertisedDNS
-              - "\n"
-              - |
-                export IS_FIRST_BOOT=false
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            /opt/neo4j/bin/neo4j-bootstrap.sh:
+              mode: '000700'
+              owner: root
+              group: root
+              content: |
+                #!/bin/bash
+                set -euo pipefail
 
-                _token=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-                _instance_id=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169.254/latest/meta-data/instance-id)
-                _az=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169.254/latest/meta-data/placement/availability-zone)
-
-                # ERR traps do not run for explicit `exit 1`, so fail() signals CloudFormation
-                # before exiting to avoid waiting for the ASG signal timeout.
+                # Template-owned bootstrap. Delivered to /opt/neo4j/bin/neo4j-bootstrap.sh by
+                # cfn-init from the shared LaunchTemplate's AWS::CloudFormation::Init metadata,
+                # then invoked by UserData. Runtime values arrive as named, exported
+                # environment variables; this script reads no ambient global and takes no
+                # positional arguments. cfn-signal is owned solely by UserData: this fail()
+                # prints and exits non-zero, and the non-zero exit trips UserData's ERR trap.
                 fail() {
                   echo "ERROR: $*" >&2
-                  if [[ -n "${logicalId:-}" ]]; then
-                    cfn-signal --success false --stack "$stackName" --resource "$logicalId" --region "$region" || true
-                  fi
                   exit 1
                 }
 
-                [[ -n "${_instance_id}" && -n "${_az}" ]] || fail "IMDSv2 metadata unavailable."
-                logicalId=$(aws ec2 describe-tags --region "$region" --filters "Name=resource-id,Values=${_instance_id}" "Name=key,Values=aws:cloudformation:logical-id" --query "Tags[0].Value" --output text 2>/dev/null || true)
-                trap 'if [[ -n "${logicalId:-}" ]]; then cfn-signal --success false --stack "$stackName" --resource "$logicalId" --region "$region"; fi' ERR
-                _stack_id=$(aws ec2 describe-tags --region "$region" \
-                  --filters "Name=resource-id,Values=${_instance_id}" "Name=key,Values=aws:cloudformation:stack-id" \
-                  --query "Tags[0].Value" --output text 2>/dev/null || true)
-                [[ -n "${_stack_id}" && "${_stack_id}" != "None" ]] || fail "stack-id tag missing."
+                # Fail closed if any required runtime variable is unset. The value is never
+                # echoed, so the Secrets Manager password cannot leak into the log. Optional
+                # variables (boltAdvertisedDNS, boltCertArn, bloomLicenseSecretArn,
+                # gdsLicenseSecretArn) are intentionally absent: they are legitimately empty
+                # when the corresponding feature is off.
+                for _required in stackName region nodeCount loadBalancerDNSName \
+                  installGDS installBloom password _stack_id _instance_id _az; do
+                  [[ -n "${!_required:-}" ]] || fail "Required environment variable ${_required} is unset."
+                done
 
-                password=$(aws secretsmanager get-secret-value \
-                  --secret-id "neo4j/${stackName}/password" \
-                  --query SecretString --output text \
-                  --region "${region}")
+                initialPassword="${password}"
+                unset password
+                export IS_FIRST_BOOT=false
 
                 set_neo4j_conf() {
                   local key="$1"
@@ -757,6 +704,10 @@ Resources:
                   fi
                 }
                 attach_and_mount_data_volume() {
+                  local region="$1"
+                  local _stack_id="$2"
+                  local _az="$3"
+                  local _instance_id="$4"
                   echo "Attaching data volume..."
                   local data_dir="${NEO4J_DATA_DIR:-/var/lib/neo4j/data}"
                   local fstab_path="${FSTAB_PATH:-/etc/fstab}"
@@ -824,11 +775,12 @@ Resources:
                   local _arn="$1"
                   local _dest="$2"
                   local _label="$3"
+                  local _region="$4"
                   local _dir
                   _dir=$(dirname "$_dest")
                   mkdir -p "$_dir"
                   local _secret
-                  if ! _secret=$(aws secretsmanager get-secret-value --region "${region}" \
+                  if ! _secret=$(aws secretsmanager get-secret-value --region "${_region}" \
                         --secret-id "$_arn" --query SecretString --output text \
                         --cli-connect-timeout 10 --cli-read-timeout 30); then
                     fail "Failed to fetch ${_label} license secret ${_arn} (network, IAM denial, or secret not found in this region)."
@@ -851,10 +803,11 @@ Resources:
                   systemctl enable neo4j
                 }
                 start_neo4j() {
+                  local initialPassword="$1"
                   echo "Starting Neo4j..."
                   service neo4j start
                   if [[ "${IS_FIRST_BOOT}" == "true" ]]; then
-                    neo4j-admin dbms set-initial-password "${password}"
+                    neo4j-admin dbms set-initial-password "${initialPassword}"
                   fi
                 }
                 install_apoc() {
@@ -881,7 +834,7 @@ Resources:
                   chown neo4j:neo4j "${neo4j_home}/plugins/$(basename "$jar")"
                 }
                 apply_base_conf() {
-                  local base="${NEO4J_BASE_CONF:-/var/lib/neo4j/neo4j-base.conf}"
+                  local base="${NEO4J_BASE_CONF:-/opt/neo4j/conf/neo4j-base.conf}"
                   echo "Applying static base configuration..."
                   # `|| [[ -n "${line}" ]]` processes a final line with no trailing newline.
                   while IFS= read -r line || [[ -n "${line}" ]]; do
@@ -1013,6 +966,7 @@ Resources:
                   rm -f "${conf}.bak"
                 }
                 install_cloudwatch_agent() {
+                  local stackName="$1"
                   local config_path="${CW_AGENT_CONFIG:-/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json}"
                   local ctl_path="${CW_AGENT_CTL:-/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl}"
                   echo "Configuring CloudWatch agent..."
@@ -1048,21 +1002,34 @@ Resources:
                 CWCONFIG
                   "${ctl_path}" -a fetch-config -m ec2 -s -c "file:${config_path}"
                 }
-                install_cloudwatch_agent
-                attach_and_mount_data_volume
+                install_cloudwatch_agent "${stackName}"
+                attach_and_mount_data_volume "${region}" "${_stack_id}" "${_az}" "${_instance_id}"
                 install_neo4j_from_yum
                 install_apoc
                 if [[ "${installBloom}" == "true" ]]; then
                   install_plugin Bloom "bloom-plugin-*.jar"
                   [[ -n "${bloomLicenseSecretArn}" ]] || fail "InstallBloom=true requires BloomLicenseSecretArn to be set."
-                  fetch_and_install_license "${bloomLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-bloom.license "Bloom"
+                  fetch_and_install_license "${bloomLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-bloom.license "Bloom" "${region}"
                 fi
                 if [[ "${installGDS}" == "true" ]]; then
                   install_plugin GDS "neo4j-graph-data-science-*.jar"
                   [[ -n "${gdsLicenseSecretArn}" ]] || fail "InstallGDS=true requires GdsLicenseSecretArn to be set."
-                  fetch_and_install_license "${gdsLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-gds.license "GDS"
+                  fetch_and_install_license "${gdsLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-gds.license "GDS" "${region}"
                 fi
-                cat > /var/lib/neo4j/neo4j-base.conf <<'NEO4JBASE'
+                apply_base_conf
+                configure_network_advertised_addresses "${loadBalancerDNSName}" "${boltAdvertisedDNS}"
+                configure_memory_recommendation
+                configure_cluster "${nodeCount}" "${region}" "${_stack_id}"
+                configure_bolt_tls "${boltCertArn}" "${region}"
+                configure_plugin_settings "${installBloom}" "${bloomLicenseSecretArn}" "${installGDS}" "${gdsLicenseSecretArn}"
+                remove_jdwp_default
+                assert_security_invariant
+                start_neo4j "${initialPassword}"
+            /opt/neo4j/conf/neo4j-base.conf:
+              mode: '000644'
+              owner: root
+              group: root
+              content: |
                 server.default_listen_address=0.0.0.0
                 server.bolt.listen_address=0.0.0.0:7687
                 server.http.listen_address=0.0.0.0:7474
@@ -1076,16 +1043,109 @@ Resources:
                 dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*
                 dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*
                 dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*
-                NEO4JBASE
-                apply_base_conf
-                configure_network_advertised_addresses "${loadBalancerDNSName}" "${boltAdvertisedDNS}"
-                configure_memory_recommendation
-                configure_cluster "${nodeCount}" "${region}" "${_stack_id}"
-                configure_bolt_tls "${boltCertArn}" "${region}"
-                configure_plugin_settings "${installBloom}" "${bloomLicenseSecretArn}" "${installGDS}" "${gdsLicenseSecretArn}"
-                remove_jdwp_default
-                assert_security_invariant
-                start_neo4j
+    Properties:
+      LaunchTemplateData:
+        ImageId: !Ref ImageId
+        InstanceType:
+          Ref: InstanceType
+        SecurityGroupIds:
+          - Ref: Neo4jExternalSecurityGroup
+          - Ref: Neo4jInternalSecurityGroup
+        EbsOptimized: true
+        IamInstanceProfile:
+          Arn: !GetAtt Neo4jInstanceProfile.Arn
+        BlockDeviceMappings:
+          # Root volume: OS + Neo4j binaries + plugins + logs + metrics.
+          # Neo4j data lives on a separate per-node EBS volume attached at boot.
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 20
+              VolumeType: gp3
+              Encrypted: true
+              DeleteOnTermination: true
+        MetadataOptions:
+          HttpTokens: required
+          HttpEndpoint: enabled
+        UserData:
+          Fn::Base64:
+            !Join
+            - ''
+            - - "#!/bin/bash\n"
+              - "set -euo pipefail\n"
+              - "echo Running startup script...\n"
+              - "nodeCount="
+              - Ref: NumberOfServers
+              - "\n"
+              - "loadBalancerDNSName="
+              - Fn::GetAtt: [Neo4jNetworkLoadBalancer,DNSName]
+              - "\n"
+              - "stackName="
+              - Ref: AWS::StackName
+              - "\n"
+              - "region="
+              - Ref: AWS::Region
+              - "\n"
+              - "installGDS="
+              - Ref: InstallGDS
+              - "\n"
+              - "installBloom="
+              - Ref: InstallBloom
+              - "\n"
+              - "bloomLicenseSecretArn="
+              - Ref: BloomLicenseSecretArn
+              - "\n"
+              - "gdsLicenseSecretArn="
+              - Ref: GdsLicenseSecretArn
+              - "\n"
+              - "boltCertArn="
+              - Ref: BoltCertificateSecretArn
+              - "\n"
+              - "boltAdvertisedDNS="
+              - Ref: BoltAdvertisedDNS
+              - "\n"
+              - |
+                _token=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+                _instance_id=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169.254/latest/meta-data/instance-id)
+                _az=$(curl -s -H "X-aws-ec2-metadata-token: $_token" http://169.254.169.254/latest/meta-data/placement/availability-zone)
+
+                # ERR traps do not run for explicit `exit 1`, so fail() signals CloudFormation
+                # before exiting to avoid waiting for the ASG signal timeout.
+                fail() {
+                  echo "ERROR: $*" >&2
+                  if [[ -n "${logicalId:-}" ]]; then
+                    cfn-signal --success false --stack "$stackName" --resource "$logicalId" --region "$region" || true
+                  fi
+                  exit 1
+                }
+
+                [[ -n "${_instance_id}" && -n "${_az}" ]] || fail "IMDSv2 metadata unavailable."
+                logicalId=$(aws ec2 describe-tags --region "$region" --filters "Name=resource-id,Values=${_instance_id}" "Name=key,Values=aws:cloudformation:logical-id" --query "Tags[0].Value" --output text 2>/dev/null || true)
+                trap 'if [[ -n "${logicalId:-}" ]]; then cfn-signal --success false --stack "$stackName" --resource "$logicalId" --region "$region"; fi' ERR
+                _stack_id=$(aws ec2 describe-tags --region "$region" \
+                  --filters "Name=resource-id,Values=${_instance_id}" "Name=key,Values=aws:cloudformation:stack-id" \
+                  --query "Tags[0].Value" --output text 2>/dev/null || true)
+                [[ -n "${_stack_id}" && "${_stack_id}" != "None" ]] || fail "stack-id tag missing."
+
+                password=$(aws secretsmanager get-secret-value \
+                  --secret-id "neo4j/${stackName}/password" \
+                  --query SecretString --output text \
+                  --region "${region}")
+
+                # cfn-init writes the template-owned bootstrap and base conf from the shared
+                # LaunchTemplate's AWS::CloudFormation::Init metadata. A non-zero exit trips
+                # the ERR trap and signals failure before reaching cfn-signal --success true,
+                # per NFR-9. The instance role already grants cloudformation:DescribeStack*.
+                cfn-init --stack "$stackName" --resource Neo4jLaunchTemplate --region "$region"
+
+                # Hand every runtime value to the bootstrap as named, exported environment
+                # variables. The Secrets Manager password travels by env, never on argv, so it
+                # is not exposed in the process list or cloud-init logs.
+                export stackName region nodeCount loadBalancerDNSName boltAdvertisedDNS boltCertArn
+                export installGDS installBloom gdsLicenseSecretArn bloomLicenseSecretArn
+                export password _stack_id _instance_id _az
+
+                /opt/neo4j/bin/neo4j-bootstrap.sh
+
                 # cfn-signal shebang (#!/usr/bin/python3 -s) requires cfnbootstrap under python3.9;
                 # switch the default only after signaling so cfn-signal can find its dependencies.
                 cfn-signal --success true --stack "$stackName" --resource "$logicalId" --region "$region"

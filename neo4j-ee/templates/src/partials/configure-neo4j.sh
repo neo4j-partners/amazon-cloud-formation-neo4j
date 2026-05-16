@@ -1,5 +1,5 @@
 apply_base_conf() {
-  local base="${NEO4J_BASE_CONF:-/var/lib/neo4j/neo4j-base.conf}"
+  local base="${NEO4J_BASE_CONF:-/opt/neo4j/conf/neo4j-base.conf}"
   echo "Applying static base configuration..."
   # `|| [[ -n "${line}" ]]` processes a final line with no trailing newline.
   while IFS= read -r line || [[ -n "${line}" ]]; do

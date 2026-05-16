@@ -236,8 +236,7 @@ class ShellPartialTests(unittest.TestCase):
             set -euo pipefail
             source "{PARTIALS / 'install-license.sh'}"
             {self.fail_function()}
-            region=us-east-1
-            fetch_and_install_license arn:test "{dest}" GDS
+            fetch_and_install_license arn:test "{dest}" GDS us-east-1
             """
         )
 
@@ -263,8 +262,7 @@ class ShellPartialTests(unittest.TestCase):
                     set -euo pipefail
                     source "{PARTIALS / 'install-license.sh'}"
                     {self.fail_function()}
-                    region=us-east-1
-                    fetch_and_install_license arn:test "{dest}" Bloom
+                    fetch_and_install_license arn:test "{dest}" Bloom us-east-1
                     """
                 )
 
@@ -603,10 +601,9 @@ class ShellPartialTests(unittest.TestCase):
             f"""
             set -euo pipefail
             source "{PARTIALS / 'install-neo4j.sh'}"
-            password=secret
             IS_FIRST_BOOT=true
             install_neo4j_from_yum
-            start_neo4j
+            start_neo4j secret
             """
         )
 
@@ -622,9 +619,8 @@ class ShellPartialTests(unittest.TestCase):
             f"""
             set -euo pipefail
             source "{PARTIALS / 'install-neo4j.sh'}"
-            password=secret
             IS_FIRST_BOOT=false
-            start_neo4j
+            start_neo4j secret
             """
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -640,8 +636,7 @@ class ShellPartialTests(unittest.TestCase):
             export CW_AGENT_CONFIG="{config}"
             export CW_AGENT_CTL=amazon-cloudwatch-agent-ctl
             source "{PARTIALS / 'configure-cloudwatch.sh'}"
-            stackName=demo
-            install_cloudwatch_agent
+            install_cloudwatch_agent demo
             """
         )
 
@@ -727,12 +722,8 @@ class ShellPartialTests(unittest.TestCase):
             set -euo pipefail
             source "{PARTIALS / 'attach-data-volume.sh'}"
             {self.fail_function()}
-            region=us-east-1
-            _stack_id=stack-arn
-            _az=us-east-1a
-            _instance_id=i-123
             IS_FIRST_BOOT=false
-            attach_and_mount_data_volume
+            attach_and_mount_data_volume us-east-1 stack-arn us-east-1a i-123
             echo "IS_FIRST_BOOT=$IS_FIRST_BOOT" > "{self.tmp / 'first-boot-state'}"
             """,
             env=run_env,
@@ -872,6 +863,17 @@ class ShellPartialTests(unittest.TestCase):
                     "Malformed line in neo4j-base.conf",
                     self.fail_log.read_text(),
                 )
+
+    def test_apply_base_conf_default_path_is_opt_neo4j_conf(self) -> None:
+        # Phase 4: cfn-init stages the base conf at /opt/neo4j/conf, a
+        # cfn-init-owned tree with no collision against the RPM-owned
+        # /var/lib/neo4j (AD-3 staging-path resolution).
+        source = (PARTIALS / "configure-neo4j.sh").read_text()
+        self.assertIn(
+            'local base="${NEO4J_BASE_CONF:-/opt/neo4j/conf/neo4j-base.conf}"',
+            source,
+        )
+        self.assertNotIn("/var/lib/neo4j/neo4j-base.conf", source)
 
     def test_assert_security_invariant_present_absent_empty(self) -> None:
         cases = [
@@ -1028,34 +1030,11 @@ class BuildScriptTests(unittest.TestCase):
                 "demo.sh",
             )
 
-    def test_embed_conf_marker_resolves_to_heredoc(self) -> None:
-        rendered = self.module._inline_partials(
-            "# embed-conf neo4j-base.conf\n",
-            "demo.sh",
-        )
-        self.assertIn(
-            "cat > /var/lib/neo4j/neo4j-base.conf <<'NEO4JBASE'",
-            rendered,
-        )
-        self.assertIn(
-            "internal.dbms.cypher_ip_blocklist=",
-            rendered,
-        )
-        self.assertTrue(rendered.rstrip().endswith("NEO4JBASE"))
-        self.assertNotRegex(rendered, r"#\s*embed-conf")
-
-    def test_embed_conf_raises_build_error_for_missing_conf(self) -> None:
-        with self.assertRaisesRegex(
-            self.module.BuildError,
-            "references missing conf",
-        ):
-            self.module._inline_partials(
-                "# embed-conf does-not-exist.conf\n",
-                "demo.sh",
-            )
-
-    def test_userdata_source_declares_expected_partial_includes(self) -> None:
-        source = (SRC / "userdata.sh").read_text()
+    def test_bootstrap_source_declares_expected_partial_includes(self) -> None:
+        # Phase 4: the orchestration partials moved out of userdata.sh into
+        # the template-owned bootstrap. UserData is now a thin wrapper that
+        # declares no partial includes; the bootstrap declares them all.
+        bootstrap = (SRC / "bootstrap" / "neo4j-bootstrap.sh").read_text()
         for partial in (
             "set-neo4j-conf.sh",
             "attach-data-volume.sh",
@@ -1065,7 +1044,11 @@ class BuildScriptTests(unittest.TestCase):
             "configure-neo4j.sh",
             "configure-cloudwatch.sh",
         ):
-            self.assertIn(f"# include partials/{partial}", source)
+            self.assertIn(f"# include partials/{partial}", bootstrap)
+        self.assertNotRegex(
+            (SRC / "userdata.sh").read_text(),
+            r"#\s*include\s+partials/",
+        )
 
 
 # Every static/security key the base conf owns. Mirrors templates/src/
@@ -1145,6 +1128,35 @@ class RenderedTemplateContractTests(unittest.TestCase):
             "public": module._assemble_public(),
             "existing_vpc": module._assemble_existing_vpc(),
         }
+        cls.docs = (
+            {name: load_cfn(body) for name, body in cls.templates.items()}
+            if yaml is not None
+            else {}
+        )
+
+    @staticmethod
+    def _launch_template(doc: dict) -> dict:
+        return next(
+            r
+            for r in doc["Resources"].values()
+            if r.get("Type") == "AWS::EC2::LaunchTemplate"
+        )
+
+    @classmethod
+    def _init_files(cls, doc: dict) -> dict:
+        lt = cls._launch_template(doc)
+        return lt["Metadata"]["AWS::CloudFormation::Init"]["config"]["files"]
+
+    @classmethod
+    def _userdata_text(cls, doc: dict) -> str:
+        # UserData is Fn::Base64 -> Fn::Join ['', [literals + intrinsics]].
+        # Intrinsics resolve at deploy time; joining the literal parts is
+        # enough to assert presence, ordering, and absence in the wrapper.
+        lt = cls._launch_template(doc)
+        join = lt["Properties"]["LaunchTemplateData"]["UserData"]["Fn::Base64"][
+            "Fn::Join"
+        ]
+        return "".join(p for p in join[1] if isinstance(p, str))
 
     def test_all_templates_include_shared_userdata_contracts(self) -> None:
         for name, template in self.templates.items():
@@ -1199,37 +1211,181 @@ class RenderedTemplateContractTests(unittest.TestCase):
                         f"{name}: {helper} defined {len(definitions)} times",
                     )
 
+    @unittest.skipUnless(yaml is not None, "pyyaml is required")
     def test_base_conf_block_embedded_verbatim_and_blocklist_once(self) -> None:
+        # Phase 4: the base conf is no longer a UserData heredoc. It is a
+        # cfn-init file resource in the LaunchTemplate Metadata, embedded as
+        # a verbatim YAML literal block. Same invariants, new home.
         base_text = (SRC / "neo4j-base.conf").read_text().rstrip("\n")
         base_lines = [
             ln.strip()
             for ln in base_text.splitlines()
             if ln.strip() and not ln.lstrip().startswith("#")
         ]
-        for name, template in self.templates.items():
+        blk = "internal.dbms.cypher_ip_blocklist="
+        for name, doc in self.docs.items():
             with self.subTest(template=name):
-                # The heredoc that writes the base conf at boot, with each
-                # key line present verbatim inside it.
-                self.assertIn(
-                    "cat > /var/lib/neo4j/neo4j-base.conf <<'NEO4JBASE'",
-                    template,
-                )
-                stripped = "\n".join(
-                    ln.strip() for ln in template.splitlines()
-                )
-                start = stripped.index("<<'NEO4JBASE'")
-                end = stripped.index("\nNEO4JBASE", start)
-                block = stripped[start:end]
+                files = self._init_files(doc)
+                entry = files["/opt/neo4j/conf/neo4j-base.conf"]
+                self.assertEqual(entry["mode"], "000644")
+                self.assertEqual(entry["owner"], "root")
+                content = entry["content"]
                 for key_line in base_lines:
-                    self.assertIn(key_line, block)
-                # Blocklist appears exactly once and only inside the block.
-                blk = "internal.dbms.cypher_ip_blocklist="
-                self.assertEqual(template.count(blk), 1, name)
-                self.assertIn(blk, block)
-                # No static base key is written via an inline set_neo4j_conf.
+                    self.assertIn(key_line, content)
+                # Blocklist appears exactly once, inside the metadata block,
+                # and never in the UserData wrapper.
+                self.assertEqual(content.count(blk), 1, name)
+                self.assertNotIn(blk, self._userdata_text(doc))
+                # No static base key is written via an inline set_neo4j_conf
+                # anywhere in the rendered template (NFR-1 at render level).
                 for key_line in base_lines:
                     key = key_line.split("=", 1)[0]
-                    self.assertNotIn(f"set_neo4j_conf {key} ", template)
+                    self.assertNotIn(
+                        f"set_neo4j_conf {key} ", self.templates[name]
+                    )
+
+    @unittest.skipUnless(yaml is not None, "pyyaml is required")
+    def test_cfn_init_metadata_on_launch_template_and_userdata_invokes_it(
+        self,
+    ) -> None:
+        for name, doc in self.docs.items():
+            with self.subTest(template=name):
+                files = self._init_files(doc)
+                boot = files["/opt/neo4j/bin/neo4j-bootstrap.sh"]
+                self.assertEqual(boot["mode"], "000700")
+                self.assertEqual(boot["owner"], "root")
+                self.assertIn("/opt/neo4j/conf/neo4j-base.conf", files)
+                ud = self._userdata_text(doc)
+                self.assertRegex(
+                    ud,
+                    r"cfn-init\s+--stack\s+\"\$stackName\"\s+"
+                    r"--resource\s+Neo4jLaunchTemplate",
+                )
+
+    @unittest.skipUnless(yaml is not None, "pyyaml is required")
+    def test_bootstrap_and_base_conf_delivered_via_metadata_not_userdata(
+        self,
+    ) -> None:
+        orchestration_defs = (
+            "set_neo4j_conf()",
+            "apply_base_conf()",
+            "configure_cluster()",
+            "attach_and_mount_data_volume()",
+            "install_neo4j_from_yum()",
+            "assert_security_invariant()",
+        )
+        for name, doc in self.docs.items():
+            with self.subTest(template=name):
+                boot = self._init_files(doc)[
+                    "/opt/neo4j/bin/neo4j-bootstrap.sh"
+                ]["content"]
+                ud = self._userdata_text(doc)
+                for fn in orchestration_defs:
+                    self.assertIn(fn, boot)
+                    self.assertNotIn(fn, ud)
+                self.assertNotIn("neo4j-base.conf <<", ud)
+                self.assertNotRegex(ud, r"#\s*embed-conf")
+
+    @unittest.skipUnless(yaml is not None, "pyyaml is required")
+    def test_cfn_init_runs_before_bootstrap_before_signal(self) -> None:
+        for name, doc in self.docs.items():
+            with self.subTest(template=name):
+                ud = self._userdata_text(doc)
+                # Anchor on the real commands, not prose mentions in comments.
+                init_pos = ud.index('cfn-init --stack "$stackName"')
+                boot_pos = ud.index("\n/opt/neo4j/bin/neo4j-bootstrap.sh\n")
+                signal_pos = ud.index("cfn-signal --success true --stack")
+                self.assertLess(init_pos, boot_pos)
+                self.assertLess(boot_pos, signal_pos)
+
+    @unittest.skipUnless(yaml is not None, "pyyaml is required")
+    def test_bootstrap_invoked_with_no_args_and_password_by_env(self) -> None:
+        # NFR-5: the bootstrap takes no positional args and the Secrets
+        # Manager password is handed over by exported env var, never argv.
+        # The bootstrap must immediately copy it into a non-exported shell
+        # variable and unset the exported name before any child commands run.
+        for name, doc in self.docs.items():
+            with self.subTest(template=name):
+                ud = self._userdata_text(doc)
+                boot = self._init_files(doc)[
+                    "/opt/neo4j/bin/neo4j-bootstrap.sh"
+                ]["content"]
+                invocation = next(
+                    ln.strip()
+                    for ln in ud.splitlines()
+                    if "/opt/neo4j/bin/neo4j-bootstrap.sh" in ln
+                )
+                self.assertEqual(
+                    invocation, "/opt/neo4j/bin/neo4j-bootstrap.sh"
+                )
+                self.assertRegex(ud, r"export\b[^\n]*\bpassword\b")
+                # No token after the script path on the invocation line.
+                self.assertNotRegex(
+                    ud, r"neo4j-bootstrap\.sh[ \t]+\S"
+                )
+                copy_pos = boot.index('initialPassword="${password}"')
+                unset_pos = boot.index("unset password")
+                first_external_pos = min(
+                    boot.index('install_cloudwatch_agent "${stackName}"'),
+                    boot.index(
+                        'attach_and_mount_data_volume "${region}"'
+                    ),
+                )
+                self.assertLess(copy_pos, unset_pos)
+                self.assertLess(unset_pos, first_external_pos)
+
+    @unittest.skipUnless(yaml is not None, "pyyaml is required")
+    def test_nonzero_cfn_init_or_bootstrap_exit_signals_failure(self) -> None:
+        # NFR-9: set -e plus the ERR trap means a non-zero exit from either
+        # cfn-init or the bootstrap signals failure and never reaches the
+        # success signal. Neither call may swallow its exit with `|| true`.
+        for name, doc in self.docs.items():
+            with self.subTest(template=name):
+                ud = self._userdata_text(doc)
+                self.assertIn("set -euo pipefail", ud)
+                self.assertRegex(
+                    ud,
+                    r"trap '[^']*cfn-signal --success false[^']*' ERR",
+                )
+                for line in ud.splitlines():
+                    s = line.strip()
+                    if s.startswith("cfn-init ") or s == (
+                        "/opt/neo4j/bin/neo4j-bootstrap.sh"
+                    ):
+                        self.assertNotIn("|| true", s)
+
+    @unittest.skipUnless(yaml is not None, "pyyaml is required")
+    def test_rendered_userdata_under_16kb_base64(self) -> None:
+        # NFR-11: the wrapper must stay well under the 16 KB EC2 cap. The
+        # bootstrap and base conf travel through cfn-init metadata, which
+        # does not count against the cap.
+        import base64
+
+        for name, doc in self.docs.items():
+            with self.subTest(template=name):
+                ud = self._userdata_text(doc)
+                size = len(base64.b64encode(ud.encode()))
+                self.assertLess(size, 16384, f"{name} UserData {size}B")
+
+    @staticmethod
+    def _invocation_pos(template: str, fn: str) -> int:
+        # The call site: a line that is the bare function name (with optional
+        # args), not the `fn() {` definition. Indentation-agnostic so it does
+        # not couple to build.py's YAML block-literal indent.
+        matches = [
+            m.start()
+            for m in re.finditer(
+                rf"^[ \t]*{re.escape(fn)}(?:\s.*)?$",
+                template,
+                re.MULTILINE,
+            )
+            if not re.match(
+                rf"^[ \t]*{re.escape(fn)}\(\)", m.group(0)
+            )
+        ]
+        if not matches:
+            raise AssertionError(f"{fn} is never invoked in the template")
+        return matches[-1]
 
     def test_security_invariant_asserted_after_config_before_signal(self) -> None:
         overlay_fns = (
@@ -1243,12 +1399,15 @@ class RenderedTemplateContractTests(unittest.TestCase):
         )
         for name, template in self.templates.items():
             with self.subTest(template=name):
-                # The call site (last occurrence; the first is the def).
-                assert_pos = template.rindex("\n                assert_security_invariant")
+                assert_pos = self._invocation_pos(
+                    template, "assert_security_invariant"
+                )
+                start_pos = self._invocation_pos(template, "start_neo4j")
                 signal_pos = template.index("cfn-signal --success true")
+                self.assertLess(assert_pos, start_pos)
                 self.assertLess(assert_pos, signal_pos)
                 for fn in overlay_fns:
-                    call_pos = template.rindex(f"\n                {fn}")
+                    call_pos = self._invocation_pos(template, fn)
                     self.assertLess(
                         call_pos,
                         assert_pos,
@@ -1257,10 +1416,15 @@ class RenderedTemplateContractTests(unittest.TestCase):
 
     def test_runtime_overlay_functions_called_with_expected_arguments(self) -> None:
         patterns = (
+            r'install_cloudwatch_agent\s+"\$\{stackName\}"',
+            r'attach_and_mount_data_volume\s+"\$\{region\}"\s+"\$\{_stack_id\}"\s+"\$\{_az\}"\s+"\$\{_instance_id\}"',
+            r'fetch_and_install_license\s+"\$\{bloomLicenseSecretArn\}"\s+/var/lib/neo4j/licenses/neo4j-bloom\.license\s+"Bloom"\s+"\$\{region\}"',
+            r'fetch_and_install_license\s+"\$\{gdsLicenseSecretArn\}"\s+/var/lib/neo4j/licenses/neo4j-gds\.license\s+"GDS"\s+"\$\{region\}"',
             r'configure_network_advertised_addresses\s+"\$\{loadBalancerDNSName\}"\s+"\$\{boltAdvertisedDNS\}"',
             r'configure_cluster\s+"\$\{nodeCount\}"\s+"\$\{region\}"\s+"\$\{_stack_id\}"',
             r'configure_bolt_tls\s+"\$\{boltCertArn\}"\s+"\$\{region\}"',
             r'configure_plugin_settings\s+"\$\{installBloom\}"\s+"\$\{bloomLicenseSecretArn\}"\s+"\$\{installGDS\}"\s+"\$\{gdsLicenseSecretArn\}"',
+            r'start_neo4j\s+"\$\{initialPassword\}"',
         )
         for name, template in self.templates.items():
             with self.subTest(template=name):

@@ -30,6 +30,7 @@ echo
 echo "== Shell syntax checks =="
 bash -n \
   neo4j-ee/templates/src/userdata.sh \
+  neo4j-ee/templates/src/bootstrap/neo4j-bootstrap.sh \
   neo4j-ee/templates/src/partials/*.sh \
   neo4j-ee/*.sh \
   neo4j-ee/scripts/*.sh \

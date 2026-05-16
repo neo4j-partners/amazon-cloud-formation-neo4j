@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'neo4j-ee/templates/**'
+      - 'neo4j-ee/tests/**'
+      - 'neo4j-ee/src/**'
 
 jobs:
   validate:
@@ -16,11 +18,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install cfn-lint
-        run: pip install cfn-lint
+      - name: Install cfn-lint and test dependencies
+        run: pip install cfn-lint pyyaml
 
       - name: Verify template output is up to date
         run: python neo4j-ee/templates/build.py --verify
+
+      - name: Run unit tests
+        run: python -m unittest discover -s neo4j-ee/tests
 
       - name: Lint neo4j-private.template.yaml
         run: cfn-lint neo4j-ee/templates/neo4j-private.template.yaml

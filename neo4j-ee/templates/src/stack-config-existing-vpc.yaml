@@ -80,8 +80,8 @@
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/external-sg-id'
       Type: String
-      Value: !GetAtt Neo4jExternalSecurityGroup.GroupId
-      Description: Neo4j external security group ID (Lambda egress rule target for port 7687).
+      Value: !GetAtt Neo4jNLBSecurityGroup.GroupId
+      Description: Neo4j NLB security group ID. In-VPC apps add this as the 7473/7687 egress target and add ingress from their SG.
 
   Neo4jConfigVpcEndpointSgParameter:
     Type: AWS::SSM::Parameter

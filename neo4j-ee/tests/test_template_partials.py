@@ -337,44 +337,6 @@ class ShellPartialTests(unittest.TestCase):
         self.assertEqual(conf.read_text(), "keep=true\n")
         self.assertFalse((self.tmp / "neo4j.conf.bak").exists())
 
-    def test_configure_network_advertised_addresses_sets_three_keys(self) -> None:
-        set_log = self.tmp / "set-conf.log"
-        result = self.run_shell(
-            f"""
-            set -euo pipefail
-            source "{PARTIALS / 'configure-neo4j.sh'}"
-            set_neo4j_conf() {{
-              echo "$1=$2" >> "{set_log}"
-            }}
-            configure_network_advertised_addresses lb.example.com bolt.example.com
-            """
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        calls = set_log.read_text()
-        self.assertIn("server.default_advertised_address=lb.example.com", calls)
-        self.assertIn("server.bolt.advertised_address=bolt.example.com:7687", calls)
-        self.assertIn("server.http.advertised_address=lb.example.com:7474", calls)
-
-    def test_configure_network_advertised_addresses_falls_back_to_lb_for_bolt(
-        self,
-    ) -> None:
-        set_log = self.tmp / "set-conf.log"
-        result = self.run_shell(
-            f"""
-            set -euo pipefail
-            source "{PARTIALS / 'configure-neo4j.sh'}"
-            set_neo4j_conf() {{
-              echo "$1=$2" >> "{set_log}"
-            }}
-            configure_network_advertised_addresses lb.example.com ""
-            """
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(
-            "server.bolt.advertised_address=lb.example.com:7687",
-            set_log.read_text(),
-        )
-
     def test_configure_memory_recommendation_applies_admin_output_safely(self) -> None:
         self.write_stub(
             "neo4j-admin",
@@ -492,77 +454,102 @@ class ShellPartialTests(unittest.TestCase):
         self.assertEqual(result.returncode, 42, result.stderr)
         self.assertIn("Peer discovery failed after 5 minutes.", self.fail_log.read_text())
 
-    def test_configure_bolt_tls_noop_when_arn_empty(self) -> None:
+    def test_configure_tls_plaintext_when_no_advertised_dns(self) -> None:
         set_log = self.tmp / "set-conf.log"
         result = self.run_shell(
             f"""
             set -euo pipefail
-            source "{PARTIALS / 'configure-neo4j.sh'}"
+            source "{PARTIALS / 'configure-tls.sh'}"
             {self.fail_function()}
             set_neo4j_conf() {{ echo "$1=$2" >> "{set_log}"; }}
-            configure_bolt_tls "" us-east-1
+            configure_tls "" lb.example.com
             """
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(set_log.read_text() if set_log.exists() else "", "")
+        calls = set_log.read_text()
+        self.assertIn("server.default_advertised_address=lb.example.com", calls)
+        self.assertIn("server.bolt.advertised_address=lb.example.com:7687", calls)
+        self.assertIn("server.http.enabled=true", calls)
+        self.assertIn("server.http.listen_address=0.0.0.0:7474", calls)
+        self.assertIn("server.http.advertised_address=lb.example.com:7474", calls)
+        self.assertIn("server.https.enabled=false", calls)
+        self.assertNotIn("dbms.ssl.policy", calls)
+        self.assertNotIn("server.bolt.tls_level", calls)
 
-    def test_configure_bolt_tls_installs_secret(self) -> None:
-        self.write_stub("aws", "echo '{\"certificate\":\"CERT\",\"private_key\":\"KEY\"}'\n")
-        self.write_stub("chown", "echo \"chown $*\" >> \"$COMMAND_LOG\"\n")
+    def test_configure_tls_generates_certs_and_sets_keys(self) -> None:
+        self.write_stub("chown", 'echo "chown $*" >> "$COMMAND_LOG"\n')
         self.write_stub(
-            "jq",
+            "openssl",
             """
-            expr="${*: -1}"
-            if [[ "$*" == *"has("* ]]; then
-              exit 0
-            elif [[ "$expr" == ".private_key" ]]; then
-              echo "KEY"
-            elif [[ "$expr" == ".certificate" ]]; then
-              echo "CERT"
-            fi
+            out="" key=""
+            while [[ $# -gt 0 ]]; do
+              case "$1" in
+                -keyout) key="$2"; shift 2;;
+                -out) out="$2"; shift 2;;
+                *) shift;;
+              esac
+            done
+            : > "$key"
+            : > "$out"
             """,
         )
         set_log = self.tmp / "set-conf.log"
-        cert_dir = self.tmp / "certificates" / "bolt"
-
+        certs = self.tmp / "certs"
         result = self.run_shell(
             f"""
             set -euo pipefail
-            export NEO4J_CERT_DIR="{cert_dir}"
-            source "{PARTIALS / 'configure-neo4j.sh'}"
+            export NEO4J_CERTS_DIR="{certs}"
+            source "{PARTIALS / 'configure-tls.sh'}"
             {self.fail_function()}
-            set_neo4j_conf() {{
-              echo "$1=$2" >> "{set_log}"
-            }}
-            configure_bolt_tls arn:bolt us-east-1
+            set_neo4j_conf() {{ echo "$1=$2" >> "{set_log}"; }}
+            configure_tls neo4j.example.com lb.example.com
             """
         )
-
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((cert_dir / "private.key").read_text(), "KEY\n")
-        self.assertEqual((cert_dir / "public.crt").read_text(), "CERT\n")
+        for proto in ("bolt", "https"):
+            self.assertTrue((certs / proto / "private.key").exists())
+            self.assertTrue((certs / proto / "public.crt").exists())
         calls = set_log.read_text()
+        self.assertIn("server.default_advertised_address=neo4j.example.com", calls)
+        self.assertIn("server.bolt.advertised_address=neo4j.example.com:7687", calls)
+        self.assertIn("server.http.enabled=false", calls)
+        self.assertIn("server.https.enabled=true", calls)
+        self.assertIn("server.https.listen_address=0.0.0.0:7473", calls)
+        self.assertIn("server.https.advertised_address=neo4j.example.com:7473", calls)
         self.assertIn("dbms.ssl.policy.bolt.enabled=true", calls)
-        self.assertIn(f"dbms.ssl.policy.bolt.base_directory={cert_dir}", calls)
+        self.assertIn(f"dbms.ssl.policy.bolt.base_directory={certs}/bolt", calls)
+        self.assertIn(f"dbms.ssl.policy.https.base_directory={certs}/https", calls)
         self.assertIn("server.bolt.tls_level=REQUIRED", calls)
 
-    def test_configure_bolt_tls_rejects_invalid_secret(self) -> None:
-        self.write_stub("aws", "echo '{\"certificate\":\"CERT\"}'\n")
-        self.write_stub("jq", "exit 1\n")
-
+    def test_configure_tls_reuses_existing_certs(self) -> None:
+        self.write_stub("chown", 'echo "chown $*" >> "$COMMAND_LOG"\n')
+        self.write_stub("openssl", 'echo "openssl MUST NOT RUN" >&2; exit 9\n')
+        certs = self.tmp / "certs"
+        for proto in ("bolt", "https"):
+            (certs / proto).mkdir(parents=True)
+            (certs / proto / "private.key").write_text("EXISTING")
+            (certs / proto / "public.crt").write_text("EXISTING")
         result = self.run_shell(
             f"""
             set -euo pipefail
-            export NEO4J_CERT_DIR="{self.tmp / 'certificates' / 'bolt'}"
-            source "{PARTIALS / 'configure-neo4j.sh'}"
+            export NEO4J_CERTS_DIR="{certs}"
+            source "{PARTIALS / 'configure-tls.sh'}"
             {self.fail_function()}
             set_neo4j_conf() {{ :; }}
-            configure_bolt_tls arn:bolt us-east-1
+            configure_tls neo4j.example.com lb.example.com
             """
         )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((certs / "bolt" / "private.key").read_text(), "EXISTING")
 
-        self.assertEqual(result.returncode, 42, result.stderr)
-        self.assertIn("must be JSON with fields", self.fail_log.read_text())
+    def test_configure_tls_does_not_write_any_base_conf_key(self) -> None:
+        source = (PARTIALS / "configure-tls.sh").read_text()
+        for key in _EXPECTED_BASE_CONF:
+            self.assertNotRegex(
+                source,
+                rf"^\s*set_neo4j_conf\s+{re.escape(key)}\b",
+                f"configure-tls.sh sets base-conf key {key} inline",
+            )
 
     def test_install_plugins_success_and_missing_jar_failures(self) -> None:
         self.write_stub("chown", "echo \"chown $*\" >> \"$COMMAND_LOG\"\n")
@@ -964,34 +951,6 @@ class ShellPartialTests(unittest.TestCase):
         self.assertIn("existing=a|b&c/d", lines)
         self.assertIn("fresh=x|y&z/w", lines)
 
-    def test_configure_bolt_tls_secret_failure_modes(self) -> None:
-        for mode, aws_body, jq_body, expect_code in [
-            ("empty", "exit 0", "exit 1\n", 42),
-            ("aws_error", "exit 9", "exit 0\n", None),
-        ]:
-            with self.subTest(mode=mode):
-                self.write_stub("aws", aws_body)
-                self.write_stub("jq", jq_body)
-                self.fail_log.write_text("")
-                cert_dir = self.tmp / mode / "bolt"
-
-                result = self.run_shell(
-                    f"""
-                    set -euo pipefail
-                    export NEO4J_CERT_DIR="{cert_dir}"
-                    source "{PARTIALS / 'configure-neo4j.sh'}"
-                    {self.fail_function()}
-                    set_neo4j_conf() {{ :; }}
-                    configure_bolt_tls arn:bolt us-east-1
-                    """
-                )
-
-                self.assertNotEqual(result.returncode, 0, result.stderr)
-                if expect_code is not None:
-                    self.assertEqual(result.returncode, expect_code, result.stderr)
-                    self.assertIn("must be JSON with fields", self.fail_log.read_text())
-                self.assertFalse((cert_dir / "private.key").exists())
-
     def test_configure_cluster_fails_on_partial_peer_discovery(self) -> None:
         # Only one member is ever discovered for a 3-node cluster. The script
         # must fail rather than configure dbms.cluster.endpoints with an
@@ -1081,7 +1040,6 @@ class BuildScriptTests(unittest.TestCase):
 _EXPECTED_BASE_CONF = {
     "server.default_listen_address": "0.0.0.0",
     "server.bolt.listen_address": "0.0.0.0:7687",
-    "server.http.listen_address": "0.0.0.0:7474",
     "dbms.routing.default_router": "SERVER",
     "server.metrics.enabled": "true",
     "server.metrics.jmx.enabled": "true",

@@ -163,15 +163,23 @@
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       Type: network
 
-  Neo4jHTTPListener:
+  Neo4jBrowserListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
-        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
+        - TargetGroupArn: !Ref Neo4jBrowserTargetGroup
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
-      Port: 7474
-      Protocol: TCP
+      Port: !If [UsePublicTLS, 7473, 7474]
+      Protocol: !If [UsePublicTLS, TLS, TCP]
+      Certificates: !If
+        - UsePublicTLS
+        - - CertificateArn: !Ref CertificateArn
+        - !Ref 'AWS::NoValue'
+      SslPolicy: !If
+        - UsePublicTLS
+        - ELBSecurityPolicy-TLS13-1-2-2021-06
+        - !Ref 'AWS::NoValue'
 
   Neo4jBoltListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -181,23 +189,36 @@
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
       Port: 7687
-      Protocol: TCP
+      Protocol: !If [UsePublicTLS, TLS, TCP]
+      Certificates: !If
+        - UsePublicTLS
+        - - CertificateArn: !Ref CertificateArn
+        - !Ref 'AWS::NoValue'
+      SslPolicy: !If
+        - UsePublicTLS
+        - ELBSecurityPolicy-TLS13-1-2-2021-06
+        - !Ref 'AWS::NoValue'
 
-  Neo4jHTTPTargetGroup:
+  Neo4jBrowserTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: !Join
         - '-'
         - - !Ref 'AWS::StackName'
-          - 'http'
+          - !If [UsePublicTLS, 'https', 'http']
           - 'tg'
-      Port: 7474
-      Protocol: TCP
-      HealthCheckProtocol: HTTP
-      HealthCheckPath: /
+      Port: !If [UsePublicTLS, 7473, 7474]
+      Protocol: !If [UsePublicTLS, TLS, TCP]
+      HealthCheckProtocol: !If [UsePublicTLS, TCP, HTTP]
+      HealthCheckPath: !If
+        - UsePublicTLS
+        - !Ref 'AWS::NoValue'
+        - /
       HealthCheckIntervalSeconds: 10
-      Matcher:
-        HttpCode: '200'
+      Matcher: !If
+        - UsePublicTLS
+        - !Ref 'AWS::NoValue'
+        - HttpCode: '200'
       TargetGroupAttributes:
         - Key: preserve_client_ip.enabled
           Value: "false"
@@ -219,7 +240,8 @@
           - 'bolt'
           - 'tg'
       Port: 7687
-      Protocol: TCP
+      Protocol: !If [UsePublicTLS, TLS, TCP]
+      HealthCheckProtocol: TCP
       HealthCheckIntervalSeconds: 10
       TargetGroupAttributes:
         - Key: preserve_client_ip.enabled

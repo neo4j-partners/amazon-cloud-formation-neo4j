@@ -25,12 +25,21 @@ Metadata:
           - InstallGDS
           - GdsLicenseSecretArn
       - Label:
+          default: "TLS"
+        Parameters:
+          - CertificateArn
+          - AdvertisedDNS
+      - Label:
+          default: "Private DNS"
+        Parameters:
+          - CreatePrivateDns
+          - PrivateDnsZoneName
+          - PrivateDnsHostedZoneId
+      - Label:
           default: "Security & Monitoring"
         Parameters:
           - AllowedCIDR
           - AlertEmail
-          - BoltCertificateSecretArn
-          - BoltAdvertisedDNS
     ParameterLabels:
       ImageId:
         default: Image ID
@@ -56,10 +65,16 @@ Metadata:
         default: Alert Email Address
       AllowedCIDR:
         default: Allowed CIDR
-      BoltCertificateSecretArn:
-        default: Bolt TLS Certificate Secret ARN
-      BoltAdvertisedDNS:
-        default: Bolt Advertised DNS Name
+      CertificateArn:
+        default: ACM Certificate ARN
+      AdvertisedDNS:
+        default: Advertised DNS Name
+      CreatePrivateDns:
+        default: Create Private DNS
+      PrivateDnsZoneName:
+        default: Private DNS Zone Name
+      PrivateDnsHostedZoneId:
+        default: Private DNS Hosted Zone ID
 
 Parameters:
   ImageId:
@@ -176,32 +191,63 @@ Parameters:
     Type: String
     Default: ''
 
-  BoltCertificateSecretArn:
+  CertificateArn:
+    Description: >-
+      ARN of an ACM certificate for the NLB TLS listeners on ports 7473 (HTTPS)
+      and 7687 (Bolt). The certificate's SAN must match AdvertisedDNS. Both
+      ACM-issued and ACM Private CA certificates are accepted. Required for
+      Private and ExistingVpc deployments; required for Public only when TLS is
+      enabled.
     Type: String
     Default: ''
+    AllowedPattern: (^$)|(^arn:aws[a-zA-Z-]*:acm:[a-z0-9-]+:[0-9]+:certificate/.+$)
+    ConstraintDescription: Must be blank or a valid ACM certificate ARN.
+  AdvertisedDNS:
     Description: >-
-      ARN of a Secrets Manager secret whose SecretString is JSON with
-      "certificate" (PEM) and "private_key" (PEM) fields. When set, Neo4j
-      enables TLS on Bolt port 7687 (server.bolt.tls_level=REQUIRED). Leave
-      blank to run Bolt without TLS (suitable for dev/test inside a private VPC).
-      ACM Private CA-issued certs are accepted here — no separate parameter needed.
-  BoltAdvertisedDNS:
+      Public DNS name that resolves to this NLB. Used as the certificate SAN
+      and as the host placed in server.bolt.advertised_address and
+      server.http.advertised_address. Map this name to the NLB DNS via Route 53
+      or operator-managed DNS before clients connect. Required for Private and
+      ExistingVpc deployments; required for Public only when TLS is enabled.
     Type: String
     Default: ''
-    Description: >-
-      Optional. DNS name placed in server.bolt.advertised_address and used as
-      the cert SAN. Provide a stable alias (e.g. a Route53 CNAME → NLB) when
-      deploying in production so certs do not pin the NLB DNS. When blank, the
-      NLB DNS is used (test-rig default; two-phase deploy required).
+    AllowedPattern: (^$)|(^[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$)
+    ConstraintDescription: Must be blank or a valid DNS name.
 
   AllowedCIDR:
     Description: >-
-      CIDR allowed to reach Neo4j ports 7474 and 7687; defaults to the VPC
-      CIDR this template creates.
+      CIDR allowed to reach Neo4j ports 7473 (HTTPS) and 7687 (Bolt); defaults
+      to the VPC CIDR this template creates.
     Type: String
     Default: 10.0.0.0/16
     AllowedPattern: ^(?!0\.0\.0\.0\/0)(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR range. 0.0.0.0/0 is not accepted.
+  CreatePrivateDns:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+    Description: >-
+      Create or manage a Route 53 private DNS record that maps AdvertisedDNS to
+      the internal NLB. Use for repeatable private test stacks or when you want
+      this stack to own the in-VPC service DNS record.
+  PrivateDnsZoneName:
+    Type: String
+    Default: ''
+    Description: >-
+      Private hosted zone name to create when CreatePrivateDns is true and
+      PrivateDnsHostedZoneId is blank, for example test.local or
+      internal.example.com. AdvertisedDNS must be inside this zone.
+  PrivateDnsHostedZoneId:
+    Type: String
+    Default: ''
+    AllowedPattern: ^$|^Z[A-Z0-9]+$
+    ConstraintDescription: Must be blank or a Route 53 hosted zone ID beginning with Z.
+    Description: >-
+      Existing Route 53 private hosted zone ID to receive the AdvertisedDNS
+      alias record. Leave blank to let this stack create a private hosted zone
+      named PrivateDnsZoneName.
 
 Rules:
   BloomLicenseRequiredWhenInstalled:
@@ -223,6 +269,22 @@ Rules:
           This Rule fires during CloudFormation stack create and update
           parameter validation.
 
+  CertificateArnRequired:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref CertificateArn, '']]
+        AssertDescription: >-
+          CertificateArn is required for Private and ExistingVpc deployments;
+          TLS is mandatory for these topologies. This Rule fires during
+          CloudFormation stack create and update parameter validation.
+  AdvertisedDnsRequired:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref AdvertisedDNS, '']]
+        AssertDescription: >-
+          AdvertisedDNS is required for Private and ExistingVpc deployments; it
+          is the certificate SAN and the advertised Bolt/HTTPS host. This Rule
+          fires during CloudFormation stack create and update parameter
+          validation.
+
 Conditions:
   CreateCluster: !Not
     - !Equals
@@ -232,9 +294,13 @@ Conditions:
     - !Equals
       - !Ref AlertEmail
       - ''
-  BoltTLSEnabled: !Not [!Equals [!Ref BoltCertificateSecretArn, '']]
   HasDataVolumeCmk: !Not [!Equals [!Ref DataVolumeKmsKeyId, '']]
   HasNode1Snapshot: !Not [!Equals [!Ref Node1SnapshotId, '']]
+  CreatePrivateDns: !Equals [!Ref CreatePrivateDns, 'true']
+  UseExistingPrivateDnsHostedZone: !Not [!Equals [!Ref PrivateDnsHostedZoneId, '']]
+  CreatePrivateDnsHostedZone: !And
+    - !Equals [!Ref CreatePrivateDns, 'true']
+    - !Equals [!Ref PrivateDnsHostedZoneId, '']
   BloomEnabledAndLicensed: !And
     - !Equals [!Ref InstallBloom, 'true']
     - !Not [!Equals [!Ref BloomLicenseSecretArn, '']]
@@ -303,13 +369,6 @@ Resources:
                   - logs:DescribeLogStreams
                 Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/neo4j/${AWS::StackName}/application:*'
               - !If
-                - BoltTLSEnabled
-                - Effect: Allow
-                  Action:
-                    - secretsmanager:GetSecretValue
-                  Resource: !Ref BoltCertificateSecretArn
-                - !Ref AWS::NoValue
-              - !If
                 - BloomEnabledAndLicensed
                 - Effect: Allow
                   Action:
@@ -356,13 +415,6 @@ Resources:
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
                 Resource: !Sub 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/neo4j-ee/${AWS::StackName}/*'
-              - !If
-                - BoltTLSEnabled
-                - Effect: Allow
-                  Action:
-                    - secretsmanager:GetSecretValue
-                  Resource: !Ref BoltCertificateSecretArn
-                - !Ref AWS::NoValue
 
   Neo4jBastionInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -370,20 +422,54 @@ Resources:
       Roles:
         - !Ref Neo4jBastionRole
 
-  Neo4jExternalSecurityGroup:
+  Neo4jNLBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Enable Neo4j External Ports
+      GroupDescription: Allow client traffic to Neo4j NLB on ports 7473 and 7687
       VpcId: !Ref Neo4jVPC
+      SecurityGroupEgress: []
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 7474
-          ToPort: 7474
+          FromPort: 7473
+          ToPort: 7473
           CidrIp: !Ref AllowedCIDR
         - IpProtocol: tcp
           FromPort: 7687
           ToPort: 7687
           CidrIp: !Ref AllowedCIDR
+
+  Neo4jExternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Neo4j traffic from NLB to instances on ports 7473 and 7687
+      VpcId: !Ref Neo4jVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 7473
+          ToPort: 7473
+          SourceSecurityGroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+        - IpProtocol: tcp
+          FromPort: 7687
+          ToPort: 7687
+          SourceSecurityGroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+
+  Neo4jNLBEgressToBrowser:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7473
+      ToPort: 7473
+      DestinationSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
+
+  Neo4jNLBEgressToBolt:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !GetAtt Neo4jNLBSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 7687
+      ToPort: 7687
+      DestinationSecurityGroupId: !GetAtt Neo4jExternalSecurityGroup.GroupId
 
   Neo4jInternalSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -460,7 +546,7 @@ Resources:
   # for operator port-forwarding to the internal NLB. It is deliberately NOT
   # registered in any NLB target group — that topology makes NAT-loopback
   # (hairpin) failures impossible for flows originating from the bastion, so
-  # operator tunnels to :7474/:7687 via the NLB always route to a different
+  # operator tunnels to :7473/:7687 via the NLB always route to a different
   # instance than the flow source. See README "Private mode networking" and
   # neo4j-ee/worklog/FIX_SSM_V7.md §9 for the full analysis.
   # ---------------------------------------------------------------------------
@@ -492,6 +578,7 @@ Resources:
     Properties:
       GroupDescription: Allow HTTPS from Neo4j instances and operator bastion to VPC interface endpoints
       VpcId: !Ref Neo4jVPC
+      SecurityGroupEgress: []
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
@@ -626,7 +713,7 @@ Resources:
       VPCZoneIdentifier:
         - !Ref Neo4jPrivateSubnet1
       TargetGroupARNs:
-        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       HealthCheckType: ELB
       HealthCheckGracePeriod: 1200
@@ -666,7 +753,7 @@ Resources:
       VPCZoneIdentifier:
         - !Ref Neo4jPrivateSubnet2
       TargetGroupARNs:
-        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       HealthCheckType: ELB
       HealthCheckGracePeriod: 1200
@@ -706,7 +793,7 @@ Resources:
       VPCZoneIdentifier:
         - !Ref Neo4jPrivateSubnet3
       TargetGroupARNs:
-        - Ref: Neo4jHTTPTargetGroup
+        - Ref: Neo4jBrowserTargetGroup
         - Ref: Neo4jBoltTargetGroup
       HealthCheckType: ELB
       HealthCheckGracePeriod: 1200
@@ -754,9 +841,9 @@ Resources:
 
                 # Fail closed if any required runtime variable is unset. The value is never
                 # echoed, so the Secrets Manager password cannot leak into the log. Optional
-                # variables (boltAdvertisedDNS, boltCertArn, bloomLicenseSecretArn,
-                # gdsLicenseSecretArn) are intentionally absent: they are legitimately empty
-                # when the corresponding feature is off.
+                # variables (advertisedDNS, bloomLicenseSecretArn, gdsLicenseSecretArn) are
+                # intentionally absent: they are legitimately empty when the corresponding
+                # feature is off (advertisedDNS is empty only for Public without TLS).
                 for _required in stackName region nodeCount loadBalancerDNSName \
                   installGDS installBloom password _stack_id _instance_id _az; do
                   [[ -n "${!_required:-}" ]] || fail "Required environment variable ${_required} is unset."
@@ -934,15 +1021,6 @@ Resources:
                   fi
                 }
 
-                configure_network_advertised_addresses() {
-                  local loadBalancerDNSName="$1"
-                  local boltAdvertisedDNS="$2"
-                  echo "Configuring advertised addresses in neo4j.conf..."
-                  set_neo4j_conf server.default_advertised_address "${loadBalancerDNSName}"
-                  set_neo4j_conf server.bolt.advertised_address "${boltAdvertisedDNS:-${loadBalancerDNSName}}:7687"
-                  set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
-                }
-
                 configure_memory_recommendation() {
                   local recommendation line
                   local applied=false
@@ -1000,35 +1078,6 @@ Resources:
                   set_neo4j_conf dbms.cluster.endpoints "${coreMembers}"
                 }
 
-                configure_bolt_tls() {
-                  local boltCertArn="$1"
-                  local region="$2"
-                  [[ -n "${boltCertArn}" ]] || return 0
-                  local neo4j_home="${NEO4J_HOME:-/var/lib/neo4j}"
-                  local cert_dir="${NEO4J_CERT_DIR:-${neo4j_home}/certificates/bolt}"
-                  mkdir -p "${cert_dir}"
-                  local _secret_json
-                  _secret_json=$(aws secretsmanager get-secret-value --region "${region}" \
-                    --secret-id "${boltCertArn}" --query SecretString --output text)
-                  if ! echo "${_secret_json}" | jq -e 'has("certificate") and has("private_key")' >/dev/null; then
-                    fail "Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM)."
-                  fi
-                  umask 077
-                  echo "${_secret_json}" | jq -r '.private_key' > "${cert_dir}/private.key"
-                  echo "${_secret_json}" | jq -r '.certificate' > "${cert_dir}/public.crt"
-                  umask 022
-                  unset _secret_json
-                  chown -R neo4j:neo4j "$(dirname "${cert_dir}")"
-                  chmod 600 "${cert_dir}/private.key"
-                  chmod 644 "${cert_dir}/public.crt"
-                  set_neo4j_conf dbms.ssl.policy.bolt.enabled true
-                  set_neo4j_conf dbms.ssl.policy.bolt.base_directory "${cert_dir}"
-                  set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key
-                  set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt
-                  set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE
-                  set_neo4j_conf server.bolt.tls_level REQUIRED
-                }
-
                 configure_plugin_settings() {
                   local installBloom="$1"
                   local bloomLicenseSecretArn="$2"
@@ -1050,6 +1099,66 @@ Resources:
                   local conf="${NEO4J_CONF:-/etc/neo4j/neo4j.conf}"
                   sed -i.bak '/jdwp/d' "${conf}"
                   rm -f "${conf}.bak"
+                }
+                configure_tls() {
+                  local advertisedDNS="$1"
+                  local loadBalancerDNSName="$2"
+                  local certsBase="${NEO4J_CERTS_DIR:-/var/lib/neo4j/certificates}"
+
+                  # Opt-out path (Public without TLS only — Private/ExistingVpc always pass a
+                  # non-empty AdvertisedDNS). Browser stays HTTP/7474, Bolt stays plaintext,
+                  # both advertised via the NLB DNS so in-VPC clients can still connect.
+                  if [[ -z "${advertisedDNS}" ]]; then
+                    echo "TLS disabled (no AdvertisedDNS); leaving Browser and Bolt plaintext."
+                    set_neo4j_conf server.default_advertised_address "${loadBalancerDNSName}"
+                    set_neo4j_conf server.bolt.advertised_address "${loadBalancerDNSName}:7687"
+                    set_neo4j_conf server.http.enabled true
+                    set_neo4j_conf server.http.listen_address 0.0.0.0:7474
+                    set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
+                    set_neo4j_conf server.https.enabled false
+                    return 0
+                  fi
+
+                  echo "Configuring TLS for Bolt and HTTPS..."
+                  command -v openssl >/dev/null 2>&1 || dnf install -y openssl
+                  local _proto _dir _key _crt
+                  for _proto in bolt https; do
+                    _dir="${certsBase}/${_proto}"
+                    _key="${_dir}/private.key"
+                    _crt="${_dir}/public.crt"
+                    if [[ -f "${_key}" && -f "${_crt}" ]]; then
+                      echo "  Reusing existing self-signed cert in ${_dir}"
+                    else
+                      echo "  Generating self-signed cert in ${_dir}..."
+                      mkdir -p "${_dir}"
+                      umask 077
+                      openssl req -x509 -newkey rsa:2048 -nodes \
+                        -keyout "${_key}" -out "${_crt}" -days 3650 \
+                        -subj "/CN=neo4j-${_proto}" >/dev/null 2>&1
+                      umask 022
+                    fi
+                    chown -R neo4j:neo4j "${_dir}"
+                    chmod 600 "${_key}"
+                    chmod 644 "${_crt}"
+                  done
+
+                  set_neo4j_conf server.default_advertised_address "${advertisedDNS}"
+                  set_neo4j_conf server.bolt.advertised_address "${advertisedDNS}:7687"
+                  set_neo4j_conf server.http.enabled false
+                  set_neo4j_conf server.https.enabled true
+                  set_neo4j_conf server.https.listen_address 0.0.0.0:7473
+                  set_neo4j_conf server.https.advertised_address "${advertisedDNS}:7473"
+                  set_neo4j_conf dbms.ssl.policy.bolt.enabled true
+                  set_neo4j_conf dbms.ssl.policy.bolt.base_directory "${certsBase}/bolt"
+                  set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key
+                  set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt
+                  set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE
+                  set_neo4j_conf server.bolt.tls_level REQUIRED
+                  set_neo4j_conf dbms.ssl.policy.https.enabled true
+                  set_neo4j_conf dbms.ssl.policy.https.base_directory "${certsBase}/https"
+                  set_neo4j_conf dbms.ssl.policy.https.private_key private.key
+                  set_neo4j_conf dbms.ssl.policy.https.public_certificate public.crt
+                  set_neo4j_conf dbms.ssl.policy.https.client_auth NONE
                 }
                 install_cloudwatch_agent() {
                   local stackName="$1"
@@ -1103,10 +1212,9 @@ Resources:
                   fetch_and_install_license "${gdsLicenseSecretArn}" /var/lib/neo4j/licenses/neo4j-gds.license "GDS" "${region}"
                 fi
                 apply_base_conf
-                configure_network_advertised_addresses "${loadBalancerDNSName}" "${boltAdvertisedDNS}"
+                configure_tls "${advertisedDNS:-}" "${loadBalancerDNSName}"
                 configure_memory_recommendation
                 configure_cluster "${nodeCount}" "${region}" "${_stack_id}"
-                configure_bolt_tls "${boltCertArn}" "${region}"
                 configure_plugin_settings "${installBloom}" "${bloomLicenseSecretArn}" "${installGDS}" "${gdsLicenseSecretArn}"
                 remove_jdwp_default
                 assert_security_invariant
@@ -1118,7 +1226,6 @@ Resources:
               content: |
                 server.default_listen_address=0.0.0.0
                 server.bolt.listen_address=0.0.0.0:7687
-                server.http.listen_address=0.0.0.0:7474
                 dbms.routing.default_router=SERVER
                 server.metrics.enabled=true
                 server.metrics.jmx.enabled=true
@@ -1183,11 +1290,11 @@ Resources:
               - "gdsLicenseSecretArn="
               - Ref: GdsLicenseSecretArn
               - "\n"
-              - "boltCertArn="
-              - Ref: BoltCertificateSecretArn
+              - "certificateArn="
+              - Ref: CertificateArn
               - "\n"
-              - "boltAdvertisedDNS="
-              - Ref: BoltAdvertisedDNS
+              - "advertisedDNS="
+              - Ref: AdvertisedDNS
               - "\n"
               - |
                 _token=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
@@ -1226,7 +1333,7 @@ Resources:
                 # Hand every runtime value to the bootstrap as named, exported environment
                 # variables. The Secrets Manager password travels by env, never on argv, so it
                 # is not exposed in the process list or cloud-init logs.
-                export stackName region nodeCount loadBalancerDNSName boltAdvertisedDNS boltCertArn
+                export stackName region nodeCount loadBalancerDNSName advertisedDNS certificateArn
                 export installGDS installBloom gdsLicenseSecretArn bloomLicenseSecretArn
                 export password _stack_id _instance_id _az
 
@@ -1593,7 +1700,7 @@ Resources:
           - 'nlb'
       Scheme: internal
       SecurityGroups:
-        - !Ref Neo4jExternalSecurityGroup
+        - !Ref Neo4jNLBSecurityGroup
       Subnets: !If
         - CreateCluster
         - - !Ref Neo4jPrivateSubnet1
@@ -1612,15 +1719,18 @@ Resources:
           Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
       Type: network
 
-  Neo4jHTTPListener:
+  Neo4jBrowserListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
-        - TargetGroupArn: !Ref Neo4jHTTPTargetGroup
+        - TargetGroupArn: !Ref Neo4jBrowserTargetGroup
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
-      Port: 7474
-      Protocol: TCP
+      Port: 7473
+      Protocol: TLS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
 
   Neo4jBoltListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -1630,23 +1740,56 @@ Resources:
           Type: forward
       LoadBalancerArn: !Ref Neo4jNetworkLoadBalancer
       Port: 7687
-      Protocol: TCP
+      Protocol: TLS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
 
-  Neo4jHTTPTargetGroup:
+  Neo4jPrivateDnsHostedZone:
+    Type: AWS::Route53::HostedZone
+    Condition: CreatePrivateDnsHostedZone
+    Properties:
+      Name: !Ref PrivateDnsZoneName
+      HostedZoneConfig:
+        Comment: !Sub 'Private DNS for Neo4j stack ${AWS::StackName}'
+      VPCs:
+        - VPCId: !Ref Neo4jVPC
+          VPCRegion: !Ref 'AWS::Region'
+      HostedZoneTags:
+        - Key: StackID
+          Value: !Ref 'AWS::StackId'
+        - Key: Name
+          Value: !Ref 'AWS::StackName'
+        - Key: "aws-apn-id"
+          Value: "pc:4t4a9h39qkq4tbo3n9zd51p25"
+
+  Neo4jAdvertisedDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreatePrivateDns
+    Properties:
+      HostedZoneId: !If
+        - UseExistingPrivateDnsHostedZone
+        - !Ref PrivateDnsHostedZoneId
+        - !Ref Neo4jPrivateDnsHostedZone
+      Name: !Ref AdvertisedDNS
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+        HostedZoneId: !GetAtt Neo4jNetworkLoadBalancer.CanonicalHostedZoneID
+        EvaluateTargetHealth: false
+
+  Neo4jBrowserTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: !Join
         - '-'
         - - !Ref 'AWS::StackName'
-          - 'http'
+          - 'https'
           - 'tg'
-      Port: 7474
-      Protocol: TCP
-      HealthCheckProtocol: HTTP
-      HealthCheckPath: /
+      Port: 7473
+      Protocol: TLS
+      HealthCheckProtocol: TCP
       HealthCheckIntervalSeconds: 10
-      Matcher:
-        HttpCode: '200'
       # preserve_client_ip.enabled=false prevents NLB NAT-loopback (hairpin)
       # failures when operator tunnels reach the NLB from a cluster member.
       # See README "Private mode networking" and worklog/FIX_SSM_V7.md §9.
@@ -1671,7 +1814,8 @@ Resources:
           - 'bolt'
           - 'tg'
       Port: 7687
-      Protocol: TCP
+      Protocol: TLS
+      HealthCheckProtocol: TCP
       HealthCheckIntervalSeconds: 10
       TargetGroupAttributes:
         - Key: preserve_client_ip.enabled
@@ -1896,8 +2040,8 @@ Resources:
     Properties:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/external-sg-id'
       Type: String
-      Value: !GetAtt Neo4jExternalSecurityGroup.GroupId
-      Description: Neo4j external security group ID (Lambda egress rule target for port 7687).
+      Value: !GetAtt Neo4jNLBSecurityGroup.GroupId
+      Description: Neo4j NLB security group ID. In-VPC apps add this as the 7473/7687 egress target and add ingress from their SG.
 
   Neo4jConfigVpcEndpointSgParameter:
     Type: AWS::SSM::Parameter

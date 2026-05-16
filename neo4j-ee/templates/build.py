@@ -21,6 +21,12 @@ PARTIAL_INCLUDE_RE = re.compile(
     r"^#\s*include\s+partials/([A-Za-z0-9_.-]+\.sh)\s*$",
     re.MULTILINE,
 )
+EMBED_CONF_RE = re.compile(
+    r"^#\s*embed-conf\s+([A-Za-z0-9_.-]+\.conf)\s*$",
+    re.MULTILINE,
+)
+EMBED_CONF_DEST = "/var/lib/neo4j/neo4j-base.conf"
+EMBED_CONF_HEREDOC = "NEO4JBASE"
 
 GENERATED_HEADER = """\
 # GENERATED FILE — do not edit directly.
@@ -117,6 +123,24 @@ def _inline_partials(content: str, source_name: str) -> str:
     rendered = PARTIAL_INCLUDE_RE.sub(replace, content)
     if PARTIAL_INCLUDE_RE.search(rendered):
         raise BuildError(f"unresolved partial include marker remains in {source_name}")
+
+    def embed_conf(match: re.Match[str]) -> str:
+        conf_name = match.group(1)
+        conf_path = SRC / conf_name
+        if not conf_path.exists():
+            raise BuildError(
+                f"{source_name} references missing conf {conf_path}"
+            )
+        body = conf_path.read_text().rstrip("\n")
+        return (
+            f"cat > {EMBED_CONF_DEST} <<'{EMBED_CONF_HEREDOC}'\n"
+            f"{body}\n"
+            f"{EMBED_CONF_HEREDOC}"
+        )
+
+    rendered = EMBED_CONF_RE.sub(embed_conf, rendered)
+    if EMBED_CONF_RE.search(rendered):
+        raise BuildError(f"unresolved embed-conf marker remains in {source_name}")
     return rendered
 
 

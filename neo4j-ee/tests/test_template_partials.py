@@ -20,7 +20,8 @@ except ImportError:  # pragma: no cover - pyyaml is expected in dev/CI
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PARTIALS = REPO_ROOT / "neo4j-ee" / "templates" / "src" / "partials"
+SRC = REPO_ROOT / "neo4j-ee" / "templates" / "src"
+PARTIALS = SRC / "partials"
 BUILD_PY = REPO_ROOT / "neo4j-ee" / "templates" / "build.py"
 
 
@@ -270,96 +271,149 @@ class ShellPartialTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 42, result.stderr)
                 self.assertIn(expected, self.fail_log.read_text())
 
-    def test_extension_config_gates_bloom_and_gds_license_settings(self) -> None:
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("dbms.jvm.additional=-agentlib:jdwp=test\nkeep=true\n")
-        set_log = self.tmp / "set-conf.log"
+    def test_configure_plugin_settings_covers_four_flag_combinations(self) -> None:
+        home = self.tmp / "neo4j"
+        bloom_lic = home / "licenses" / "neo4j-bloom.license"
+        gds_lic = home / "licenses" / "neo4j-gds.license"
+        cases = [
+            # installBloom, bloomArn, installGDS, gdsArn,
+            # expect_bloom_class, expect_bloom_lic, expect_gds_lic
+            ("true", "arn:bloom", "true", "arn:gds", True, True, True),
+            ("true", "", "true", "", True, False, False),
+            ("false", "", "false", "", False, False, False),
+            ("false", "arn:bloom", "true", "arn:gds", False, False, True),
+        ]
+        for (
+            ib,
+            barn,
+            ig,
+            garn,
+            want_class,
+            want_blic,
+            want_glic,
+        ) in cases:
+            with self.subTest(installBloom=ib, installGDS=ig, barn=barn, garn=garn):
+                set_log = self.tmp / "set-conf.log"
+                set_log.write_text("")
+                result = self.run_shell(
+                    f"""
+                    set -euo pipefail
+                    export NEO4J_HOME="{home}"
+                    source "{PARTIALS / 'configure-neo4j.sh'}"
+                    set_neo4j_conf() {{
+                      echo "$1=$2" >> "{set_log}"
+                    }}
+                    configure_plugin_settings "{ib}" "{barn}" "{ig}" "{garn}"
+                    """
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                calls = set_log.read_text()
+                if want_class:
+                    self.assertIn(
+                        "server.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf",
+                        calls,
+                    )
+                else:
+                    self.assertNotIn("server.unmanaged_extension_classes", calls)
+                if want_blic:
+                    self.assertIn(f"dbms.bloom.license_file={bloom_lic}", calls)
+                else:
+                    self.assertNotIn("dbms.bloom.license_file", calls)
+                if want_glic:
+                    self.assertIn(f"gds.enterprise.license_file={gds_lic}", calls)
+                else:
+                    self.assertNotIn("gds.enterprise.license_file", calls)
 
+    def test_remove_jdwp_default_strips_jdwp_line_only(self) -> None:
+        conf = self.tmp / "neo4j.conf"
+        conf.write_text(
+            "dbms.jvm.additional=-agentlib:jdwp=transport=dt_socket\nkeep=true\n"
+        )
         result = self.run_shell(
             f"""
             set -euo pipefail
             export NEO4J_CONF="{conf}"
-            export NEO4J_HOME="{self.tmp / 'neo4j'}"
             source "{PARTIALS / 'configure-neo4j.sh'}"
-            set_neo4j_conf() {{
-              echo "$1=$2" >> "{set_log}"
-            }}
-            installBloom=true
-            bloomLicenseSecretArn=arn:bloom
-            installGDS=true
-            gdsLicenseSecretArn=arn:gds
-            extension_config
+            remove_jdwp_default
             """
         )
-
         self.assertEqual(result.returncode, 0, result.stderr)
-        calls = set_log.read_text()
-        self.assertIn("server.unmanaged_extension_classes=com.neo4j.bloom.server=/bloom,semantics.extension=/rdf", calls)
-        self.assertIn(f"dbms.bloom.license_file={self.tmp / 'neo4j' / 'licenses' / 'neo4j-bloom.license'}", calls)
-        self.assertIn(f"gds.enterprise.license_file={self.tmp / 'neo4j' / 'licenses' / 'neo4j-gds.license'}", calls)
         self.assertEqual(conf.read_text(), "keep=true\n")
+        self.assertFalse((self.tmp / "neo4j.conf.bak").exists())
 
-    def test_extension_config_omits_license_files_when_license_arns_are_empty(self) -> None:
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("keep=true\n")
+    def test_configure_network_advertised_addresses_sets_three_keys(self) -> None:
         set_log = self.tmp / "set-conf.log"
-
         result = self.run_shell(
             f"""
             set -euo pipefail
-            export NEO4J_CONF="{conf}"
             source "{PARTIALS / 'configure-neo4j.sh'}"
             set_neo4j_conf() {{
               echo "$1=$2" >> "{set_log}"
             }}
-            installBloom=true
-            bloomLicenseSecretArn=
-            installGDS=true
-            gdsLicenseSecretArn=
-            extension_config
+            configure_network_advertised_addresses lb.example.com bolt.example.com
             """
         )
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-        calls = set_log.read_text()
-        self.assertIn("server.unmanaged_extension_classes=", calls)
-        self.assertNotIn("dbms.bloom.license_file", calls)
-        self.assertNotIn("gds.enterprise.license_file", calls)
-
-    def test_build_neo4j_conf_file_single_node_sets_expected_config(self) -> None:
-        self.write_stub("hostname", "echo '10.0.0.10 172.31.0.10'\n")
-        self.write_stub("neo4j-admin", "echo 'server.memory.heap.max_size=4g'\n")
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("")
-        set_log = self.tmp / "set-conf.log"
-
-        result = self.run_shell(
-            f"""
-            set -euo pipefail
-            export NEO4J_CONF="{conf}"
-            source "{PARTIALS / 'configure-neo4j.sh'}"
-            set_neo4j_conf() {{
-              echo "$1=$2" >> "{set_log}"
-            }}
-            loadBalancerDNSName=lb.example.com
-            boltAdvertisedDNS=bolt.example.com
-            nodeCount=1
-            boltCertArn=
-            build_neo4j_conf_file
-            """
-        )
-
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = set_log.read_text()
         self.assertIn("server.default_advertised_address=lb.example.com", calls)
         self.assertIn("server.bolt.advertised_address=bolt.example.com:7687", calls)
-        self.assertIn("server.metrics.enabled=true", calls)
-        self.assertIn("dbms.routing.default_router=SERVER", calls)
-        self.assertIn("server.memory.heap.max_size=4g", conf.read_text())
+        self.assertIn("server.http.advertised_address=lb.example.com:7474", calls)
 
-    def test_build_neo4j_conf_file_cluster_discovers_peer_endpoints(self) -> None:
+    def test_configure_network_advertised_addresses_falls_back_to_lb_for_bolt(
+        self,
+    ) -> None:
+        set_log = self.tmp / "set-conf.log"
+        result = self.run_shell(
+            f"""
+            set -euo pipefail
+            source "{PARTIALS / 'configure-neo4j.sh'}"
+            set_neo4j_conf() {{
+              echo "$1=$2" >> "{set_log}"
+            }}
+            configure_network_advertised_addresses lb.example.com ""
+            """
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "server.bolt.advertised_address=lb.example.com:7687",
+            set_log.read_text(),
+        )
+
+    def test_configure_memory_recommendation_appends_admin_output(self) -> None:
+        self.write_stub("neo4j-admin", "echo 'server.memory.heap.max_size=4g'\n")
+        conf = self.tmp / "neo4j.conf"
+        conf.write_text("existing=keep\n")
+        result = self.run_shell(
+            f"""
+            set -euo pipefail
+            export NEO4J_CONF="{conf}"
+            source "{PARTIALS / 'configure-neo4j.sh'}"
+            configure_memory_recommendation
+            """
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = conf.read_text()
+        self.assertIn("existing=keep", text)
+        self.assertIn("server.memory.heap.max_size=4g", text)
+
+    def test_configure_cluster_single_node_writes_nothing(self) -> None:
+        set_log = self.tmp / "set-conf.log"
+        result = self.run_shell(
+            f"""
+            set -euo pipefail
+            source "{PARTIALS / 'configure-neo4j.sh'}"
+            {self.fail_function()}
+            set_neo4j_conf() {{
+              echo "$1=$2" >> "{set_log}"
+            }}
+            configure_cluster 1 us-east-1 stack-arn
+            """
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(set_log.read_text() if set_log.exists() else "", "")
+
+    def test_configure_cluster_discovers_peer_endpoints(self) -> None:
         self.write_stub("hostname", "echo '172.31.0.10'\n")
-        self.write_stub("neo4j-admin", "echo 'memory=recommended'\n")
         self.write_stub("sleep", "exit 0\n")
         self.write_stub(
             "aws",
@@ -374,26 +428,17 @@ class ShellPartialTests(unittest.TestCase):
             fi
             """,
         )
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("")
         set_log = self.tmp / "set-conf.log"
 
         result = self.run_shell(
             f"""
             set -euo pipefail
-            export NEO4J_CONF="{conf}"
             source "{PARTIALS / 'configure-neo4j.sh'}"
             {self.fail_function()}
             set_neo4j_conf() {{
               echo "$1=$2" >> "{set_log}"
             }}
-            region=us-east-1
-            _stack_id=stack-arn
-            loadBalancerDNSName=lb.example.com
-            boltAdvertisedDNS=
-            nodeCount=3
-            boltCertArn=
-            build_neo4j_conf_file
+            configure_cluster 3 us-east-1 stack-arn
             """
         )
 
@@ -404,37 +449,39 @@ class ShellPartialTests(unittest.TestCase):
         self.assertIn("dbms.cluster.discovery.resolver_type=LIST", calls)
         self.assertIn("dbms.cluster.endpoints=10.0.0.1:6000,10.0.0.2:6000,10.0.0.3:6000", calls)
 
-    def test_build_neo4j_conf_file_fails_when_peer_discovery_finds_no_members(self) -> None:
+    def test_configure_cluster_fails_when_peer_discovery_finds_no_members(self) -> None:
         self.write_stub("hostname", "echo '172.31.0.10'\n")
-        self.write_stub("neo4j-admin", "echo 'memory=recommended'\n")
         self.write_stub("sleep", "exit 0\n")
         self.write_stub("aws", "exit 0\n")
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("")
 
         result = self.run_shell(
             f"""
             set -euo pipefail
-            export NEO4J_CONF="{conf}"
             source "{PARTIALS / 'configure-neo4j.sh'}"
             {self.fail_function()}
             set_neo4j_conf() {{ :; }}
-            region=us-east-1
-            _stack_id=stack-arn
-            loadBalancerDNSName=lb.example.com
-            boltAdvertisedDNS=
-            nodeCount=3
-            boltCertArn=
-            build_neo4j_conf_file
+            configure_cluster 3 us-east-1 stack-arn
             """
         )
 
         self.assertEqual(result.returncode, 42, result.stderr)
         self.assertIn("Peer discovery failed after 5 minutes.", self.fail_log.read_text())
 
-    def test_build_neo4j_conf_file_installs_bolt_tls_secret(self) -> None:
-        self.write_stub("hostname", "echo '172.31.0.10'\n")
-        self.write_stub("neo4j-admin", "echo 'memory=recommended'\n")
+    def test_configure_bolt_tls_noop_when_arn_empty(self) -> None:
+        set_log = self.tmp / "set-conf.log"
+        result = self.run_shell(
+            f"""
+            set -euo pipefail
+            source "{PARTIALS / 'configure-neo4j.sh'}"
+            {self.fail_function()}
+            set_neo4j_conf() {{ echo "$1=$2" >> "{set_log}"; }}
+            configure_bolt_tls "" us-east-1
+            """
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(set_log.read_text() if set_log.exists() else "", "")
+
+    def test_configure_bolt_tls_installs_secret(self) -> None:
         self.write_stub("aws", "echo '{\"certificate\":\"CERT\",\"private_key\":\"KEY\"}'\n")
         self.write_stub("chown", "echo \"chown $*\" >> \"$COMMAND_LOG\"\n")
         self.write_stub(
@@ -450,27 +497,19 @@ class ShellPartialTests(unittest.TestCase):
             fi
             """,
         )
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("")
         set_log = self.tmp / "set-conf.log"
         cert_dir = self.tmp / "certificates" / "bolt"
 
         result = self.run_shell(
             f"""
             set -euo pipefail
-            export NEO4J_CONF="{conf}"
             export NEO4J_CERT_DIR="{cert_dir}"
             source "{PARTIALS / 'configure-neo4j.sh'}"
             {self.fail_function()}
             set_neo4j_conf() {{
               echo "$1=$2" >> "{set_log}"
             }}
-            region=us-east-1
-            loadBalancerDNSName=lb.example.com
-            boltAdvertisedDNS=
-            nodeCount=1
-            boltCertArn=arn:bolt
-            build_neo4j_conf_file
+            configure_bolt_tls arn:bolt us-east-1
             """
         )
 
@@ -482,28 +521,18 @@ class ShellPartialTests(unittest.TestCase):
         self.assertIn(f"dbms.ssl.policy.bolt.base_directory={cert_dir}", calls)
         self.assertIn("server.bolt.tls_level=REQUIRED", calls)
 
-    def test_build_neo4j_conf_file_rejects_invalid_bolt_tls_secret(self) -> None:
-        self.write_stub("hostname", "echo '172.31.0.10'\n")
-        self.write_stub("neo4j-admin", "echo 'memory=recommended'\n")
+    def test_configure_bolt_tls_rejects_invalid_secret(self) -> None:
         self.write_stub("aws", "echo '{\"certificate\":\"CERT\"}'\n")
         self.write_stub("jq", "exit 1\n")
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("")
 
         result = self.run_shell(
             f"""
             set -euo pipefail
-            export NEO4J_CONF="{conf}"
             export NEO4J_CERT_DIR="{self.tmp / 'certificates' / 'bolt'}"
             source "{PARTIALS / 'configure-neo4j.sh'}"
             {self.fail_function()}
             set_neo4j_conf() {{ :; }}
-            region=us-east-1
-            loadBalancerDNSName=lb.example.com
-            boltAdvertisedDNS=
-            nodeCount=1
-            boltCertArn=arn:bolt
-            build_neo4j_conf_file
+            configure_bolt_tls arn:bolt us-east-1
             """
         )
 
@@ -786,48 +815,105 @@ class ShellPartialTests(unittest.TestCase):
         self.assertIn("No UUID", self.fail_log.read_text())
 
 
-    def test_extension_config_always_sets_full_cypher_ip_blocklist(self) -> None:
-        # Security invariant (CLAUDE.md): the Cypher IP blocklist must be set
-        # unconditionally, independent of Bloom/GDS, covering IMDS, RFC1918,
-        # and the IPv6 unique-local/link-local/multicast ranges.
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("keep=true\n")
+    def test_apply_base_conf_applies_every_key_and_skips_noise(self) -> None:
+        base = self.tmp / "neo4j-base.conf"
+        # Comment, blank line, real keys, and an unterminated final line.
+        base.write_text(
+            "# a comment\n"
+            "\n"
+            "server.metrics.filter=*\n"
+            "internal.dbms.cypher_ip_blocklist=10.0.0.0/8,169.254.169.0/24\n"
+            "no_newline_key=tail"
+        )
         set_log = self.tmp / "set-conf.log"
+        result = self.run_shell(
+            f"""
+            set -euo pipefail
+            export NEO4J_BASE_CONF="{base}"
+            source "{PARTIALS / 'configure-neo4j.sh'}"
+            {self.fail_function()}
+            set_neo4j_conf() {{
+              echo "$1=$2" >> "{set_log}"
+            }}
+            apply_base_conf
+            """
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = set_log.read_text().splitlines()
+        self.assertIn("server.metrics.filter=*", lines)
+        self.assertIn(
+            "internal.dbms.cypher_ip_blocklist=10.0.0.0/8,169.254.169.0/24",
+            lines,
+        )
+        # Unterminated final line is still applied.
+        self.assertIn("no_newline_key=tail", lines)
+        # Comment and blank lines never reach set_neo4j_conf.
+        self.assertNotIn("# a comment", set_log.read_text())
+        self.assertEqual(len(lines), 3)
 
+    def test_apply_base_conf_fails_on_malformed_line(self) -> None:
+        for bad in ("no_equals_here", "=empty_key"):
+            with self.subTest(bad=bad):
+                base = self.tmp / "neo4j-base.conf"
+                base.write_text(f"good=1\n{bad}\n")
+                self.fail_log.write_text("")
+                result = self.run_shell(
+                    f"""
+                    set -euo pipefail
+                    export NEO4J_BASE_CONF="{base}"
+                    source "{PARTIALS / 'configure-neo4j.sh'}"
+                    {self.fail_function()}
+                    set_neo4j_conf() {{ :; }}
+                    apply_base_conf
+                    """
+                )
+                self.assertEqual(result.returncode, 42, result.stderr)
+                self.assertIn(
+                    "Malformed line in neo4j-base.conf",
+                    self.fail_log.read_text(),
+                )
+
+    def test_assert_security_invariant_present_absent_empty(self) -> None:
+        cases = [
+            ("internal.dbms.cypher_ip_blocklist=10.0.0.0/8\nkeep=1\n", 0),
+            ("keep=1\n", 42),
+            ("internal.dbms.cypher_ip_blocklist=\nkeep=1\n", 42),
+        ]
+        for content, expected in cases:
+            with self.subTest(content=content):
+                conf = self.tmp / "neo4j.conf"
+                conf.write_text(content)
+                self.fail_log.write_text("")
+                result = self.run_shell(
+                    f"""
+                    set -euo pipefail
+                    export NEO4J_CONF="{conf}"
+                    source "{PARTIALS / 'configure-neo4j.sh'}"
+                    {self.fail_function()}
+                    assert_security_invariant
+                    """
+                )
+                self.assertEqual(result.returncode, expected, result.stderr)
+
+    def test_assert_security_invariant_does_not_validate_cidr_contents(self) -> None:
+        # AD-2 / NFR-9: presence-only. A non-empty but content-bogus value
+        # must still pass — the function must not parse or compare CIDRs.
+        conf = self.tmp / "neo4j.conf"
+        conf.write_text("internal.dbms.cypher_ip_blocklist=not-a-cidr\n")
         result = self.run_shell(
             f"""
             set -euo pipefail
             export NEO4J_CONF="{conf}"
             source "{PARTIALS / 'configure-neo4j.sh'}"
-            set_neo4j_conf() {{
-              echo "$1=$2" >> "{set_log}"
-            }}
-            installBloom=false
-            bloomLicenseSecretArn=
-            installGDS=false
-            gdsLicenseSecretArn=
-            extension_config
+            {self.fail_function()}
+            assert_security_invariant
             """
         )
-
         self.assertEqual(result.returncode, 0, result.stderr)
-        blocklist_lines = [
-            line
-            for line in set_log.read_text().splitlines()
-            if line.startswith("internal.dbms.cypher_ip_blocklist=")
-        ]
-        self.assertEqual(len(blocklist_lines), 1, set_log.read_text())
-        line = blocklist_lines[0]
-        for cidr in (
-            "169.254.169.0/24",
-            "10.0.0.0/8",
-            "172.16.0.0/12",
-            "192.168.0.0/16",
-            "fc00::/7",
-            "fe80::/10",
-            "ff00::/8",
-        ):
-            self.assertIn(cidr, line)
+        body = (PARTIALS / "configure-neo4j.sh").read_text()
+        func = body.split("assert_security_invariant()", 1)[1].split("\n}", 1)[0]
+        for cidr_token in ("169.254", "10.0.0.0", "/8", "fc00"):
+            self.assertNotIn(cidr_token, func)
 
     def test_set_neo4j_conf_handles_sed_special_characters_in_values(self) -> None:
         # set_neo4j_conf is sed-based with '|' as the delimiter; '&' is the
@@ -851,35 +937,25 @@ class ShellPartialTests(unittest.TestCase):
         self.assertIn("existing=a|b&c/d", lines)
         self.assertIn("fresh=x|y&z/w", lines)
 
-    def test_build_neo4j_conf_file_bolt_tls_secret_failure_modes(self) -> None:
+    def test_configure_bolt_tls_secret_failure_modes(self) -> None:
         for mode, aws_body, jq_body, expect_code in [
             ("empty", "exit 0", "exit 1\n", 42),
             ("aws_error", "exit 9", "exit 0\n", None),
         ]:
             with self.subTest(mode=mode):
-                self.write_stub("hostname", "echo '172.31.0.10'\n")
-                self.write_stub("neo4j-admin", "echo 'memory=recommended'\n")
                 self.write_stub("aws", aws_body)
                 self.write_stub("jq", jq_body)
                 self.fail_log.write_text("")
-                conf = self.tmp / f"{mode}.conf"
-                conf.write_text("")
                 cert_dir = self.tmp / mode / "bolt"
 
                 result = self.run_shell(
                     f"""
                     set -euo pipefail
-                    export NEO4J_CONF="{conf}"
                     export NEO4J_CERT_DIR="{cert_dir}"
                     source "{PARTIALS / 'configure-neo4j.sh'}"
                     {self.fail_function()}
                     set_neo4j_conf() {{ :; }}
-                    region=us-east-1
-                    loadBalancerDNSName=lb.example.com
-                    boltAdvertisedDNS=
-                    nodeCount=1
-                    boltCertArn=arn:bolt
-                    build_neo4j_conf_file
+                    configure_bolt_tls arn:bolt us-east-1
                     """
                 )
 
@@ -889,12 +965,11 @@ class ShellPartialTests(unittest.TestCase):
                     self.assertIn("must be JSON with fields", self.fail_log.read_text())
                 self.assertFalse((cert_dir / "private.key").exists())
 
-    def test_build_neo4j_conf_file_fails_on_partial_peer_discovery(self) -> None:
+    def test_configure_cluster_fails_on_partial_peer_discovery(self) -> None:
         # Only one member is ever discovered for a 3-node cluster. The script
         # must fail rather than configure dbms.cluster.endpoints with an
         # incomplete member list (which would form a split-brain cluster).
         self.write_stub("hostname", "echo '172.31.0.10'\n")
-        self.write_stub("neo4j-admin", "echo 'memory=recommended'\n")
         self.write_stub("sleep", "exit 0\n")
         self.write_stub(
             "aws",
@@ -909,32 +984,26 @@ class ShellPartialTests(unittest.TestCase):
             fi
             """,
         )
-        conf = self.tmp / "neo4j.conf"
-        conf.write_text("")
         set_log = self.tmp / "set-conf.log"
 
         result = self.run_shell(
             f"""
             set -euo pipefail
-            export NEO4J_CONF="{conf}"
             source "{PARTIALS / 'configure-neo4j.sh'}"
             {self.fail_function()}
             set_neo4j_conf() {{
               echo "$1=$2" >> "{set_log}"
             }}
-            region=us-east-1
-            _stack_id=stack-arn
-            loadBalancerDNSName=lb.example.com
-            boltAdvertisedDNS=
-            nodeCount=3
-            boltCertArn=
-            build_neo4j_conf_file
+            configure_cluster 3 us-east-1 stack-arn
             """
         )
 
         self.assertEqual(result.returncode, 42, result.stderr)
         self.assertIn("Peer discovery failed after 5 minutes.", self.fail_log.read_text())
-        self.assertNotIn("dbms.cluster.endpoints=", set_log.read_text())
+        self.assertNotIn(
+            "dbms.cluster.endpoints=",
+            set_log.read_text() if set_log.exists() else "",
+        )
 
 
 class BuildScriptTests(unittest.TestCase):
@@ -959,6 +1028,113 @@ class BuildScriptTests(unittest.TestCase):
                 "demo.sh",
             )
 
+    def test_embed_conf_marker_resolves_to_heredoc(self) -> None:
+        rendered = self.module._inline_partials(
+            "# embed-conf neo4j-base.conf\n",
+            "demo.sh",
+        )
+        self.assertIn(
+            "cat > /var/lib/neo4j/neo4j-base.conf <<'NEO4JBASE'",
+            rendered,
+        )
+        self.assertIn(
+            "internal.dbms.cypher_ip_blocklist=",
+            rendered,
+        )
+        self.assertTrue(rendered.rstrip().endswith("NEO4JBASE"))
+        self.assertNotRegex(rendered, r"#\s*embed-conf")
+
+    def test_embed_conf_raises_build_error_for_missing_conf(self) -> None:
+        with self.assertRaisesRegex(
+            self.module.BuildError,
+            "references missing conf",
+        ):
+            self.module._inline_partials(
+                "# embed-conf does-not-exist.conf\n",
+                "demo.sh",
+            )
+
+    def test_userdata_source_declares_expected_partial_includes(self) -> None:
+        source = (SRC / "userdata.sh").read_text()
+        for partial in (
+            "set-neo4j-conf.sh",
+            "attach-data-volume.sh",
+            "install-license.sh",
+            "install-neo4j.sh",
+            "install-plugins.sh",
+            "configure-neo4j.sh",
+            "configure-cloudwatch.sh",
+        ):
+            self.assertIn(f"# include partials/{partial}", source)
+
+
+# Every static/security key the base conf owns. Mirrors templates/src/
+# neo4j-base.conf; the content test below is the single source of truth.
+_EXPECTED_BASE_CONF = {
+    "server.default_listen_address": "0.0.0.0",
+    "server.bolt.listen_address": "0.0.0.0:7687",
+    "server.http.listen_address": "0.0.0.0:7474",
+    "dbms.routing.default_router": "SERVER",
+    "server.metrics.enabled": "true",
+    "server.metrics.jmx.enabled": "true",
+    "server.metrics.prefix": "neo4j",
+    "server.metrics.filter": "*",
+    "server.metrics.csv.interval": "5s",
+    "internal.dbms.cypher_ip_blocklist": (
+        "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,"
+        "169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8"
+    ),
+    "dbms.security.procedures.unrestricted": "gds.*,apoc.*,bloom.*",
+    "dbms.security.http_auth_allowlist": "/,/browser.*,/bloom.*",
+    "dbms.security.procedures.allowlist": "apoc.*,gds.*,bloom.*",
+}
+
+
+class Neo4jBaseConfTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.path = SRC / "neo4j-base.conf"
+        cls.lines = [
+            ln
+            for ln in cls.path.read_text().splitlines()
+            if ln.strip() and not ln.lstrip().startswith("#")
+        ]
+
+    def test_every_expected_key_present_with_correct_value(self) -> None:
+        parsed = dict(ln.split("=", 1) for ln in self.lines)
+        self.assertEqual(parsed, _EXPECTED_BASE_CONF)
+
+    def test_security_invariant_key_is_present_and_non_empty(self) -> None:
+        parsed = dict(ln.split("=", 1) for ln in self.lines)
+        value = parsed.get("internal.dbms.cypher_ip_blocklist", "")
+        self.assertTrue(value)
+        for cidr in REQUIRED_BLOCKLIST_CIDRS:
+            self.assertIn(cidr, value)
+
+    def test_no_key_appears_more_than_once(self) -> None:
+        # Neo4j strict validation refuses to start on a duplicate key
+        # (only server.jvm.additional may repeat, and the base file has none).
+        keys = [ln.split("=", 1)[0] for ln in self.lines]
+        dupes = sorted({k for k in keys if keys.count(k) > 1})
+        self.assertEqual(dupes, [], f"duplicate keys in neo4j-base.conf: {dupes}")
+
+
+class StaticKeyOwnershipTests(unittest.TestCase):
+    """NFR-1: no base-conf key is also written by an inline set_neo4j_conf."""
+
+    def test_no_static_key_written_inline_in_any_partial(self) -> None:
+        offenders: list[str] = []
+        for sh in sorted(PARTIALS.glob("*.sh")):
+            text = sh.read_text()
+            for key in _EXPECTED_BASE_CONF:
+                if re.search(
+                    rf"^\s*set_neo4j_conf\s+{re.escape(key)}\b",
+                    text,
+                    re.MULTILINE,
+                ):
+                    offenders.append(f"{sh.name}: {key}")
+        self.assertEqual(offenders, [], f"static keys set inline: {offenders}")
+
 
 class RenderedTemplateContractTests(unittest.TestCase):
     @classmethod
@@ -975,11 +1151,121 @@ class RenderedTemplateContractTests(unittest.TestCase):
             with self.subTest(template=name):
                 self.assertIn("fetch_and_install_license", template)
                 self.assertIn("attach_and_mount_data_volume", template)
-                self.assertIn("build_neo4j_conf_file", template)
+                self.assertIn("apply_base_conf", template)
+                self.assertIn("configure_cluster", template)
+                self.assertIn("configure_bolt_tls", template)
+                self.assertIn("configure_network_advertised_addresses", template)
                 self.assertIn("start_neo4j", template)
                 self.assertLess(template.index("start_neo4j"), template.index("cfn-signal --success true"))
                 self.assertIn('secret-id "neo4j/${stackName}/password"', template)
                 self.assertNotIn('password="', template)
+
+    def test_rendered_templates_have_no_unresolved_markers_and_define_helpers_once(
+        self,
+    ) -> None:
+        helpers = (
+            "set_neo4j_conf",
+            "attach_and_mount_data_volume",
+            "fetch_and_install_license",
+            "install_neo4j_from_yum",
+            "start_neo4j",
+            "install_apoc",
+            "install_plugin",
+            "install_cloudwatch_agent",
+            "apply_base_conf",
+            "assert_security_invariant",
+            "configure_network_advertised_addresses",
+            "configure_memory_recommendation",
+            "configure_cluster",
+            "configure_bolt_tls",
+            "configure_plugin_settings",
+            "remove_jdwp_default",
+        )
+        for name, template in self.templates.items():
+            with self.subTest(template=name):
+                self.assertNotRegex(template, r"#\s*include\s+partials/")
+                self.assertNotRegex(template, r"#\s*embed-conf\s+")
+                self.assertNotIn("build_neo4j_conf_file", template)
+                self.assertNotIn("extension_config", template)
+                for helper in helpers:
+                    definitions = re.findall(
+                        rf"^\s*{re.escape(helper)}\(\)\s*\{{",
+                        template,
+                        re.MULTILINE,
+                    )
+                    self.assertEqual(
+                        len(definitions),
+                        1,
+                        f"{name}: {helper} defined {len(definitions)} times",
+                    )
+
+    def test_base_conf_block_embedded_verbatim_and_blocklist_once(self) -> None:
+        base_text = (SRC / "neo4j-base.conf").read_text().rstrip("\n")
+        base_lines = [
+            ln.strip()
+            for ln in base_text.splitlines()
+            if ln.strip() and not ln.lstrip().startswith("#")
+        ]
+        for name, template in self.templates.items():
+            with self.subTest(template=name):
+                # The heredoc that writes the base conf at boot, with each
+                # key line present verbatim inside it.
+                self.assertIn(
+                    "cat > /var/lib/neo4j/neo4j-base.conf <<'NEO4JBASE'",
+                    template,
+                )
+                stripped = "\n".join(
+                    ln.strip() for ln in template.splitlines()
+                )
+                start = stripped.index("<<'NEO4JBASE'")
+                end = stripped.index("\nNEO4JBASE", start)
+                block = stripped[start:end]
+                for key_line in base_lines:
+                    self.assertIn(key_line, block)
+                # Blocklist appears exactly once and only inside the block.
+                blk = "internal.dbms.cypher_ip_blocklist="
+                self.assertEqual(template.count(blk), 1, name)
+                self.assertIn(blk, block)
+                # No static base key is written via an inline set_neo4j_conf.
+                for key_line in base_lines:
+                    key = key_line.split("=", 1)[0]
+                    self.assertNotIn(f"set_neo4j_conf {key} ", template)
+
+    def test_security_invariant_asserted_after_config_before_signal(self) -> None:
+        overlay_fns = (
+            "apply_base_conf",
+            "configure_network_advertised_addresses",
+            "configure_memory_recommendation",
+            "configure_cluster",
+            "configure_bolt_tls",
+            "configure_plugin_settings",
+            "remove_jdwp_default",
+        )
+        for name, template in self.templates.items():
+            with self.subTest(template=name):
+                # The call site (last occurrence; the first is the def).
+                assert_pos = template.rindex("\n                assert_security_invariant")
+                signal_pos = template.index("cfn-signal --success true")
+                self.assertLess(assert_pos, signal_pos)
+                for fn in overlay_fns:
+                    call_pos = template.rindex(f"\n                {fn}")
+                    self.assertLess(
+                        call_pos,
+                        assert_pos,
+                        f"{name}: {fn} called after assert_security_invariant",
+                    )
+
+    def test_runtime_overlay_functions_called_with_expected_arguments(self) -> None:
+        patterns = (
+            r'configure_network_advertised_addresses\s+"\$\{loadBalancerDNSName\}"\s+"\$\{boltAdvertisedDNS\}"',
+            r'configure_cluster\s+"\$\{nodeCount\}"\s+"\$\{region\}"\s+"\$\{_stack_id\}"',
+            r'configure_bolt_tls\s+"\$\{boltCertArn\}"\s+"\$\{region\}"',
+            r'configure_plugin_settings\s+"\$\{installBloom\}"\s+"\$\{bloomLicenseSecretArn\}"\s+"\$\{installGDS\}"\s+"\$\{gdsLicenseSecretArn\}"',
+        )
+        for name, template in self.templates.items():
+            with self.subTest(template=name):
+                for pat in patterns:
+                    self.assertRegex(template, pat)
 
     def test_templates_preserve_plugin_license_rules(self) -> None:
         for name, template in self.templates.items():
@@ -1173,8 +1459,10 @@ class RenderedTemplateSecurityTests(unittest.TestCase):
     def test_cypher_ip_blocklist_invariant_in_all_rendered_templates(self) -> None:
         for name, body in self.text.items():
             with self.subTest(template=name):
-                marker = "set_neo4j_conf internal.dbms.cypher_ip_blocklist"
-                self.assertIn(marker, body)
+                # Owned by the embedded neo4j-base.conf block, not an
+                # inline set_neo4j_conf call (NFR-1/NFR-2).
+                marker = "internal.dbms.cypher_ip_blocklist="
+                self.assertEqual(body.count(marker), 1, name)
                 line = next(
                     ln for ln in body.splitlines() if marker in ln
                 )

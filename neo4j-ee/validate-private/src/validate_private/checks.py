@@ -251,6 +251,70 @@ def run_server_id_check(config: "StackConfig", reporter: "TestReporter") -> None
     log.info("")
 
 
+def run_blocklist_check(config: "StackConfig", reporter: "TestReporter") -> None:
+    """Assert internal.dbms.cypher_ip_blocklist is present and non-empty on
+    every node's effective neo4j.conf (NFR-2, ties to the G3 conf-key audit).
+
+    Presence-only by design (AD-2): a non-empty value passes; CIDR content is
+    owned by the build-time contract tests, not this runtime audit.
+    """
+    import boto3
+
+    from botocore.config import Config as BotocoreConfig
+    from validate_private.aws_helpers import asg_instances, stack_resources
+    from validate_private.runner import run_shell_on_instance
+
+    retry_cfg = BotocoreConfig(retries={"mode": "standard"})
+    cfn = boto3.client("cloudformation", region_name=config.region, config=retry_cfg)
+    asg = boto3.client("autoscaling", region_name=config.region, config=retry_cfg)
+    ssm = boto3.client("ssm", region_name=config.region, config=retry_cfg)
+
+    log.info("")
+    log.info("=== Cypher IP blocklist invariant (per node) ===")
+
+    start = time.monotonic()
+    try:
+        resources = stack_resources(cfn, config.stack_name)
+    except Exception as exc:
+        reporter.record("Blocklist: discover instances", False, str(exc), time.monotonic() - start)
+        return
+
+    instance_ids: list[str] = []
+    for logical in _ASG_LOGICAL_IDS:
+        asg_name = resources.get(logical)
+        if asg_name:
+            instance_ids.extend(asg_instances(asg, asg_name))
+
+    if not instance_ids:
+        reporter.record(
+            "Blocklist: discover instances", False,
+            f"No running instances found for ASGs {_ASG_LOGICAL_IDS} in stack {config.stack_name}",
+            time.monotonic() - start,
+        )
+        return
+
+    extract = (
+        "awk -F= '/^internal\\.dbms\\.cypher_ip_blocklist=/ "
+        "{sub(/^[^=]*=/, \"\"); print; exit}' /etc/neo4j/neo4j.conf"
+    )
+    for iid in instance_ids:
+        start = time.monotonic()
+        ok, stdout, stderr = run_shell_on_instance(ssm, iid, extract)
+        value = stdout.strip()
+        passed = ok and bool(value)
+        if passed:
+            detail = f"present and non-empty ({value})"
+        elif not ok:
+            detail = f"SSM command failed: {stderr.strip() or 'unknown error'}"
+        else:
+            detail = "internal.dbms.cypher_ip_blocklist absent or empty"
+        reporter.record(
+            f"Blocklist active ({iid})", passed, detail, time.monotonic() - start
+        )
+
+    log.info("")
+
+
 def run_checks(config: "StackConfig", reporter: "TestReporter") -> None:
     check_bolt(config, reporter)
     check_server_status(config, reporter)
@@ -260,3 +324,4 @@ def run_checks(config: "StackConfig", reporter: "TestReporter") -> None:
     check_apoc(config, reporter)
     check_gds(config, reporter)
     check_cluster_roles(config, reporter)
+    run_blocklist_check(config, reporter)

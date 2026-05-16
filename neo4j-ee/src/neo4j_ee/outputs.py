@@ -72,9 +72,25 @@ def truthy(value: str | None) -> bool:
 
 
 def resolve_bolt_scheme(fields: dict[str, str]) -> str:
-    """Return the Bolt URI scheme implied by output fields."""
+    """Return the Bolt URI scheme implied by output fields.
+
+    TLS is signalled by a non-empty AdvertisedDNS (mandatory for Private and
+    ExistingVpc; set for Public only with --enable-public-tls).
+
+    The operator tooling uses the ``+ssc`` (self-signed-certificates) scheme:
+    encrypted, but with no chain or hostname verification. This is the correct
+    choice for an internal admin tool reaching the stack's own NLB through a
+    bastion/tunnel because it works uniformly whether the NLB presents a real
+    ACM/ACM-Private-CA certificate or the self-signed certificate that
+    ``certificate.py`` imports for the test path (which is not publicly
+    trusted). It also removes any dependency on in-VPC AdvertisedDNS
+    resolution: ``neo4j+ssc://<nlb-dns>:7687`` connects regardless of the cert
+    SAN. End-user/production clients that want full verification use ``+s``
+    with their own trusted certificate and the real AdvertisedDNS; that is
+    outside the validate-private tooling's scope.
+    """
     base = "bolt" if fields.get("NumberOfServers", "3") == "1" else "neo4j"
-    if fields.get("BoltTlsSecretArn", ""):
+    if fields.get("AdvertisedDNS", ""):
         return f"{base}+ssc"
     return base
 

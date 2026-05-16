@@ -4,7 +4,7 @@
 # dependencies = ["boto3"]
 # ///
 
-"""Open an SSM port-forward tunnel to Neo4j Browser on port 7474."""
+"""Open an SSM port-forward tunnel to Neo4j Browser on port 7473."""
 
 from __future__ import annotations
 
@@ -38,20 +38,24 @@ def main() -> None:
     region = require_field(fields, "Region", outputs_file)
     bastion_id = require_field(fields, "Neo4jOperatorBastionId", outputs_file)
     nlb_dns = require_field(fields, "Neo4jInternalDNS", outputs_file)
+    advertised_dns = require_field(fields, "AdvertisedDNS", outputs_file)
     bolt_scheme = resolve_bolt_scheme(fields)
-    local_scheme = "bolt+ssc" if bolt_scheme.endswith("+ssc") else "bolt"
 
     print("=== Neo4j Browser Tunnel ===")
     print()
     print(f"  Stack:         {stack_name}")
     print(f"  Region:        {region}")
     print(f"  Bastion:       {bastion_id}")
+    print(f"  AdvertisedDNS: {advertised_dns}")
     print()
-    print(f"  Tunnel:  localhost:7474  ->  {nlb_dns}:7474")
+    print(f"  Tunnel:  localhost:7473  ->  {nlb_dns}:7473")
+    print()
+    print("  Add to your laptop's /etc/hosts so the cert SAN matches:")
+    print(f"    127.0.0.1 {advertised_dns}")
     print()
     print("  Once the tunnel opens:")
-    print("    Browser: http://localhost:7474")
-    print(f"    Bolt:    {local_scheme}://localhost:7687")
+    print(f"    Browser: https://{advertised_dns}:7473")
+    print(f"    Bolt:    {bolt_scheme}://{advertised_dns}:7687")
     print("             if the Bolt tunnel is also open")
     print()
     print("  Press Ctrl-C to close.")
@@ -70,7 +74,7 @@ def main() -> None:
             "--document-name",
             "AWS-StartPortForwardingSessionToRemoteHost",
             "--parameters",
-            f"host={nlb_dns},portNumber=7474,localPortNumber=7474",
+            f"host={nlb_dns},portNumber=7473,localPortNumber=7473",
         ],
     )
 

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
 import sys
 
 import boto3
+from botocore.exceptions import ClientError
 
 
 @dataclass(frozen=True)
@@ -37,12 +39,12 @@ def _tag_copied_ami(
                 {"Key": "SourceRegion", "Value": source_region},
             ],
         )
-    except Exception as exc:
+    except ClientError as exc:
         print(f"Warning: could not tag copied AMI {ami_id}: {exc}")
 
 
 def resolve_ami(
-    args,
+    args: argparse.Namespace,
     *,
     region: str,
     stack_name: str,

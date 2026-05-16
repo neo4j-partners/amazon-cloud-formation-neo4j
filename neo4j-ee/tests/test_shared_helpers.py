@@ -5,6 +5,7 @@ import io
 from pathlib import Path
 import sys
 import tempfile
+import types
 import unittest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -72,7 +73,7 @@ class OutputHelperTests(unittest.TestCase):
 
 class AmiHelperTests(unittest.TestCase):
     def test_marketplace_mode_does_not_require_local_ami_file(self) -> None:
-        args = type("Args", (), {"marketplace": True})()
+        args = types.SimpleNamespace(marketplace=True)
 
         info = resolve_ami(
             args,

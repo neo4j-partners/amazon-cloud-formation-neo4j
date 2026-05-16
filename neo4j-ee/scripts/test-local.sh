@@ -23,10 +23,6 @@ python3 -m compileall -q \
   test_neo4j/src
 
 echo
-echo "== Shared output parser check =="
-PYTHONPATH=neo4j-ee/src python3 -c "from pathlib import Path; from neo4j_ee.outputs import parse_key_value_text, require_field, truthy; fields = parse_key_value_text('StackName = demo\nIgnored line\nInstallGDS = true\n'); assert require_field(fields, 'StackName', Path('demo.txt')) == 'demo'; assert truthy(fields['InstallGDS'])"
-
-echo
 echo "== Unit tests =="
 python3 -m unittest discover -s neo4j-ee/tests
 

@@ -8,6 +8,7 @@ Usage:
 """
 
 import argparse
+from dataclasses import dataclass
 import difflib
 import re
 import sys
@@ -76,6 +77,31 @@ _PREAMBLE_TLS = [
 ]
 
 
+class BuildError(RuntimeError):
+    """Raised when template source partials cannot be assembled."""
+
+
+@dataclass(frozen=True)
+class TemplateSpec:
+    filename: str
+    description: str
+    metadata_partial: str
+    parameter_partials: tuple[str, ...]
+    rule_partials: tuple[str, ...]
+    conditions_partial: str
+    resource_partials: tuple[str, ...]
+    userdata_resource_partial: str
+    outputs_partial: str
+    rules_blank_between_partials: bool = True
+
+
+def _read(filename: str) -> str:
+    try:
+        return (SRC / filename).read_text()
+    except FileNotFoundError as exc:
+        raise BuildError(f"source partial src/{filename} not found") from exc
+
+
 def _inline_partials(content: str, source_name: str) -> str:
     """Inline UserData partial markers in shell source content."""
 
@@ -83,27 +109,21 @@ def _inline_partials(content: str, source_name: str) -> str:
         partial_name = match.group(1)
         partial_path = PARTIALS / partial_name
         if not partial_path.exists():
-            print(
-                f"ERROR: {source_name} references missing partial {partial_path}",
-                file=sys.stderr,
+            raise BuildError(
+                f"{source_name} references missing partial {partial_path}"
             )
-            sys.exit(1)
         return partial_path.read_text().rstrip("\n")
 
     rendered = PARTIAL_INCLUDE_RE.sub(replace, content)
     if PARTIAL_INCLUDE_RE.search(rendered):
-        print(
-            f"ERROR: unresolved partial include marker remains in {source_name}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        raise BuildError(f"unresolved partial include marker remains in {source_name}")
     return rendered
 
 
 def _userdata_block(base_indent: int = 8) -> str:
     """Return the UserData: Fn::Base64: !Join [...] block as YAML text."""
     source_name = "userdata.sh"
-    sh_content = _inline_partials((SRC / source_name).read_text(), source_name)
+    sh_content = _inline_partials(_read(source_name), source_name)
 
     p = " " * base_indent         # UserData: level
     p2 = " " * (base_indent + 2)  # Fn::Base64: level
@@ -136,183 +156,178 @@ def _userdata_block(base_indent: int = 8) -> str:
     return "".join(result)
 
 
-def _read(filename: str) -> str:
-    return (SRC / filename).read_text()
-
-
-def _assemble_private() -> str:
-    asg_content = _read("asg.yaml")
-    userdata = _userdata_block()
+def _asg_with_userdata(filename: str) -> str:
+    asg_content = _read(filename)
     placeholder = "        # __USERDATA__\n"
     if placeholder not in asg_content:
-        print("ERROR: # __USERDATA__ placeholder not found in src/asg.yaml", file=sys.stderr)
-        sys.exit(1)
-    asg_content = asg_content.replace(placeholder, userdata)
+        raise BuildError(f"# __USERDATA__ placeholder not found in src/{filename}")
+    return asg_content.replace(placeholder, _userdata_block())
 
-    return "".join([
+
+def _append_partials(
+    parts: list[str],
+    filenames: tuple[str, ...],
+    *,
+    blank_between_partials: bool = True,
+) -> None:
+    for index, filename in enumerate(filenames):
+        parts.append(_read(filename))
+        if blank_between_partials or index == len(filenames) - 1:
+            parts.append("\n")
+
+
+def _resource_partial(filename: str, spec: TemplateSpec) -> str:
+    if filename == spec.userdata_resource_partial:
+        return _asg_with_userdata(filename)
+    return _read(filename)
+
+
+def _append_resource_partials(parts: list[str], spec: TemplateSpec) -> None:
+    for filename in spec.resource_partials:
+        parts.append(_resource_partial(filename, spec))
+        parts.append("\n")
+
+
+def _assemble(spec: TemplateSpec) -> str:
+    parts = [
         GENERATED_HEADER,
         "AWSTemplateFormatVersion: '2010-09-09'\n",
-        "Description: Neo4j Enterprise Edition — Private\n",
+        f"Description: {spec.description}\n",
         "Metadata:\n",
-        _read("metadata-private.yaml"),
+        _read(spec.metadata_partial),
         "\n",
         "Parameters:\n",
-        _read("parameters-common.yaml"),
-        "\n",
-        _read("parameters-tls.yaml"),
-        "\n",
-        _read("parameters-private.yaml"),
-        "\n",
-        "Rules:\n",
-        _read("rules-common.yaml"),
-        "\n",
+    ]
+    _append_partials(parts, spec.parameter_partials)
+    parts.append("Rules:\n")
+    _append_partials(
+        parts,
+        spec.rule_partials,
+        blank_between_partials=spec.rules_blank_between_partials,
+    )
+    parts.extend([
         "Conditions:\n",
-        _read("conditions-private.yaml"),
+        _read(spec.conditions_partial),
         "\n",
         "Resources:\n",
-        _read("iam.yaml"),
-        "\n",
-        _read("security-groups.yaml"),
-        "\n",
-        _read("ebs-volumes.yaml"),
-        "\n",
-        asg_content,
-        "\n",
-        _read("networking-private.yaml"),
-        "\n",
-        _read("stack-config.yaml"),
-        "\n",
-        _read("observability.yaml"),
-        "\n",
-        "Outputs:\n",
-        _read("outputs-private.yaml"),
     ])
-
-
-def _assemble_public() -> str:
-    asg_content = _read("asg-public.yaml")
-    userdata = _userdata_block()
-    placeholder = "        # __USERDATA__\n"
-    if placeholder not in asg_content:
-        print("ERROR: # __USERDATA__ placeholder not found in src/asg-public.yaml", file=sys.stderr)
-        sys.exit(1)
-    asg_content = asg_content.replace(placeholder, userdata)
-
-    return "".join([
-        GENERATED_HEADER,
-        "AWSTemplateFormatVersion: '2010-09-09'\n",
-        "Description: Neo4j Enterprise Edition — Public\n",
-        "Metadata:\n",
-        _read("metadata-public.yaml"),
-        "\n",
-        "Parameters:\n",
-        _read("parameters-common.yaml"),
-        "\n",
-        _read("parameters-tls.yaml"),
-        "\n",
-        _read("parameters-public.yaml"),
-        "\n",
-        "Rules:\n",
-        _read("rules-common.yaml"),
-        "\n",
-        "Conditions:\n",
-        _read("conditions-public.yaml"),
-        "\n",
-        "Resources:\n",
-        _read("iam-public.yaml"),
-        "\n",
-        _read("security-groups-public.yaml"),
-        "\n",
-        _read("ebs-volumes.yaml"),
-        "\n",
-        asg_content,
-        "\n",
-        _read("networking-public.yaml"),
-        "\n",
-        _read("password-secret.yaml"),
-        "\n",
-        _read("observability.yaml"),
-        "\n",
+    _append_resource_partials(parts, spec)
+    parts.extend([
         "Outputs:\n",
-        _read("outputs-public.yaml"),
+        _read(spec.outputs_partial),
     ])
+    return "".join(parts)
 
 
-def _assemble_existing_vpc() -> str:
-    asg_content = _read("asg-existing-vpc.yaml")
-    userdata = _userdata_block()
-    placeholder = "        # __USERDATA__\n"
-    if placeholder not in asg_content:
-        print("ERROR: # __USERDATA__ placeholder not found in src/asg-existing-vpc.yaml", file=sys.stderr)
-        sys.exit(1)
-    asg_content = asg_content.replace(placeholder, userdata)
+_PRIVATE_SPEC = TemplateSpec(
+    filename="neo4j-private.template.yaml",
+    description="Neo4j Enterprise Edition — Private",
+    metadata_partial="metadata-private.yaml",
+    parameter_partials=(
+        "parameters-common.yaml",
+        "parameters-tls.yaml",
+        "parameters-private.yaml",
+    ),
+    rule_partials=("rules-common.yaml",),
+    conditions_partial="conditions-private.yaml",
+    resource_partials=(
+        "iam.yaml",
+        "security-groups.yaml",
+        "ebs-volumes.yaml",
+        "asg.yaml",
+        "networking-private.yaml",
+        "stack-config.yaml",
+        "observability.yaml",
+    ),
+    userdata_resource_partial="asg.yaml",
+    outputs_partial="outputs-private.yaml",
+)
 
-    return "".join([
-        GENERATED_HEADER,
-        "AWSTemplateFormatVersion: '2010-09-09'\n",
-        "Description: Neo4j Enterprise Edition — Private, Existing VPC\n",
-        "Metadata:\n",
-        _read("metadata-existing-vpc.yaml"),
-        "\n",
-        "Parameters:\n",
-        _read("parameters-common.yaml"),
-        "\n",
-        _read("parameters-tls.yaml"),
-        "\n",
-        _read("parameters-existing-vpc.yaml"),
-        "\n",
-        "Rules:\n",
-        _read("rules-common.yaml"),
-        _read("rules-existing-vpc.yaml"),
-        "\n",
-        "Conditions:\n",
-        _read("conditions-existing-vpc.yaml"),
-        "\n",
-        "Resources:\n",
-        _read("iam.yaml"),
-        "\n",
-        _read("security-groups-existing-vpc.yaml"),
-        "\n",
-        _read("ebs-volumes.yaml"),
-        "\n",
-        asg_content,
-        "\n",
-        _read("networking-existing-vpc.yaml"),
-        "\n",
-        _read("stack-config-existing-vpc.yaml"),
-        "\n",
-        _read("observability-existing-vpc.yaml"),
-        "\n",
-        "Outputs:\n",
-        _read("outputs-existing-vpc.yaml"),
-    ])
+_PUBLIC_SPEC = TemplateSpec(
+    filename="neo4j-public.template.yaml",
+    description="Neo4j Enterprise Edition — Public",
+    metadata_partial="metadata-public.yaml",
+    parameter_partials=(
+        "parameters-common.yaml",
+        "parameters-tls.yaml",
+        "parameters-public.yaml",
+    ),
+    rule_partials=("rules-common.yaml",),
+    conditions_partial="conditions-public.yaml",
+    resource_partials=(
+        "iam-public.yaml",
+        "security-groups-public.yaml",
+        "ebs-volumes.yaml",
+        "asg-public.yaml",
+        "networking-public.yaml",
+        "password-secret.yaml",
+        "observability.yaml",
+    ),
+    userdata_resource_partial="asg-public.yaml",
+    outputs_partial="outputs-public.yaml",
+)
 
+_EXISTING_VPC_SPEC = TemplateSpec(
+    filename="neo4j-private-existing-vpc.template.yaml",
+    description="Neo4j Enterprise Edition — Private, Existing VPC",
+    metadata_partial="metadata-existing-vpc.yaml",
+    parameter_partials=(
+        "parameters-common.yaml",
+        "parameters-tls.yaml",
+        "parameters-existing-vpc.yaml",
+    ),
+    rule_partials=("rules-common.yaml", "rules-existing-vpc.yaml"),
+    conditions_partial="conditions-existing-vpc.yaml",
+    resource_partials=(
+        "iam.yaml",
+        "security-groups-existing-vpc.yaml",
+        "ebs-volumes.yaml",
+        "asg-existing-vpc.yaml",
+        "networking-existing-vpc.yaml",
+        "stack-config-existing-vpc.yaml",
+        "observability-existing-vpc.yaml",
+    ),
+    userdata_resource_partial="asg-existing-vpc.yaml",
+    outputs_partial="outputs-existing-vpc.yaml",
+    rules_blank_between_partials=False,
+)
 
-_TEMPLATES = [
-    ("neo4j-private.template.yaml", _assemble_private),
-    ("neo4j-public.template.yaml", _assemble_public),
-    ("neo4j-private-existing-vpc.template.yaml", _assemble_existing_vpc),
+_TEMPLATE_SPECS = [
+    _PRIVATE_SPEC,
+    _PUBLIC_SPEC,
+    _EXISTING_VPC_SPEC,
 ]
 
 
+def _assemble_private() -> str:
+    return _assemble(_PRIVATE_SPEC)
+
+
+def _assemble_public() -> str:
+    return _assemble(_PUBLIC_SPEC)
+
+
+def _assemble_existing_vpc() -> str:
+    return _assemble(_EXISTING_VPC_SPEC)
+
+
 def _build() -> None:
-    for filename, assembler in _TEMPLATES:
-        out_path = OUT / filename
-        out_path.write_text(assembler())
+    for spec in _TEMPLATE_SPECS:
+        out_path = OUT / spec.filename
+        out_path.write_text(_assemble(spec))
         print(f"wrote {out_path.relative_to(OUT.parent)}")
 
 
-def _verify() -> None:
+def _verify() -> bool:
     failed = False
-    for filename, assembler in _TEMPLATES:
-        committed_path = OUT / filename
+    for spec in _TEMPLATE_SPECS:
+        committed_path = OUT / spec.filename
         if not committed_path.exists():
-            print(f"ERROR: {filename} not found; run build.py first", file=sys.stderr)
-            sys.exit(1)
-        generated = assembler()
+            raise BuildError(f"{spec.filename} not found; run build.py first")
+        generated = _assemble(spec)
         committed = committed_path.read_text()
         if generated == committed:
-            print(f"{filename} is up to date")
+            print(f"{spec.filename} is up to date")
             continue
         diff = list(difflib.unified_diff(
             committed.splitlines(),
@@ -321,14 +336,16 @@ def _verify() -> None:
             tofile="generated",
             lineterm="",
         ))
-        print(f"ERROR: {filename} is out of date. Run build.py to regenerate.", file=sys.stderr)
+        print(
+            f"ERROR: {spec.filename} is out of date. Run build.py to regenerate.",
+            file=sys.stderr,
+        )
         for line in diff[:80]:
             print(line, file=sys.stderr)
         if len(diff) > 80:
             print(f"  ... ({len(diff) - 80} more lines)", file=sys.stderr)
         failed = True
-    if failed:
-        sys.exit(1)
+    return not failed
 
 
 def main() -> None:
@@ -341,10 +358,15 @@ def main() -> None:
         help="exit non-zero if committed templates differ from a fresh build",
     )
     args = parser.parse_args()
-    if args.verify:
-        _verify()
-    else:
-        _build()
+    try:
+        if args.verify:
+            if not _verify():
+                sys.exit(1)
+        else:
+            _build()
+    except BuildError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

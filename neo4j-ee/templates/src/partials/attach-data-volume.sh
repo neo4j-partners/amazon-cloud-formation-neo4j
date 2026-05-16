@@ -1,4 +1,8 @@
 attach_and_mount_data_volume() {
+  local region="$1"
+  local _stack_id="$2"
+  local _az="$3"
+  local _instance_id="$4"
   echo "Attaching data volume..."
   local data_dir="${NEO4J_DATA_DIR:-/var/lib/neo4j/data}"
   local fstab_path="${FSTAB_PATH:-/etc/fstab}"

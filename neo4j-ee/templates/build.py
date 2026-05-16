@@ -21,12 +21,10 @@ PARTIAL_INCLUDE_RE = re.compile(
     r"^#\s*include\s+partials/([A-Za-z0-9_.-]+\.sh)\s*$",
     re.MULTILINE,
 )
-EMBED_CONF_RE = re.compile(
-    r"^#\s*embed-conf\s+([A-Za-z0-9_.-]+\.conf)\s*$",
-    re.MULTILINE,
-)
-EMBED_CONF_DEST = "/var/lib/neo4j/neo4j-base.conf"
-EMBED_CONF_HEREDOC = "NEO4JBASE"
+BOOTSTRAP_SOURCE = "bootstrap/neo4j-bootstrap.sh"
+BASE_CONF_SOURCE = "neo4j-base.conf"
+BOOTSTRAP_DEST = "/opt/neo4j/bin/neo4j-bootstrap.sh"
+BASE_CONF_DEST = "/opt/neo4j/conf/neo4j-base.conf"
 
 GENERATED_HEADER = """\
 # GENERATED FILE — do not edit directly.
@@ -123,25 +121,63 @@ def _inline_partials(content: str, source_name: str) -> str:
     rendered = PARTIAL_INCLUDE_RE.sub(replace, content)
     if PARTIAL_INCLUDE_RE.search(rendered):
         raise BuildError(f"unresolved partial include marker remains in {source_name}")
-
-    def embed_conf(match: re.Match[str]) -> str:
-        conf_name = match.group(1)
-        conf_path = SRC / conf_name
-        if not conf_path.exists():
-            raise BuildError(
-                f"{source_name} references missing conf {conf_path}"
-            )
-        body = conf_path.read_text().rstrip("\n")
-        return (
-            f"cat > {EMBED_CONF_DEST} <<'{EMBED_CONF_HEREDOC}'\n"
-            f"{body}\n"
-            f"{EMBED_CONF_HEREDOC}"
-        )
-
-    rendered = EMBED_CONF_RE.sub(embed_conf, rendered)
-    if EMBED_CONF_RE.search(rendered):
-        raise BuildError(f"unresolved embed-conf marker remains in {source_name}")
     return rendered
+
+
+def _literal_block_lines(content: str, indent: int) -> list[str]:
+    """Render content as YAML block-literal lines at the given indent.
+
+    Mirrors the UserData block-literal rule: non-empty lines are indented,
+    blank lines are emitted empty so they do not terminate the scalar.
+    """
+    pad = " " * indent
+    out: list[str] = []
+    for line in content.splitlines():
+        stripped = line.rstrip("\n\r")
+        out.append(f"{pad}{stripped}\n" if stripped else "\n")
+    return out
+
+
+def _metadata_block(base_indent: int = 4) -> str:
+    """Return the LaunchTemplate Metadata: AWS::CloudFormation::Init block.
+
+    Delivers the template-owned bootstrap and neo4j-base.conf as cfn-init
+    file resources. Content is embedded as plain YAML literal blocks, not
+    Fn::Sub, so the bytes are deterministic (NFR-6) and bash ${...} does
+    not collide with Fn::Sub ${} (AD-3).
+    """
+    bootstrap = _inline_partials(_read(BOOTSTRAP_SOURCE), BOOTSTRAP_SOURCE)
+    base_conf = _read(BASE_CONF_SOURCE)
+
+    p = " " * base_indent          # Metadata:
+    p2 = " " * (base_indent + 2)   # AWS::CloudFormation::Init:
+    p4 = " " * (base_indent + 4)   # config:
+    p6 = " " * (base_indent + 6)   # files:
+    p8 = " " * (base_indent + 8)   # /path:
+    p10 = " " * (base_indent + 10)  # mode/owner/group/content:
+    content_indent = base_indent + 12
+
+    result = [
+        f"{p}Metadata:\n",
+        f"{p2}AWS::CloudFormation::Init:\n",
+        f"{p4}config:\n",
+        f"{p6}files:\n",
+        f"{p8}{BOOTSTRAP_DEST}:\n",
+        f"{p10}mode: '000700'\n",
+        f"{p10}owner: root\n",
+        f"{p10}group: root\n",
+        f"{p10}content: |\n",
+    ]
+    result.extend(_literal_block_lines(bootstrap.rstrip("\n"), content_indent))
+    result.extend([
+        f"{p8}{BASE_CONF_DEST}:\n",
+        f"{p10}mode: '000644'\n",
+        f"{p10}owner: root\n",
+        f"{p10}group: root\n",
+        f"{p10}content: |\n",
+    ])
+    result.extend(_literal_block_lines(base_conf.rstrip("\n"), content_indent))
+    return "".join(result)
 
 
 def _userdata_block(base_indent: int = 8) -> str:
@@ -182,10 +218,16 @@ def _userdata_block(base_indent: int = 8) -> str:
 
 def _asg_with_userdata(filename: str) -> str:
     asg_content = _read(filename)
-    placeholder = "        # __USERDATA__\n"
-    if placeholder not in asg_content:
+    userdata_placeholder = "        # __USERDATA__\n"
+    metadata_placeholder = "    # __INIT_METADATA__\n"
+    if userdata_placeholder not in asg_content:
         raise BuildError(f"# __USERDATA__ placeholder not found in src/{filename}")
-    return asg_content.replace(placeholder, _userdata_block())
+    if metadata_placeholder not in asg_content:
+        raise BuildError(
+            f"# __INIT_METADATA__ placeholder not found in src/{filename}"
+        )
+    asg_content = asg_content.replace(metadata_placeholder, _metadata_block())
+    return asg_content.replace(userdata_placeholder, _userdata_block())
 
 
 def _append_partials(

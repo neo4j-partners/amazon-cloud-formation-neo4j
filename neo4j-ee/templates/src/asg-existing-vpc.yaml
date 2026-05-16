@@ -133,6 +133,7 @@
 
   Neo4jLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
+    # __INIT_METADATA__
     Properties:
       LaunchTemplateData:
         ImageId: !Ref ImageId

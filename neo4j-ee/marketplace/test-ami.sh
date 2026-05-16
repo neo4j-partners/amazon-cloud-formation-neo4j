@@ -240,8 +240,12 @@ COMMAND_ID=$(aws ssm send-command \
     "test -x /sbin/ebsnvme-id && echo PASS: ebsnvme-id present",
     "command -v mkfs.xfs && echo PASS: mkfs.xfs present",
     "echo \"\"",
-    "echo \"=== CHECK 10: No Neo4j configuration baked in AMI ===\"",
-    "test ! -e /etc/neo4j/neo4j.conf && test ! -e /var/lib/neo4j/neo4j-base.conf && echo PASS: No Neo4j config on AMI || echo FAIL: Neo4j config present on AMI"
+    "echo \"=== CHECK 10: No Neo4j configuration or bootstrap baked in AMI ===\"",
+    "test ! -e /etc/neo4j/neo4j.conf && test ! -e /opt/neo4j/conf/neo4j-base.conf && test ! -e /opt/neo4j/bin/neo4j-bootstrap.sh && echo PASS: No Neo4j config on AMI || echo FAIL: Neo4j config present on AMI",
+    "echo \"\"",
+    "echo \"=== CHECK 11: cfn helpers resolve ===\"",
+    "command -v cfn-init && echo PASS: cfn-init resolves || echo FAIL: cfn-init does not resolve",
+    "command -v cfn-signal && echo PASS: cfn-signal resolves || echo FAIL: cfn-signal does not resolve"
   ]' \
   --query "Command.CommandId" \
   --output text)
@@ -361,11 +365,20 @@ for expected in \
 done
 
 if echo "${COMMAND_OUTPUT}" | grep -q "PASS: No Neo4j config on AMI"; then
-  echo "  PASS: No Neo4j configuration is baked into the AMI"
+  echo "  PASS: No Neo4j configuration or bootstrap is baked into the AMI"
 else
-  echo "  FAIL: Neo4j configuration found on the AMI (NFR-3 violation)"
+  echo "  FAIL: Neo4j config or bootstrap found on the AMI (NFR-3/AD-3 violation)"
   FAILURES=$((FAILURES + 1))
 fi
+
+for helper in cfn-init cfn-signal; do
+  if echo "${COMMAND_OUTPUT}" | grep -q "PASS: ${helper} resolves"; then
+    echo "  PASS: ${helper} resolves on the AMI"
+  else
+    echo "  FAIL: ${helper} does not resolve on the AMI (NFR-10 violation)"
+    FAILURES=$((FAILURES + 1))
+  fi
+done
 
 for tool in jq python3.11 unzip; do
   if echo "${COMMAND_OUTPUT}" | grep -q "/${tool}"; then

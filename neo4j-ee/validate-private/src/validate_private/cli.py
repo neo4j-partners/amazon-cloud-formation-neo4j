@@ -93,12 +93,28 @@ def main() -> None:
     )
     mode_group.add_argument(
         "--suite",
-        choices=["failover", "resilience", "all"],
+        choices=["release", "failover", "resilience", "all"],
         help=(
             "Run a suite of test cases. "
+            "release: default validation plus version inventory. "
             "failover: follower-with-data, leader, rolling, reads. "
             "resilience: single-loss, total-loss. "
             "all: failover then resilience (resilience skipped if failover has any failures)."
+        ),
+    )
+    parser.add_argument(
+        "--expected-neo4j-version",
+        help=(
+            "Expected Neo4j Kernel/package version for --suite release. "
+            "When omitted, the release suite records the observed version without enforcing one."
+        ),
+    )
+    parser.add_argument(
+        "--min-java-major",
+        type=int,
+        help=(
+            "Minimum acceptable Java major version for --suite release. "
+            "When omitted, the release suite records the observed version without enforcing one."
         ),
     )
     parser.add_argument(
@@ -152,6 +168,19 @@ def main() -> None:
             else:
                 run_total_loss(config, reporter, timeout=args.timeout or 1200)
     elif args.suite:
+        if args.suite == "release":
+            from validate_private.checks import run_release_gate  # noqa: PLC0415
+            run_release_gate(
+                config,
+                reporter,
+                expected_neo4j_version=args.expected_neo4j_version,
+                min_java_major=args.min_java_major,
+            )
+            exit_code = reporter.summary(
+                stack_name=config.stack_name,
+                bastion_id=config.bastion_id,
+            )
+            sys.exit(exit_code)
         if args.suite in ("failover", "all"):
             _run_failover_suite(config, reporter)
         if args.suite in ("resilience", "all"):

@@ -5,9 +5,10 @@ install_neo4j_from_yum() {
   systemctl enable neo4j
 }
 start_neo4j() {
+  local initialPassword="$1"
   echo "Starting Neo4j..."
   service neo4j start
   if [[ "${IS_FIRST_BOOT}" == "true" ]]; then
-    neo4j-admin dbms set-initial-password "${password}"
+    neo4j-admin dbms set-initial-password "${initialPassword}"
   fi
 }

@@ -1,4 +1,5 @@
 install_cloudwatch_agent() {
+  local stackName="$1"
   local config_path="${CW_AGENT_CONFIG:-/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json}"
   local ctl_path="${CW_AGENT_CTL:-/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl}"
   echo "Configuring CloudWatch agent..."

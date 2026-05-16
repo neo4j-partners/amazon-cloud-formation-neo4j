@@ -13,7 +13,8 @@ These commands use the Neo4j Python driver and boto3 via SSM to reach the cluste
 | Command | What it does | Runtime |
 |---|---|---|
 | `uv run preflight [stack]` | Run 11 required checks (+ 1 informational): stack status, bastion SSM, Python driver, cypher-shell, secret, contract SSM params, VPC endpoints, and endpoint reachability probes. Exits 0 only if all required checks pass. | 45–75s |
-| `uv run validate-private [--stack <name>]` | Run 8 validation checks: Bolt, server edition, listen address, memory config, data directory, APOC, GDS, cluster roles | 25–35s |
+| `uv run validate-private [--stack <name>]` | Run validation checks: Bolt, server edition, listen address, memory config, data directory, APOC, GDS, cluster roles, blocklist | 25–35s |
+| `uv run validate-private --suite release [--stack <name>] [--expected-neo4j-version X] [--min-java-major N]` | Run the default validation checks plus per-node Neo4j RPM, Java, and Cypher default inventory. Optional version flags make the release gate fail on mismatch. | 45–75s |
 | `uv run run-cypher [stack] '<cypher>'` | Execute a Cypher query and print JSON rows to stdout | 5–10s |
 | `uv run admin-shell [stack]` | Open an interactive `cypher-shell` session on the bastion | Interactive |
 | `uv run ssm-check-sessions [stack]` | List active SSM sessions for the stack's Neo4j instance(s) and operator bastion. | <5s |
@@ -47,3 +48,15 @@ Operator helper scripts. Run Python helpers with `uv run <script>.py`; they use 
 - A deployed Private-mode stack with its output file in `../.deploy/`
 
 Run `uv run preflight` first to confirm the stack and bastion are ready before using the other tools.
+
+## Release gate
+
+The lightweight post-release gate is:
+
+1. Resolve the expected Neo4j version from the same `stable/latest` package source used by the deployment.
+2. Confirm the expected Java major version for that Neo4j release.
+3. Deploy a fresh EE Private stack from the rendered templates.
+4. Run `uv run preflight --stack <stack>`.
+5. Run `uv run validate-private --suite release --stack <stack> --expected-neo4j-version <version> --min-java-major <major>`.
+6. Run a targeted resilience case only when the release changes boot, volume, ASG, or cluster-recovery behavior.
+7. Tear the stack down.

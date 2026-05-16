@@ -1290,9 +1290,6 @@ Resources:
               - "gdsLicenseSecretArn="
               - Ref: GdsLicenseSecretArn
               - "\n"
-              - "certificateArn="
-              - Ref: CertificateArn
-              - "\n"
               - "advertisedDNS="
               - Ref: AdvertisedDNS
               - "\n"
@@ -1333,7 +1330,7 @@ Resources:
                 # Hand every runtime value to the bootstrap as named, exported environment
                 # variables. The Secrets Manager password travels by env, never on argv, so it
                 # is not exposed in the process list or cloud-init logs.
-                export stackName region nodeCount loadBalancerDNSName advertisedDNS certificateArn
+                export stackName region nodeCount loadBalancerDNSName advertisedDNS
                 export installGDS installBloom gdsLicenseSecretArn bloomLicenseSecretArn
                 export password _stack_id _instance_id _az
 
@@ -1984,7 +1981,36 @@ Resources:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/nlb-dns'
       Type: String
       Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
-      Description: Internal NLB DNS name (connect via neo4j://<dns>:7687 from in-VPC).
+      Description: Internal NLB DNS name. Map AdvertisedDNS to this hostname so TLS clients connect via the cert SAN.
+
+  Neo4jConfigAdvertisedDnsParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/advertised-dns'
+      Type: String
+      Value: !Ref AdvertisedDNS
+      Description: Public DNS name that resolves to the NLB and matches the ACM cert SAN. In-VPC clients connect via neo4j+s://<advertised-dns>:7687 and https://<advertised-dns>:7473.
+
+  Neo4jConfigPrivateDnsHostedZoneIdParameter:
+    Type: AWS::SSM::Parameter
+    Condition: CreatePrivateDns
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-dns-hosted-zone-id'
+      Type: String
+      Value: !If
+        - UseExistingPrivateDnsHostedZone
+        - !Ref PrivateDnsHostedZoneId
+        - !Ref Neo4jPrivateDnsHostedZone
+      Description: Route 53 private hosted zone ID containing the AdvertisedDNS record.
+
+  Neo4jConfigPrivateDnsRecordParameter:
+    Type: AWS::SSM::Parameter
+    Condition: CreatePrivateDns
+    Properties:
+      Name: !Sub '/neo4j-ee/${AWS::StackName}/private-dns-record'
+      Type: String
+      Value: !Ref AdvertisedDNS
+      Description: Route 53 private DNS record mapped to the internal NLB.
 
   Neo4jConfigRegionParameter:
     Type: AWS::SSM::Parameter
@@ -2170,6 +2196,17 @@ Outputs:
   Neo4jInternalDNS:
     Description: Internal NLB DNS name (not internet-reachable; use SSM port-forwarding to connect)
     Value: !GetAtt Neo4jNetworkLoadBalancer.DNSName
+  Neo4jPrivateDnsHostedZoneId:
+    Condition: CreatePrivateDns
+    Description: Route 53 private hosted zone ID containing AdvertisedDNS.
+    Value: !If
+      - UseExistingPrivateDnsHostedZone
+      - !Ref PrivateDnsHostedZoneId
+      - !Ref Neo4jPrivateDnsHostedZone
+  Neo4jPrivateDnsRecord:
+    Condition: CreatePrivateDns
+    Description: Private DNS record mapped to the internal NLB.
+    Value: !Ref AdvertisedDNS
   Neo4jOperatorBastionId:
     Description: >-
       Operator bastion instance ID. Use this as the SSM --target for port-forwarding
@@ -2196,11 +2233,11 @@ Outputs:
       - !Sub '${Neo4jNode1DataVolume},${Neo4jNode2DataVolume},${Neo4jNode3DataVolume}'
       - !Ref Neo4jNode1DataVolume
   Neo4jSSMBoltCommand:
-    Description: "SSM port-forward for Bolt via operator bastion: run then connect to neo4j://localhost:7687"
+    Description: "SSM port-forward for Bolt via operator bastion. After mapping AdvertisedDNS to 127.0.0.1 in /etc/hosts, connect to neo4j+s://<AdvertisedDNS>:7687"
     Value: !Sub "aws ssm start-session --target ${Neo4jOperatorBastion} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7687,localPortNumber=7687' --region ${AWS::Region}"
-  Neo4jSSMHTTPCommand:
-    Description: "SSM port-forward for Browser via operator bastion: run then open http://localhost:7474"
-    Value: !Sub "aws ssm start-session --target ${Neo4jOperatorBastion} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7474,localPortNumber=7474' --region ${AWS::Region}"
+  Neo4jSSMHTTPSCommand:
+    Description: "SSM port-forward for Browser via operator bastion. After mapping AdvertisedDNS to 127.0.0.1 in /etc/hosts, open https://<AdvertisedDNS>:7473"
+    Value: !Sub "aws ssm start-session --target ${Neo4jOperatorBastion} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7473,localPortNumber=7473' --region ${AWS::Region}"
   Neo4jPasswordSecretArn:
     Description: >-
       Secrets Manager ARN holding the Neo4j admin password. The plaintext

@@ -143,6 +143,23 @@ def _secret_exists(ctx: PreflightContext) -> CheckResult:
     return CheckResult(True, f"Secret={secret['Name']}")
 
 
+def _tls_params_set(ctx: PreflightContext) -> CheckResult:
+    cert = ctx.fields.get("CertificateArn", "")
+    dns = ctx.fields.get("AdvertisedDNS", "")
+    missing = [
+        name
+        for name, value in (("CertificateArn", cert), ("AdvertisedDNS", dns))
+        if not value
+    ]
+    if missing:
+        return CheckResult(
+            False,
+            f"missing/empty: {', '.join(missing)} "
+            "(TLS is mandatory for Private and ExistingVpc)",
+        )
+    return CheckResult(True, f"AdvertisedDNS={dns}")
+
+
 def _params_exist(
     ctx: PreflightContext,
     names: tuple[str, ...],
@@ -277,6 +294,10 @@ def main() -> None:
         ("neo4j Python driver installed on bastion", lambda: _neo4j_driver_installed(ctx)),
         ("cypher-shell installed on bastion", lambda: _cypher_shell_installed(ctx)),
         (f"Secret 'neo4j/{ctx.stack_name}/password' exists", lambda: _secret_exists(ctx)),
+        (
+            "TLS params set: CertificateArn, AdvertisedDNS",
+            lambda: _tls_params_set(ctx),
+        ),
         (
             "Contract SSM params: "
             "vpc-id, nlb-dns, external-sg-id, "

@@ -94,7 +94,7 @@ def _print_sessions(sessions: list[SessionInfo]) -> None:
 
 def _print_local_ports() -> None:
     result = subprocess.run(
-        ["lsof", "-i", ":7474", "-i", ":7687"],
+        ["lsof", "-i", ":7473", "-i", ":7687"],
         check=False,
         capture_output=True,
         text=True,
@@ -102,7 +102,7 @@ def _print_local_ports() -> None:
     if result.stdout.strip():
         print(result.stdout.rstrip())
     else:
-        print("  Ports 7474 and 7687 are free")
+        print("  Ports 7473 and 7687 are free")
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:

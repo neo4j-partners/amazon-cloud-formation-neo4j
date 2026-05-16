@@ -63,13 +63,27 @@ class OutputHelperTests(unittest.TestCase):
             require_field(fields, "Password", source)
 
     def test_resolve_bolt_scheme_uses_cluster_and_tls_outputs(self) -> None:
+        # No AdvertisedDNS => TLS off => plain scheme.
         self.assertEqual(resolve_bolt_scheme({"NumberOfServers": "1"}), "bolt")
         self.assertEqual(resolve_bolt_scheme({"NumberOfServers": "3"}), "neo4j")
+        # AdvertisedDNS present => TLS on => +ssc (encrypted, trust-any), which
+        # is correct for both real-ACM and self-signed test certs.
         self.assertEqual(
             resolve_bolt_scheme(
-                {"NumberOfServers": "3", "BoltTlsSecretArn": "arn:test"}
+                {"NumberOfServers": "1", "AdvertisedDNS": "neo4j.example.com"}
+            ),
+            "bolt+ssc",
+        )
+        self.assertEqual(
+            resolve_bolt_scheme(
+                {"NumberOfServers": "3", "AdvertisedDNS": "neo4j.example.com"}
             ),
             "neo4j+ssc",
+        )
+        # An empty AdvertisedDNS (Public without --enable-public-tls) stays plain.
+        self.assertEqual(
+            resolve_bolt_scheme({"NumberOfServers": "3", "AdvertisedDNS": ""}),
+            "neo4j",
         )
 
 

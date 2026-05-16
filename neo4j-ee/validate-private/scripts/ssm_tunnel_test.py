@@ -3,8 +3,9 @@
 SSM port-forward tunnel diagnostic script.
 
 Tests whether an SSM port-forward tunnel started as a Python subprocess actually
-forwards Browser HTTP traffic, and surfaces exactly which subprocess flags cause
-failures.
+forwards Browser HTTPS traffic, and surfaces exactly which subprocess flags cause
+failures. The operator Browser path is HTTPS on 7473 (TLS terminated at the NLB);
+see phase 6 of neo4j-ee/worklog/tls.md.
 
 Usage:
     # Prerequisites: deploy a Private-mode stack and note instance ID and NLB DNS.
@@ -29,6 +30,7 @@ import argparse
 import os
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -43,7 +45,10 @@ except ImportError:
     print("Note: 'requests' not installed — requests-based HTTP check will be skipped.")
 
 
-LOCAL_PORT = 17474   # use a non-standard port to avoid conflicts
+LOCAL_PORT = 17473   # use a non-standard port to avoid conflicts
+# TLS is terminated at the NLB; the cert is self-signed on the test path, so the
+# diagnostic must skip chain/hostname verification (the equivalent of +ssc).
+_TLS_CTX = ssl._create_unverified_context()
 CONNECT_TIMEOUT = 60  # seconds to wait for the port to bind
 HTTP_ATTEMPTS = 20    # how many HTTP attempts to make after port is open
 HTTP_TIMEOUT = 5      # per-request timeout
@@ -137,25 +142,30 @@ def probe_tunnel(
 
         print(f"  Port open after {result['port_open_after_s']}s")
 
-        # Step 2: Plain HTTP data exchange against Browser.
+        # Step 2: TLS handshake + HTTPS data exchange against Browser (7473).
         try:
-            with socket.create_connection(("localhost", local_port), timeout=3) as s:
-                s.settimeout(3)
-                s.sendall(f"GET / HTTP/1.0\r\nHost: {host}\r\n\r\n".encode())
-                data = s.recv(16)
+            with socket.create_connection(("localhost", local_port), timeout=3) as raw:
+                raw.settimeout(3)
+                with _TLS_CTX.wrap_socket(raw, server_hostname=None) as s:
+                    s.sendall(f"GET / HTTP/1.0\r\nHost: {host}\r\n\r\n".encode())
+                    data = s.recv(16)
             if data:
                 result["tcp_only_ok"] = True
-                print(f"  HTTP data exchange: OK ({data[:16]!r})")
+                print(f"  HTTPS data exchange: OK ({data[:16]!r})")
             else:
-                print("  HTTP data exchange: connected but received no data")
+                print("  HTTPS data exchange: connected but received no data")
         except Exception as e:
-            print(f"  HTTP data exchange: {type(e).__name__}: {e}")
+            print(f"  HTTPS data exchange: {type(e).__name__}: {e}")
 
-        # Step 3: HTTP check (if requests is available).
+        # Step 3: HTTPS check (if requests is available).
         if HAS_REQUESTS:
             for attempt in range(HTTP_ATTEMPTS):
                 try:
-                    resp = requests.get(f"http://localhost:{local_port}", timeout=HTTP_TIMEOUT)
+                    resp = requests.get(
+                        f"https://localhost:{local_port}",
+                        timeout=HTTP_TIMEOUT,
+                        verify=False,
+                    )
                     if resp.status_code == 200:
                         result["http_ok"] = True
                         result["http_attempts_before_ok"] = attempt
@@ -170,9 +180,9 @@ def probe_tunnel(
                     print(f"  Attempt {attempt}: ConnectionError: {e}")
                 time.sleep(1)
             else:
-                print(f"  HTTP never returned 200 after {HTTP_ATTEMPTS} attempts")
+                print(f"  HTTPS never returned 200 after {HTTP_ATTEMPTS} attempts")
         else:
-            print("  Skipping HTTP check (requests not installed)")
+            print("  Skipping HTTPS check (requests not installed)")
 
     finally:
         # Terminate the tunnel process (and its entire process group if new_session)
@@ -217,7 +227,8 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="SSM port-forward tunnel diagnostic")
     p.add_argument("--instance", help="EC2 instance ID (SSM target)")
     p.add_argument("--host", help="Remote host to forward to (NLB DNS or IP)")
-    p.add_argument("--remote-port", type=int, default=7474, help="Remote port (default: 7474)")
+    p.add_argument("--remote-port", type=int, default=7473,
+                   help="Remote port (default: 7473, Browser HTTPS)")
     p.add_argument("--local-port", type=int, default=LOCAL_PORT, help=f"Local port (default: {LOCAL_PORT})")
     p.add_argument("--region")
     p.add_argument("--stack-file", type=Path,
@@ -302,7 +313,7 @@ def main() -> None:
         time.sleep(3)
 
     print("\n\n=== RESULTS ===")
-    print(f"{'Label':<45} {'Port':<6} {'Data':<5} {'HTTP':<5} {'Note'}")
+    print(f"{'Label':<45} {'Port':<6} {'Data':<5} {'HTTPS':<5} {'Note'}")
     print("-" * 80)
     for r in results:
         port_s = f"{r['port_open_after_s']}s" if r['port_open_after_s'] is not None else "FAIL"

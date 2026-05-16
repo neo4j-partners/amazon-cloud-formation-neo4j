@@ -30,9 +30,13 @@ configure_tls() {
       echo "  Generating self-signed cert in ${_dir}..."
       mkdir -p "${_dir}"
       umask 077
+      # SAN/CN must be AdvertisedDNS: the NLB re-encrypts to this instance and
+      # Neo4j's Jetty enforces sniHostCheck, so the served cert must match the
+      # browser's Host (AdvertisedDNS) or HTTPS fails with 400 Invalid SNI.
       openssl req -x509 -newkey rsa:2048 -nodes \
         -keyout "${_key}" -out "${_crt}" -days 3650 \
-        -subj "/CN=neo4j-${_proto}" >/dev/null 2>&1
+        -subj "/CN=${advertisedDNS}" \
+        -addext "subjectAltName=DNS:${advertisedDNS}" >/dev/null 2>&1
       umask 022
     fi
     chown -R neo4j:neo4j "${_dir}"

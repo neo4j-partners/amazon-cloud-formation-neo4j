@@ -52,28 +52,42 @@ def check_stack_status(
             ctx.fail(f"Failed to query stack status: {exc}")
 
 
+def _expected_neo4j_ports(config: StackConfig) -> set[int]:
+    """Return the externally reachable Neo4j ports for this stack.
+
+    Bolt is always 7687. The Browser/HTTP port depends on TLS termination: an
+    EE stack with TLS at the NLB (signalled by AdvertisedDNS, recorded as
+    config.bolt_tls_enabled) serves HTTPS on 7473; CE and plain EE serve HTTP
+    on 7474. Mirrors the listener split documented in phase 6 of
+    neo4j-ee/worklog/tls.md.
+    """
+    browser_port = 7473 if (config.edition == "ee" and config.bolt_tls_enabled) else 7474
+    return {browser_port, 7687}
+
+
 def check_security_group_ports(
     session: boto3.Session,
     config: StackConfig,
     reporter: TestReporter,
     resource_map: dict[str, str],
 ) -> None:
-    """Verify the security group allows inbound on ports 7474 and 7687."""
+    """Verify the security group allows inbound on the expected Neo4j ports."""
     with reporter.test("Security group ports") as ctx:
         sg_id = resource_map.get("Neo4jExternalSecurityGroup")
         if not sg_id:
             ctx.fail("Neo4jExternalSecurityGroup not found in stack resources")
             return
 
+        expected_ports = _expected_neo4j_ports(config)
         try:
             ec2 = session.client("ec2")
             resp = ec2.describe_security_groups(GroupIds=[sg_id])
             permissions = resp["SecurityGroups"][0]["IpPermissions"]
             open_ports = {p["FromPort"] for p in permissions if "FromPort" in p}
 
-            missing = {7474, 7687} - open_ports
+            missing = expected_ports - open_ports
             if not missing:
-                ctx.pass_(f"{sg_id} allows ports 7474 and 7687")
+                ctx.pass_(f"{sg_id} allows ports {sorted(expected_ports)}")
             else:
                 ctx.fail(
                     f"{sg_id} missing expected ports: {missing} "
@@ -289,7 +303,7 @@ def check_external_sg_cidr(
     reporter: TestReporter,
     resource_map: dict[str, str],
 ) -> None:
-    """Verify external SG ingress CIDRs on ports 7474/7687 match the AllowedCIDR stack parameter.
+    """Verify external SG ingress CIDRs on the Neo4j ports match the AllowedCIDR stack parameter.
 
     On CE the user-facing SG is Neo4jExternalSecurityGroup and AllowedCIDR is
     bound directly there. On EE public the NLB fronts the cluster: AllowedCIDR
@@ -326,14 +340,15 @@ def check_external_sg_cidr(
             ec2_resp = ec2.describe_security_groups(GroupIds=[sg_id])
             permissions = ec2_resp["SecurityGroups"][0]["IpPermissions"]
 
+            expected_ports = _expected_neo4j_ports(config)
             port_cidrs: dict[int, list[str]] = {}
             for perm in permissions:
                 port = perm.get("FromPort")
-                if port in (7474, 7687):
+                if port in expected_ports:
                     port_cidrs[port] = [r["CidrIp"] for r in perm.get("IpRanges", [])]
 
             issues = []
-            for port in (7474, 7687):
+            for port in sorted(expected_ports):
                 cidrs = port_cidrs.get(port, [])
                 if not cidrs:
                     issues.append(f"port {port}: no CIDR found")
@@ -341,7 +356,10 @@ def check_external_sg_cidr(
                     issues.append(f"port {port}: {cidrs} (expected {expected_cidr})")
 
             if not issues:
-                ctx.pass_(f"{sg_id} ports 7474/7687 restricted to {expected_cidr}")
+                ctx.pass_(
+                    f"{sg_id} ports {sorted(expected_ports)} restricted to "
+                    f"{expected_cidr}"
+                )
             else:
                 ctx.fail(f"CIDR mismatch on {sg_id}: {'; '.join(issues)}")
         except Exception as exc:

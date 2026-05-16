@@ -204,7 +204,7 @@ Parameters:
     ConstraintDescription: Must be blank or a valid ACM certificate ARN.
   AdvertisedDNS:
     Description: >-
-      Public DNS name that resolves to this NLB. Used as the certificate SAN
+      Advertised DNS name that resolves to this NLB. Used as the certificate SAN
       and as the host placed in server.bolt.advertised_address and
       server.http.advertised_address. Map this name to the NLB DNS via Route 53
       or operator-managed DNS before clients connect. Required for Private and
@@ -1132,9 +1132,13 @@ Resources:
                       echo "  Generating self-signed cert in ${_dir}..."
                       mkdir -p "${_dir}"
                       umask 077
+                      # SAN/CN must be AdvertisedDNS: the NLB re-encrypts to this instance and
+                      # Neo4j's Jetty enforces sniHostCheck, so the served cert must match the
+                      # browser's Host (AdvertisedDNS) or HTTPS fails with 400 Invalid SNI.
                       openssl req -x509 -newkey rsa:2048 -nodes \
                         -keyout "${_key}" -out "${_crt}" -days 3650 \
-                        -subj "/CN=neo4j-${_proto}" >/dev/null 2>&1
+                        -subj "/CN=${advertisedDNS}" \
+                        -addext "subjectAltName=DNS:${advertisedDNS}" >/dev/null 2>&1
                       umask 022
                     fi
                     chown -R neo4j:neo4j "${_dir}"
@@ -1989,7 +1993,7 @@ Resources:
       Name: !Sub '/neo4j-ee/${AWS::StackName}/advertised-dns'
       Type: String
       Value: !Ref AdvertisedDNS
-      Description: Public DNS name that resolves to the NLB and matches the ACM cert SAN. In-VPC clients connect via neo4j+s://<advertised-dns>:7687 and https://<advertised-dns>:7473.
+      Description: Advertised DNS name that resolves to the NLB and matches the ACM cert SAN. Operator tooling connects via neo4j+ssc://<advertised-dns>:7687; production clients with a trusted cert use neo4j+s://<advertised-dns>:7687. Browser is https://<advertised-dns>:7473.
 
   Neo4jConfigPrivateDnsHostedZoneIdParameter:
     Type: AWS::SSM::Parameter
@@ -2233,7 +2237,7 @@ Outputs:
       - !Sub '${Neo4jNode1DataVolume},${Neo4jNode2DataVolume},${Neo4jNode3DataVolume}'
       - !Ref Neo4jNode1DataVolume
   Neo4jSSMBoltCommand:
-    Description: "SSM port-forward for Bolt via operator bastion. After mapping AdvertisedDNS to 127.0.0.1 in /etc/hosts, connect to neo4j+s://<AdvertisedDNS>:7687"
+    Description: "SSM port-forward for Bolt via operator bastion. After mapping AdvertisedDNS to 127.0.0.1 in /etc/hosts, operator tooling connects to neo4j+ssc://<AdvertisedDNS>:7687 (tolerates the self-signed test cert). Production clients with a trusted cert and real DNS use neo4j+s://<AdvertisedDNS>:7687."
     Value: !Sub "aws ssm start-session --target ${Neo4jOperatorBastion} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters 'host=${Neo4jNetworkLoadBalancer.DNSName},portNumber=7687,localPortNumber=7687' --region ${AWS::Region}"
   Neo4jSSMHTTPSCommand:
     Description: "SSM port-forward for Browser via operator bastion. After mapping AdvertisedDNS to 127.0.0.1 in /etc/hosts, open https://<AdvertisedDNS>:7473"

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 
 from private_tools import (
     read_outputs,
@@ -61,6 +62,10 @@ def main() -> None:
     print("  Press Ctrl-C to close.")
     print()
 
+    # os.execvp replaces this process without flushing Python's buffers; under
+    # non-TTY (block-buffered) stdout the header above would otherwise be lost.
+    sys.stdout.flush()
+    sys.stderr.flush()
     os.execvp(
         "aws",
         [

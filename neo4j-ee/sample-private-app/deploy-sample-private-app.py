@@ -28,7 +28,12 @@ TEMPLATE_FILE = SCRIPT_DIR / "sample-private-app.template.yaml"
 LAMBDA_DIR = SCRIPT_DIR / "lambda"
 
 sys.path.insert(0, str(EE_DIR / "src"))
-from neo4j_ee.outputs import read_outputs, require_field, resolve_outputs_file  # noqa: E402
+from neo4j_ee.outputs import (  # noqa: E402
+    read_outputs,
+    require_field,
+    resolve_bolt_scheme,
+    resolve_outputs_file,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,13 +86,6 @@ def describe_stack_id(cfn, stack_name: str) -> str:
     if not stack_id:
         raise SystemExit(f"ERROR: Could not resolve stack ID for {stack_name}.")
     return stack_id
-
-
-def resolve_bolt_scheme(number_of_servers: str, bolt_tls_enabled: bool) -> str:
-    base = "bolt" if number_of_servers == "1" else "neo4j"
-    if bolt_tls_enabled:
-        return f"{base}+ssc"
-    return base
 
 
 def print_header(
@@ -391,7 +389,10 @@ def main() -> None:
         ) from exc
     deployment_mode = fields.get("DeploymentMode", "")
     number_of_servers = fields.get("NumberOfServers", "1")
-    bolt_tls_enabled = bool(fields.get("BoltTlsSecretArn"))
+    # TLS is signalled by a non-empty AdvertisedDNS (mandatory for Private and
+    # ExistingVpc); operator/app clients use the +ssc scheme. Mirrors
+    # neo4j_ee.outputs.resolve_bolt_scheme so tooling does not drift.
+    bolt_tls_enabled = bool(fields.get("AdvertisedDNS"))
 
     if deployment_mode not in {"Private", "ExistingVpc"}:
         raise SystemExit(
@@ -408,7 +409,7 @@ def main() -> None:
     app_stack_name = f"neo4j-sample-private-app-{neo4j_stack}{suffix}"
     ssm_prefix = f"/neo4j-ee/{neo4j_stack}"
     neo4j_stack_id = describe_stack_id(cfn, neo4j_stack)
-    bolt_scheme = resolve_bolt_scheme(number_of_servers, bolt_tls_enabled)
+    bolt_scheme = resolve_bolt_scheme(fields)
 
     print_header(
         neo4j_stack,

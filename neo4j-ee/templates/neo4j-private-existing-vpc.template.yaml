@@ -890,14 +890,24 @@ Resources:
                   --region "${region}")
 
                 set_neo4j_conf() {
-                  local conf=/etc/neo4j/neo4j.conf
-                  sed -i "s|^#\?$1=.*|$1=$2|" "$conf"
-                  if ! grep -q "^$1=" "$conf"; then
-                    echo "$1=$2" >> "$conf"
+                  local key="$1"
+                  local value="$2"
+                  local conf="${NEO4J_CONF:-/etc/neo4j/neo4j.conf}"
+                  local key_pattern replacement
+                  key_pattern=$(printf '%s' "${key}" | sed 's/[][\\.^$*]/\\&/g')
+                  replacement=$(printf '%s=%s' "${key}" "${value}" | sed 's/[\\&|]/\\&/g')
+                  sed -i.bak "s|^#\{0,1\}${key_pattern}=.*|${replacement}|" "$conf"
+                  rm -f "${conf}.bak"
+                  if ! awk -v key="${key}" 'index($0, key "=") == 1 { found = 1 } END { exit found ? 0 : 1 }' "$conf"; then
+                    echo "${key}=${value}" >> "$conf"
                   fi
                 }
                 attach_and_mount_data_volume() {
                   echo "Attaching data volume..."
+                  local data_dir="${NEO4J_DATA_DIR:-/var/lib/neo4j/data}"
+                  local fstab_path="${FSTAB_PATH:-/etc/fstab}"
+                  local nvme_device_glob="${NVME_DEVICE_GLOB:-/dev/nvme?n1}"
+                  local allow_regular_devices="${ALLOW_REGULAR_NVME_DEVICES:-false}"
                   local vols vc vid uuid
                   local dev=""
                   vols=$(aws ec2 describe-volumes --region "$region" \
@@ -934,8 +944,8 @@ Resources:
                   vid_serial=$(echo "${vid}" | tr -d '-')
                   udevadm settle --timeout=30 || true
                   for t in $(seq 1 15); do
-                    for d in /dev/nvme?n1; do
-                      [[ -b "$d" ]] || continue
+                    for d in ${nvme_device_glob}; do
+                      [[ -b "$d" || ( "${allow_regular_devices}" == "true" && -e "$d" ) ]] || continue
                       local d_serial
                       d_serial=$(lsblk -no SERIAL "$d" 2>/dev/null | tr -d ' ')
                       if [[ "$d_serial" == "$vid_serial" ]]; then
@@ -944,17 +954,17 @@ Resources:
                     done
                     sleep 2
                   done
-                  [[ -n "${dev}" && -b "${dev}" ]] || fail "Could not resolve NVMe device for ${vid}."
+                  [[ -n "${dev}" && ( -b "${dev}" || ( "${allow_regular_devices}" == "true" && -e "${dev}" ) ) ]] || fail "Could not resolve NVMe device for ${vid}."
                   if ! blkid "${dev}" > /dev/null 2>&1; then
                     mkfs.xfs "${dev}"
                     IS_FIRST_BOOT=true
                   fi
                   uuid=$(blkid -s UUID -o value "${dev}")
                   [[ -n "${uuid}" ]] || fail "No UUID on ${dev}."
-                  mkdir -p /var/lib/neo4j/data
-                  echo "UUID=${uuid}  /var/lib/neo4j/data  xfs  defaults,nofail,noatime,x-systemd.device-timeout=30  0 2" >> /etc/fstab
-                  mount /var/lib/neo4j/data
-                  [[ "${IS_FIRST_BOOT}" != "true" ]] || chown neo4j:neo4j /var/lib/neo4j/data
+                  mkdir -p "${data_dir}"
+                  echo "UUID=${uuid}  ${data_dir}  xfs  defaults,nofail,noatime,x-systemd.device-timeout=30  0 2" >> "${fstab_path}"
+                  mount "${data_dir}"
+                  [[ "${IS_FIRST_BOOT}" != "true" ]] || chown neo4j:neo4j "${data_dir}"
                 }
                 fetch_and_install_license() {
                   local _arn="$1"
@@ -994,44 +1004,51 @@ Resources:
                   fi
                 }
                 install_apoc() {
+                  local neo4j_home="${NEO4J_HOME:-/var/lib/neo4j}"
                   local jar
-                  jar=$(ls /var/lib/neo4j/labs/apoc-*-core.jar 2>/dev/null | head -1 || true)
+                  jar=$(ls "${neo4j_home}"/labs/apoc-*-core.jar 2>/dev/null | head -1 || true)
                   if [ -z "$jar" ]; then
-                    fail "APOC core JAR not found in /var/lib/neo4j/labs after installing neo4j-enterprise."
+                    fail "APOC core JAR not found in ${neo4j_home}/labs after installing neo4j-enterprise."
                   fi
                   echo "Installing APOC plugin..."
-                  cp "$jar" /var/lib/neo4j/plugins/
-                  chown neo4j:neo4j /var/lib/neo4j/plugins/$(basename "$jar")
+                  cp "$jar" "${neo4j_home}/plugins/"
+                  chown neo4j:neo4j "${neo4j_home}/plugins/$(basename "$jar")"
                 }
                 install_plugin() {
+                  local neo4j_home="${NEO4J_HOME:-/var/lib/neo4j}"
                   local label="$1" pattern="$2"
                   local jar
-                  jar=$(ls /var/lib/neo4j/products/${pattern} 2>/dev/null | head -1 || true)
+                  jar=$(ls "${neo4j_home}"/products/${pattern} 2>/dev/null | head -1 || true)
                   if [ -z "$jar" ]; then
-                    fail "${label} JAR not found in /var/lib/neo4j/products/; rebuild AMI or disable Install${label}."
+                    fail "${label} JAR not found in ${neo4j_home}/products/; rebuild AMI or disable Install${label}."
                   fi
                   echo "Installing ${label} plugin from $jar..."
-                  cp "$jar" /var/lib/neo4j/plugins/
-                  chown neo4j:neo4j /var/lib/neo4j/plugins/$(basename "$jar")
+                  cp "$jar" "${neo4j_home}/plugins/"
+                  chown neo4j:neo4j "${neo4j_home}/plugins/$(basename "$jar")"
                 }
                 extension_config() {
+                  local neo4j_home="${NEO4J_HOME:-/var/lib/neo4j}"
                   echo Configuring extensions and security in neo4j.conf...
                   set_neo4j_conf internal.dbms.cypher_ip_blocklist "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.169.0/24,fc00::/7,fe80::/10,ff00::/8"
                   if [[ "${installBloom}" == "true" ]]; then
                     set_neo4j_conf server.unmanaged_extension_classes "com.neo4j.bloom.server=/bloom,semantics.extension=/rdf"
                     if [[ -n "${bloomLicenseSecretArn}" ]]; then
-                      set_neo4j_conf dbms.bloom.license_file /var/lib/neo4j/licenses/neo4j-bloom.license
+                      set_neo4j_conf dbms.bloom.license_file "${neo4j_home}/licenses/neo4j-bloom.license"
                     fi
                   fi
                   if [[ "${installGDS}" == "true" && -n "${gdsLicenseSecretArn}" ]]; then
-                    set_neo4j_conf gds.enterprise.license_file /var/lib/neo4j/licenses/neo4j-gds.license
+                    set_neo4j_conf gds.enterprise.license_file "${neo4j_home}/licenses/neo4j-gds.license"
                   fi
                   set_neo4j_conf dbms.security.procedures.unrestricted "gds.*,apoc.*,bloom.*"
                   set_neo4j_conf dbms.security.http_auth_allowlist "/,/browser.*,/bloom.*"
                   set_neo4j_conf dbms.security.procedures.allowlist "apoc.*,gds.*,bloom.*"
-                  sed -i '/jdwp/d' /etc/neo4j/neo4j.conf
+                  local conf="${NEO4J_CONF:-/etc/neo4j/neo4j.conf}"
+                  sed -i.bak '/jdwp/d' "${conf}"
+                  rm -f "${conf}.bak"
                 }
                 build_neo4j_conf_file() {
+                  local neo4j_home="${NEO4J_HOME:-/var/lib/neo4j}"
+                  local conf="${NEO4J_CONF:-/etc/neo4j/neo4j.conf}"
                   local -r privateIP="$(hostname -i | awk '{print $NF}')"
                   echo "Configuring network in neo4j.conf..."
                   set_neo4j_conf server.default_listen_address 0.0.0.0
@@ -1040,7 +1057,7 @@ Resources:
                   set_neo4j_conf server.bolt.advertised_address "${boltAdvertisedDNS:-${loadBalancerDNSName}}:7687"
                   set_neo4j_conf server.http.listen_address 0.0.0.0:7474
                   set_neo4j_conf server.http.advertised_address "${loadBalancerDNSName}:7474"
-                  neo4j-admin server memory-recommendation >> /etc/neo4j/neo4j.conf
+                  neo4j-admin server memory-recommendation >> "${conf}"
                   set_neo4j_conf server.metrics.enabled true
                   set_neo4j_conf server.metrics.jmx.enabled true
                   set_neo4j_conf server.metrics.prefix neo4j
@@ -1066,7 +1083,7 @@ Resources:
                       if [[ -n "${asgNames}" ]]; then
                         instanceIds=$(aws autoscaling describe-auto-scaling-groups --region "$region" --auto-scaling-group-names ${asgNames} --query "AutoScalingGroups[].Instances[].InstanceId" --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' | grep -v '^None$' | xargs || true)
                         if [[ -n "${instanceIds}" ]]; then
-                          coreMembers=$(aws ec2 describe-instances --region "$region" --instance-ids ${instanceIds} --query "Reservations[].Instances[].PrivateIpAddress" --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' | grep -v '^None$' | awk '{print $1":6000"}' | paste -sd, || true)
+                          coreMembers=$(aws ec2 describe-instances --region "$region" --instance-ids ${instanceIds} --query "Reservations[].Instances[].PrivateIpAddress" --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' | grep -v '^None$' | awk '{print $1":6000"}' | paste -sd, - || true)
                         fi
                       fi
                       foundCount=0
@@ -1083,7 +1100,8 @@ Resources:
                     set_neo4j_conf dbms.cluster.endpoints "${coreMembers}"
                   fi
                   if [ -n "${boltCertArn}" ]; then
-                    mkdir -p /var/lib/neo4j/certificates/bolt
+                    local cert_dir="${NEO4J_CERT_DIR:-${neo4j_home}/certificates/bolt}"
+                    mkdir -p "${cert_dir}"
                     local _secret_json
                     _secret_json=$(aws secretsmanager get-secret-value --region "${region}" \
                       --secret-id "${boltCertArn}" --query SecretString --output text)
@@ -1091,15 +1109,15 @@ Resources:
                       fail "Secret ${boltCertArn} must be JSON with fields 'certificate' (PEM) and 'private_key' (PEM)."
                     fi
                     umask 077
-                    echo "${_secret_json}" | jq -r '.private_key' > /var/lib/neo4j/certificates/bolt/private.key
-                    echo "${_secret_json}" | jq -r '.certificate' > /var/lib/neo4j/certificates/bolt/public.crt
+                    echo "${_secret_json}" | jq -r '.private_key' > "${cert_dir}/private.key"
+                    echo "${_secret_json}" | jq -r '.certificate' > "${cert_dir}/public.crt"
                     umask 022
                     unset _secret_json
-                    chown -R neo4j:neo4j /var/lib/neo4j/certificates
-                    chmod 600 /var/lib/neo4j/certificates/bolt/private.key
-                    chmod 644 /var/lib/neo4j/certificates/bolt/public.crt
+                    chown -R neo4j:neo4j "$(dirname "${cert_dir}")"
+                    chmod 600 "${cert_dir}/private.key"
+                    chmod 644 "${cert_dir}/public.crt"
                     set_neo4j_conf dbms.ssl.policy.bolt.enabled true
-                    set_neo4j_conf dbms.ssl.policy.bolt.base_directory /var/lib/neo4j/certificates/bolt
+                    set_neo4j_conf dbms.ssl.policy.bolt.base_directory "${cert_dir}"
                     set_neo4j_conf dbms.ssl.policy.bolt.private_key private.key
                     set_neo4j_conf dbms.ssl.policy.bolt.public_certificate public.crt
                     set_neo4j_conf dbms.ssl.policy.bolt.client_auth NONE
@@ -1107,11 +1125,13 @@ Resources:
                   fi
                 }
                 install_cloudwatch_agent() {
+                  local config_path="${CW_AGENT_CONFIG:-/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json}"
+                  local ctl_path="${CW_AGENT_CTL:-/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl}"
                   echo "Configuring CloudWatch agent..."
-                  cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<CWCONFIG
+                  cat > "${config_path}" <<CWCONFIG
                 {"logs":{"logs_collected":{"files":{"collect_list":[{"file_path":"/var/log/neo4j/security.log","log_group_name":"/neo4j/${stackName}/application","log_stream_name":"{instance_id}/security","retention_in_days":90},{"file_path":"/var/log/neo4j/debug.log","log_group_name":"/neo4j/${stackName}/application","log_stream_name":"{instance_id}/debug","retention_in_days":90},{"file_path":"/var/log/cloud-init-output.log","log_group_name":"/neo4j/${stackName}/application","log_stream_name":"{instance_id}/cloud-init-output","retention_in_days":90}]}}}}
                 CWCONFIG
-                  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+                  "${ctl_path}" -a fetch-config -m ec2 -s -c "file:${config_path}"
                 }
                 install_cloudwatch_agent
                 attach_and_mount_data_volume

@@ -322,11 +322,42 @@ what was observed.
 
 The TLS checks must behave correctly across the supported shapes.
 
-- [ ] ExistingVpc stack (`./deploy.py --mode ExistingVpc ...`): `--suite tls`
+- [x] ExistingVpc stack (`./deploy.py --mode ExistingVpc ...`): `--suite tls`
       passes, including `AdvertisedDNS resolves in-VPC` when the stack owns the
       private DNS
-- [ ] Single-node Private stack (`--number-of-servers 1`): exactly one
+      **VERIFIED 2026-05-17.** Donor VPC built with the repo helper
+      `python scripts/create-test-vpc.py --region us-east-1 --with-endpoints`
+      (`vpc-07f8d2d21acda5563`, 3 AZ subnets, ssm/ssmmessages/logs/
+      secretsmanager endpoints, written to `.deploy/vpc-1778992111.txt` and
+      auto-detected by deploy.py). `./deploy.py --mode ExistingVpc
+      --create-private-dns --private-dns-zone neo4j.local --region us-east-1`
+      -> `test-ee-1778992357` (3-node, DeploymentMode=ExistingVpc, stack owns
+      the Route 53 private zone). Note: `--create-private-dns` without a zone
+      arg is rejected up front with a clear error and no partial stack, so
+      `--private-dns-zone neo4j.local` is required for this branch.
+      `preflight` 12/12 PASS. First `--suite tls` run: 9/10 PASS with the
+      known post-deploy transient `GET https://...:7473/ -> 000` (HTTP 000 =
+      handshake/connect not completed; 7687 TLS, cert SAN, and all 3 node
+      TLS-conf lines already PASS). After https-tg reached 3/3 healthy the
+      re-run was **All 10 tests PASSED** (49.4s). Decisive item: the
+      stack-owned-DNS branch is non-vacuous:
+      `PASS: neo4j-test-ee-1778992357.neo4j.local -> 10.42.1.157 (alias to
+      NLB ['10.42.0.87','10.42.1.157','10.42.2.84'])` — a real in-VPC
+      resolution against the stack's own hosted zone, not the synthetic-SAN
+      skip branch that default Private takes.
+- [x] Single-node Private stack (`--number-of-servers 1`): exactly one
       `TLS conf` line, and the Bolt checks still pass
+      **VERIFIED 2026-05-17** via `./deploy.py --number-of-servers 1 --region
+      us-east-1` -> `test-ee-1778991580` (NumberOfServers=1, one private
+      subnet). `preflight` 12/12 PASS (operational SSM params list only
+      `private-subnet-1-id`, confirming the single-subnet single-node shape).
+      `uv run validate-private --stack test-ee-1778991580 --suite tls` exits
+      0, **All 8 tests PASSED** (32.8s) with exactly **one**
+      `TLS conf enforced (bolt REQUIRED, https on, http off)` line (the
+      3-node runs print three), and the Bolt-path checks all PASS (7687 TLS
+      handshake returns a server cert, cert SAN contains the advertised name,
+      bolt REQUIRED). Kill-loop-fixed line `PASS: 7473 TCP, 7687 TCP`
+      present.
 - [x] Public without TLS (`./deploy.py --mode Public`): `validate-private`
       refuses this stack at config load, which is correct. The probe-skip
       branch is exercised only by unit reasoning, not this CLI
@@ -359,11 +390,15 @@ The TLS checks must behave correctly across the supported shapes.
 ## Sign-off checklist
 
 - [ ] Phase 0 fully green
-- [ ] Phase 1 all PASS, exit 0
-- [ ] Phase 2 probe PASS on gated path, absent on demo path
-- [ ] Every Phase 3 negative test observed flipping to FAIL and back to PASS
-- [ ] Phase 4 topologies covered
-- [ ] No vacuous PASS found: every check was seen to fail at least once
+- [x] Phase 1 all PASS, exit 0
+- [x] Phase 2 probe PASS on gated path, absent on demo path
+- [x] Every Phase 3 negative test observed flipping to FAIL and back to PASS
+- [x] Phase 4 topologies covered (release gate 28/28, Public-no-TLS refused,
+      single-node 8/8 with one TLS-conf line, ExistingVpc 10/10 with the
+      stack-owned-DNS branch non-vacuous)
+- [x] No vacuous PASS found: every check was seen to fail at least once
+      (Phase 3 flips + the ExistingVpc `000` -> 200 and the
+      synthetic-SAN-skip vs real-resolution distinction)
 - [ ] Throwaway test stacks torn down: `./teardown.sh` then, if needed,
       `./teardown.sh --delete-volumes`
 

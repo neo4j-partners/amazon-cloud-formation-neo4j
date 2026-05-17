@@ -596,3 +596,89 @@ recording it: `Neo4j Kernel 2026.04.0 (enterprise)`,
 Verdict for the release-gate item: **PASS.** Phase 4 release gate and
 Public-no-TLS items complete. Remaining Phase 4 items (ExistingVpc,
 single-node Private) require fresh deploys.
+
+### Phase 4: single-node Private (test-ee-1778991580)
+
+After full account cleanup (0 EIPs in use, 0 live test-ee stacks, 0
+orphaned available volumes confirmed via direct `aws`), deployed
+`./deploy.py --number-of-servers 1 --region us-east-1` ->
+`test-ee-1778991580` (exit 0, CREATE_COMPLETE, NumberOfServers=1, one
+private subnet, one node ASG).
+
+`preflight test-ee-1778991580` 12/12 PASS. The single-node shape shows
+through in the operational SSM params line: `private-subnet-1-id` only
+(no subnet-2/3), versus the 3-node stacks which list three.
+
+`uv run validate-private --stack test-ee-1778991580 --suite tls` exit 0,
+**All 8 tests PASSED** (32.8s). The decisive single-node assertion: the
+per-node `TLS conf enforced (bolt REQUIRED, https on, http off)` check
+printed exactly **one** line (3-node runs print three). This proves the
+per-node TLS-conf check enumerates the actual cluster membership rather
+than assuming three. Bolt path fully covered on the single node: 7687 TLS
+handshake returns a server certificate, cert subject/SAN contains the
+advertised name, conf shows bolt REQUIRED. Kill-loop-fixed control-plane
+line `PASS: 7473 TCP, 7687 TCP` present here too.
+
+Verdict for the single-node item: **PASS.**
+
+### Phase 4: ExistingVpc sourcing decision
+
+ExistingVpc (`--mode ExistingVpc`) requires a caller-supplied VPC with
+private subnet(s), route table(s), and the SSM/SecretsManager/logs/
+ssmmessages interface endpoints that `preflight` and the data-plane probes
+depend on. Post-cleanup nothing satisfies that, so a donor VPC is needed.
+The repo already ships the intended path: `scripts/create-test-vpc.py
+--region us-east-1 --with-endpoints` builds a minimal 3-AZ donor VPC with
+the four required interface endpoints and writes `.deploy/vpc-*.txt`, which
+`deploy.py --mode ExistingVpc` auto-detects (no need to hand-pass --vpc-id/
+--subnet-*). This is cleaner and more realistic than reusing a Neo4j
+stack's VPC, so that is the path taken (the earlier single-node-VPC-reuse
+idea was abandoned in favor of the supported helper).
+
+### Phase 4: ExistingVpc result (test-ee-1778992357)
+
+Donor VPC: `vpc-07f8d2d21acda5563` (subnets `subnet-03e9fda225bb2501a` /
+`subnet-01931692abdfed1ab` / `subnet-0b29f6ca1636c0e48`, endpoint SG
+`sg-02084a6166f6a0a07`, CIDR `10.42.0.0/16`), `.deploy/vpc-1778992111.txt`.
+
+First deploy attempt failed fast and cleanly: `./deploy.py --mode
+ExistingVpc --create-private-dns` (no zone) exited 1 with
+`--create-private-dns requires --private-dns-zone or
+--private-dns-hosted-zone-id` *before* creating any stack (only the
+licence secrets were created, then auto-cleaned by deploy.py's own
+unwind). Lesson: the stack-owned-DNS branch requires
+`--private-dns-zone <name>`; the validation is up front, no partial infra.
+
+Re-deploy `./deploy.py --mode ExistingVpc --create-private-dns
+--private-dns-zone neo4j.local --region us-east-1` -> `test-ee-1778992357`
+(exit 0, 3-node, DeploymentMode=ExistingVpc, stack owns the Route 53
+private hosted zone for `neo4j.local`).
+
+`preflight test-ee-1778992357` 12/12 PASS (operational SSM params list
+`private-subnet-1-id` + `private-subnet-2-id`, the 3-node ExistingVpc
+shape).
+
+`--suite tls` run 1: **9/10**, the single FAIL being the documented
+post-deploy transient `GET https://neo4j-test-ee-1778992357.neo4j.local
+:7473/ -> 000` (HTTP 000 = TLS connect/handshake did not complete; the
+7687 TLS handshake, cert SAN, and all three node TLS-conf lines already
+PASS, so this is the same cold-start timing flake as Phase 1 `000` and
+Phase 2, not a defect). Confirmed transient the documented way, not
+papered over: polled the https target group to 3/3 healthy, then
+re-ran `--suite tls` -> **All 10 tests PASSED** (49.4s).
+
+Decisive ExistingVpc assertion (the reason this topology is in the plan):
+the `AdvertisedDNS resolves in-VPC` check is **non-vacuous** here.
+Default Private takes the synthetic-SAN skip branch (`... no in-VPC
+record expected`); with `--create-private-dns` the stack owns the zone
+and the check actually resolves the name in-VPC:
+`PASS: neo4j-test-ee-1778992357.neo4j.local -> 10.42.1.157 (alias to NLB
+['10.42.0.87','10.42.1.157','10.42.2.84'])`. This proves the check
+performs a real resolution against the stack's hosted zone rather than
+vacuously passing, which is exactly the stack-owned-DNS branch the plan
+demands.
+
+Verdict for the ExistingVpc item: **PASS.** Phase 4 fully complete (all
+four items: release gate 28/28, Public-no-TLS refused at config load,
+single-node 8/8 with exactly one TLS-conf line, ExistingVpc 10/10 with
+the non-vacuous stack-owned-DNS branch).

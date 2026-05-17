@@ -64,6 +64,12 @@ Parameters:
       - 'false'
     Default: 'false'
     Description: Whether the parent EE stack was deployed with optional Bolt TLS.
+  AdvertisedDNS:
+    Type: String
+    Default: ''
+    Description: >-
+      AdvertisedDNS of the parent EE stack. Empty for plaintext stacks; when set,
+      the Lambda runs an end-to-end TLS conformance probe against the NLB.
 
 Conditions:
   HasObjectVersion: !Not [!Equals [!Ref LambdaS3ObjectVersion, '']]
@@ -177,6 +183,7 @@ Resources:
           NEO4J_SECRET_ARN: !Ref PasswordSecretArn
           NEO4J_NUMBER_OF_SERVERS: !Ref NumberOfServers
           NEO4J_BOLT_TLS: !Ref BoltTlsEnabled
+          NEO4J_ADVERTISED_DNS: !Ref AdvertisedDNS
       Code:
         S3Bucket: !Ref LambdaS3Bucket
         S3Key: !Ref LambdaS3Key
@@ -343,6 +350,7 @@ Resources:
           NEO4J_SECRET_ARN: !Ref PasswordSecretArn
           NEO4J_NUMBER_OF_SERVERS: !Ref NumberOfServers
           NEO4J_BOLT_TLS: !Ref BoltTlsEnabled
+          NEO4J_ADVERTISED_DNS: !Ref AdvertisedDNS
           NEO4J_STACK_NAME: !Ref Neo4jStackName
           NEO4J_STACK_ID: !Ref Neo4jStackId
           SSM_DOC_READ_SERVER_ID: !Ref ReadServerIdDocument

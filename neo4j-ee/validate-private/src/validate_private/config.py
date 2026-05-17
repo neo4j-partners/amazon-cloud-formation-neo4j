@@ -28,6 +28,9 @@ class StackConfig:
     install_apoc: bool
     install_gds: bool
     install_bloom: bool
+    advertised_dns: str
+    certificate_arn: str
+    create_private_dns: bool
 
 
 def _fetch_secret(secret_name: str, region: str) -> str:
@@ -97,4 +100,14 @@ def load_config(
         install_apoc=truthy(fields.get("InstallAPOC")),
         install_gds=truthy(fields.get("InstallGDS")),
         install_bloom=truthy(fields.get("InstallBloom")),
+        advertised_dns=fields.get("AdvertisedDNS", ""),
+        certificate_arn=(
+            fields.get("CertificateArn")
+            or fields.get("AutoImportedCertificateArn", "")
+        ),
+        # Neo4jPrivateDnsHostedZoneId is emitted by outputs-private.yaml only
+        # under the CreatePrivateDns condition, so its presence is the
+        # authoritative signal that the stack owns an in-VPC record for
+        # AdvertisedDNS (no extra AWS call needed).
+        create_private_dns=bool(fields.get("Neo4jPrivateDnsHostedZoneId")),
     )

@@ -230,16 +230,119 @@ cfn-init runs before the package is installed. `/opt/neo4j` is collision-free
 against the RPM and is the shared home of the bootstrap, so base-conf and
 bootstrap form one cleanly cfn-init-owned artifact set.
 
+### AD-4: TLS terminates and re-encrypts at the NLB; instance certs are self-signed
+
+Client TLS terminates at the Network Load Balancer using an ACM certificate,
+and the NLB re-encrypts to Neo4j on the instance. Neo4j serves its own
+per-instance self-signed certificate on Bolt (`7687`) and HTTPS (`7473`), with
+`dbms.ssl.policy.*.client_auth NONE`. The TLS listeners use the
+`ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09` security policy, the AWS-recommended
+hybrid post-quantum policy. It negotiates ML-KEM hybrid key exchange with
+capable clients while remaining backward compatible with TLS 1.3-only and TLS
+1.2-only clients, so adopting it does not break existing clients. NLB selects
+the matching backend policy for the re-encrypt leg automatically.
+`configure_tls` is a
+runtime overlay function (Placement Decision Rule branch 1): it depends on
+`AdvertisedDNS` and the load balancer DNS name and takes both as explicit
+arguments.
+
+**The TLS signal is a non-empty `AdvertisedDNS`, never a secret output.**
+Private and ExistingVpc always pass a non-empty `AdvertisedDNS` and TLS is
+mandatory there, enforced at parameter-validation time by the
+`CertificateArnRequired` and `AdvertisedDnsRequired` Rules. Public is opt-in
+through the `UsePublicTLS` condition; without it the Public NLB stays plain TCP
+on `7474`/`7687`. Operator and test tooling resolve the Bolt scheme from
+non-empty `AdvertisedDNS` and connect with `neo4j+ssc://`. There is no
+`BoltTlsSecretArn` output and no secret-driven TLS path.
+
+**The certificate SAN and CN must be `AdvertisedDNS`.** Neo4j's Jetty enforces
+`sniHostCheck` on HTTPS only, so the served certificate must match the
+browser's `Host`, which is `AdvertisedDNS`. A mismatch fails HTTPS with
+`400 Invalid SNI`. This is why `AdvertisedDNS` is both the certificate SAN/CN
+and the host placed in `server.https.advertised_address` and
+`server.default_advertised_address`. `server.default_advertised_address` in
+particular must stay `AdvertisedDNS`: it is Jetty's no-SNI fallback host, and
+the NLB HTTPS health check on `7473` connects without SNI; if it is not the
+cert SAN, Jetty answers the health check with `400 Invalid SNI` and every
+`7473` target goes unhealthy.
+
+**Bolt alone advertises the NLB DNS, not `AdvertisedDNS`.** Bolt is a routed
+protocol: the cluster publishes `server.bolt.advertised_address` in its
+routing table, and every `neo4j://`-style client must resolve it to refresh
+routing. `AdvertisedDNS` is only guaranteed to resolve in-VPC when the stack
+also owns a Route 53 record for it (`CreatePrivateDns=true` or a real external
+DNS name); by default (`CreatePrivateDns=false`) it is a synthetic cert SAN
+with no in-VPC record. The NLB DNS is always resolvable in-VPC, so
+`server.bolt.advertised_address` (only) is the NLB DNS. Bolt TLS has no
+`sniHostCheck`, so the self-signed cert (SAN = `AdvertisedDNS`) is still
+accepted by `neo4j+ssc://` clients, which encrypt without trust verification.
+
+**Operator tooling uses `neo4j+ssc://`, production clients use `neo4j+s://`.**
+The instance certificate is self-signed and the NLB does not validate it on
+re-encryption (`client_auth NONE`), so trust verification is impossible for
+operator tunnels that reach the NLB by IP. `neo4j+ssc://` encrypts without
+trust verification and is the documented operator and test scheme. Production
+clients that map `AdvertisedDNS` to the NLB and trust the ACM-fronted name use
+`neo4j+s://`. SSM command descriptions and tunnel scripts use the `+ssc` form.
+
+**`openssl` is baked into the AMI, not installed on the boot path.** It is
+OS-level, immutable, and Neo4j-independent, so it belongs in the AMI
+(Placement Decision Rule branch 3). `configure_tls` runs `openssl` to generate
+the per-instance self-signed cert and `fail()`s if it is absent. Generating
+the cert at boot is acceptable because it has no network dependency and is
+idempotent: an existing cert pair is reused, so ASG self-heal does not depend
+on a package mirror. A `dnf install` on the boot path would, which is the
+AD-1 binary-shaped failure class with full ASG-self-heal blast radius.
+
+**The Browser target group uses an L7 health check.** The Browser target group
+health check is `HTTPS` for TLS topologies and `HTTP` for Public without TLS,
+both against `/` with a `200` matcher, so a target is healthy only when Neo4j
+is actually serving. The NLB does not validate the target certificate, so the
+self-signed instance cert is accepted, and TLS 1.2 is sufficient for an NLB
+HTTPS health check. The Bolt target group stays a `TCP` health check because
+Bolt is a binary protocol with no L7 health check available. A TCP-only
+Browser check is prohibited: it reports a wedged Neo4j as healthy.
+
+**Private DNS is an optional, stack-owned convenience.** When
+`CreatePrivateDns` is true, the Private and ExistingVpc templates create a
+Route 53 alias record mapping `AdvertisedDNS` to the internal NLB, in a hosted
+zone the stack creates or in an existing zone passed as
+`PrivateDnsHostedZoneId`. `EvaluateTargetHealth` is `false`: the NLB is the
+only target and there is no failover record, so health-evaluated DNS would
+only add an empty-target-group failure mode during provisioning. Public never
+creates Route 53 private DNS resources.
+
+**TLS enforcement is audited post-deploy, not assumed.** Like the cypher IP
+blocklist invariant, TLS is checked at independent layers and the runtime
+audit is the last one. Build-time contract tests pin the rendered listeners,
+target groups, and `SslPolicy` (NFR-12, NFR-13, NFR-14). After deploy,
+`validate-private --suite tls` proves enforcement, not mere availability,
+from three angles: an elbv2 control-plane audit (listeners `Protocol=TLS`
+with the post-quantum `SslPolicy`, Browser target group `HTTPS`, Bolt `TCP`),
+in-VPC data-plane probes from the bastion (`openssl`/`curl`/`getent`:
+plaintext `7474` refused, HTTPS `7473` answers `200`, Bolt `7687` requires a
+TLS handshake, the served certificate's SAN/CN equals `AdvertisedDNS`,
+`AdvertisedDNS` resolves inside the VPC), and a per-node `neo4j.conf` SSL-key
+read over SSM (`server.bolt.tls_level=REQUIRED`, `https.enabled=true`,
+`http.enabled=false`). `preflight` fails closed if `CertificateArn` or
+`AdvertisedDNS` is absent on a Private or ExistingVpc stack. The
+`sample-private-app` Lambda runs the equivalent probe end-to-end from a real
+in-VPC client and the deploy script exits non-zero on any hard failure
+(plaintext accepted, HTTPS down, or served-cert identity mismatch); strict
+`+s` verification is reported informationally because the auto-imported
+self-signed certificate is a supported mode. A negative result is a real
+finding, never papered over.
+
 ---
 
 ## 6. The AMI / Template / UserData / Bootstrap Split
 
 | Layer | Owns | Changeable by | Examples |
 |---|---|---|---|
-| **AMI** (`marketplace/create-ami.sh`) | OS-level, immutable, Neo4j-independent concerns | AMI rebuild + Marketplace submission + instance replacement | OS patches; AWS CLI v2; `python3.11`, `jq`; `amazon-cloudwatch-agent`; `aws-cfn-bootstrap` (`cfn-init`, `cfn-signal`); Neo4j yum repo + GPG key; `neo4j` system user (uid/gid 500); SSH hardening; IMDSv2 enforcement |
-| **Template** (rendered by `build.py`) | Static Neo4j config and orchestration body, as cfn-init metadata on `Neo4jLaunchTemplate` | Template update, zero Marketplace churn | `neo4j-base.conf` contents; the inlined bootstrap script |
+| **AMI** (`marketplace/create-ami.sh`) | OS-level, immutable, Neo4j-independent concerns | AMI rebuild + Marketplace submission + instance replacement | OS patches; AWS CLI v2; `python3.11`, `jq`, `openssl`; `amazon-cloudwatch-agent`; `aws-cfn-bootstrap` (`cfn-init`, `cfn-signal`); Neo4j yum repo + GPG key; `neo4j` system user (uid/gid 500); SSH hardening; IMDSv2 enforcement |
+| **Template** (rendered by `build.py`) | Static Neo4j config and orchestration body as cfn-init metadata on `Neo4jLaunchTemplate`; the per-topology CloudFormation resources | Template update, zero Marketplace churn | `neo4j-base.conf` contents; the inlined bootstrap script; NLB TLS listeners and target groups; ACM `CertificateArn` and `AdvertisedDNS` parameters; the mandatory-TLS Rules; the optional Route 53 private DNS resources (AD-4) |
 | **UserData** (`templates/src/userdata.sh`) | CloudFormation signaling and metadata resolution that cannot be delegated | Template update | IMDSv2 token + instance-id/AZ fetch; stack-id and logical-id tag lookups; password fetch from Secrets Manager; `cfn-init`; export of runtime env vars; bootstrap invocation; `cfn-signal`; ERR trap |
-| **Bootstrap** (`templates/src/bootstrap/neo4j-bootstrap.sh` + partials) | Boot-time install, configuration application, security assertion, service start | Template update | `install_neo4j_from_yum`, `install_apoc`, `install_plugin`; `apply_base_conf`; runtime overlay functions; `assert_security_invariant`; `start_neo4j` |
+| **Bootstrap** (`templates/src/bootstrap/neo4j-bootstrap.sh` + partials) | Boot-time install, configuration application, security assertion, service start | Template update | `install_neo4j_from_yum`, `install_apoc`, `install_plugin`; `apply_base_conf`; runtime overlay functions including `configure_tls` (AD-4); `assert_security_invariant`; `start_neo4j` |
 
 The AMI carries no Neo4j configuration key, no value, and no conf-mutating
 logic. The same AMI is reused across all three topologies: Public, Private, and
@@ -300,6 +403,19 @@ regression, not an improvement.
   orchestration fix an AMI rebuild and Marketplace resubmission.
 - **Do not add a static Neo4j key as an inline `set_neo4j_conf` call.** Fixed
   keys belong in `neo4j-base.conf` (Placement Decision Rule branch 2).
+- **Do not `dnf`- or `yum`-install any package on the boot path.** `openssl`
+  and every other OS package belong in the AMI. A boot-path package install is
+  the AD-1 binary-shaped failure class with full ASG-self-heal blast radius.
+- **Do not use a TCP-only health check for the Browser target group.** It
+  reports a wedged Neo4j as healthy. The Browser check is L7 (AD-4).
+- **Do not key TLS off a secret output.** The TLS signal is a non-empty
+  `AdvertisedDNS`. There is no `BoltTlsSecretArn`.
+- **Do not set the certificate SAN or CN to anything but `AdvertisedDNS`.**
+  Neo4j's Jetty `sniHostCheck` fails HTTPS with `400 Invalid SNI` on a
+  mismatch (AD-4).
+- **Do not require client auth or a trusted CA on the instance TLS policies.**
+  The NLB re-encrypts without presenting a client certificate; the instance
+  cert is self-signed by design (AD-4).
 
 ---
 
@@ -324,6 +440,9 @@ are kept fixed and gaps in the list below are intentional.
 | NFR-9 | Boot fails closed before `cfn-signal` if the blocklist is absent or empty; the check stays presence-only | `assert_security_invariant` unit tests; AD-2 |
 | NFR-10 | `cfn-init` and `cfn-signal` are present on the built image | `test-ami.sh` CHECK 11 (PATH resolution of both helpers) |
 | NFR-11 | Rendered UserData of every template is well under the 16 KB post-base64 cap | Build-time size guard |
+| NFR-12 | Private and ExistingVpc NLB listeners and target groups are `Protocol: TLS` on `7473`/`7687` with the ACM cert and `ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09`; no plain `7474` in the data path; Public TLS is gated on `UsePublicTLS` (AD-4) | `NlbAndRoutingTests.test_private_existing_listeners_and_tgs_are_tls`, `test_public_listeners_are_tls_conditional` |
+| NFR-13 | The Browser target group uses an L7 health check (`HTTPS` for TLS, `HTTP` for Public plain) against `/` with a `200` matcher; the Bolt target group uses `TCP` (AD-4) | `NlbAndRoutingTests.test_private_existing_listeners_and_tgs_are_tls` |
+| NFR-14 | `openssl` is baked into the AMI and never `dnf`-installed on the boot path (AD-4) | `test_create_ami_bakes_openssl`, `test_configure_tls_does_not_install_packages_at_boot` |
 
 `RenderedTemplateContractTests` additionally assert the rendered cfn-init
 metadata, the single-LaunchTemplate placement, and the embedded base-conf

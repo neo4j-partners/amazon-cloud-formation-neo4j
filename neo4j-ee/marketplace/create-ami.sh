@@ -181,9 +181,13 @@ dnf update -y
 # aws-cfn-bootstrap (cfn-init, cfn-signal) is installed explicitly, not assumed
 # from the AL2023 base, so a base-image change that drops or relocates the
 # helpers fails test-ami.sh at build time rather than a customer launch (NFR-10).
+# openssl is baked here, not dnf-installed at boot: it is OS-level, immutable,
+# and Neo4j-independent (Placement Decision Rule branch 3). configure-tls.sh
+# uses it to generate the per-instance self-signed cert, so a missing openssl
+# must fail at AMI build, not on the ASG self-heal path with no template fix.
 echo "Installing static deployment tooling..."
 dnf remove -y awscli 2>/dev/null || true
-dnf install -y unzip python3.11 jq amazon-cloudwatch-agent aws-cfn-bootstrap
+dnf install -y unzip python3.11 jq openssl amazon-cloudwatch-agent aws-cfn-bootstrap
 
 ARCH="x86_64"
 curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o /tmp/awscliv2.zip

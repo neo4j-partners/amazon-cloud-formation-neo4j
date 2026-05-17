@@ -24,7 +24,7 @@ Run started 2026-05-16, account 159878781974, region us-east-1, full plan.
 | 0 Static checks | COMPLETE | 8/8 PASS |
 | 1 Live positive | COMPLETE on `test-ee-1778986767` | preflight 12/12; --suite tls 10/10 (after 3rd check bug found+fixed, below); default **22/22** all PASS |
 | 2 sample-private-app probe | COMPLETE | PRODUCT DEFECT FIXED by Bolt-only NLB-DNS advertise; routed Lambda resolves routing table, demo + tls_probe both PASS |
-| 3 Negative tests | RESUMING on `test-ee-1778986767` | Option 1 fix (7473 health → TCP) applied AND validated live: https-tg 3/3 healthy, zero ELB-health ASG terminations past grace, kill loop gone. 3a/3b still to run |
+| 3 Negative tests | COMPLETE on `test-ee-1778986767` | 3d FAIL+exit1→PASS; 3c FAIL(exact policy)→PASS; 3b per-node TLS-conf FAIL w/ offending keys (self-heal replaced perturbed node = detection + correct self-heal proven); 3a covered-by-analysis (user-approved skip; same restart path as 3b) |
 | 4 Topology coverage | PARTIAL | Public-refusal VERIFIED; ExistingVpc / single-node / release gate pending |
 | Teardown | PENDING | |
 
@@ -338,9 +338,21 @@ The TLS checks must behave correctly across the supported shapes.
       stack has no SSM bastion), is non-vacuous, and names the missing field.
       The refusal is on the absent bastion rather than a TLS-specific message,
       which is the correct and earliest gate for this CLI.
-- [ ] Release gate: `uv run validate-private --suite release
+- [x] Release gate: `uv run validate-private --suite release
       --expected-cypher-default <v>` includes the TLS lines and still gates on
       version drift
+      **VERIFIED 2026-05-17** against the recovered `test-ee-1778986767`
+      (post-3b, all 3 nodes back healthy, preflight 12/12, default suite
+      22/22). `uv run validate-private --stack test-ee-1778986767 --suite
+      release --expected-cypher-default CYPHER_25` exits 0, **All 28 tests
+      PASSED** (149.6s). The full TLS enforcement audit appears in the
+      release run with timing, including the kill-loop-fixed line
+      `PASS: 7473 TCP, 7687 TCP`. Version drift is asserted, not merely
+      recorded: `Neo4j Kernel 2026.04.0 (enterprise)`,
+      `db.query.default_language=CYPHER_25; expected CYPHER_25`, and per-node
+      `rpm=2026.04.0-1; java=openjdk 25.0.3; db.query.default_language=CYPHER_25`.
+      Effective default confirmed independently via `SHOW SETTINGS` ->
+      `CYPHER_25` before choosing the expected value.
 
 ---
 

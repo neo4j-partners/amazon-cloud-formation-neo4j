@@ -470,6 +470,54 @@ rationale comment matching the three `networking-*.yaml` partials and the
 tests exist, so none needed updating; the build-time contract test was
 already aligned to TCP.
 
+### Phase 3 negatives on `test-ee-1778986767`
+
+Default suite first (baseline): **all 22 PASSED** (incl. corrected
+`7473 TCP, 7687 TCP`, blocklist invariant on 3/3 nodes, GDS, Bloom,
+1 writer/2 followers).
+
+- **3d preflight gate** — blanked `AdvertisedDNS` in
+  `.deploy/test-ee-1778986767.txt`: preflight `[FAIL] TLS params set …
+  missing/empty: AdvertisedDNS (TLS is mandatory for Private and
+  ExistingVpc)`, **exit 1**. Restored → `[PASS]`, 12/12, exit 0.
+- **3c control-plane drift** — `modify-listener` 7473 SslPolicy →
+  `ELBSecurityPolicy-TLS13-1-2-2021-06`: `NLB TLS listeners` **FAIL**,
+  detail `port 7473 SslPolicy ELBSecurityPolicy-TLS13-1-2-2021-06 !=
+  ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09` (names wrong + expected).
+  Reverted → all 10 PASSED.
+- **3b plaintext exposure** — SSM to node `i-0143910af36c9cc24`
+  (Node3 ASG): set `server.bolt.tls_level=OPTIONAL`,
+  `server.http.enabled=true`, `systemctl restart neo4j`. The per-node
+  audit fired: `TLS conf (i-08babf253d9571001)` **FAIL**, detail lists
+  the offending keys; the other 2 nodes PASS (per-node proven). Note
+  the failing instance is the *replacement*: the restart dropped
+  7473/7687 on a node ~48 min old (long past the 1200 s grace), the TCP
+  health check went unhealthy, and the ASG correctly self-healed
+  (`taken out of service in response to an ELB system health check
+  failure` 03:51:04Z → replacement launched 03:51:06Z). The replacement
+  came up mid-bootstrap ("all keys missing"), which is what the audit
+  caught. Detection proven; bad conf auto-reverted by the replacement.
+- **3a** — skipped by user decision. It exercises the same
+  restart-induced self-heal path as 3b (plus a sample-private-app
+  redeploy); recorded as covered-by-analysis.
+
+**NOT the kill loop (important distinction).** Kill loop = healthy
+Neo4j but the HTTPS+SNI health check *always* fails, so *every* node is
+replaced ~20 min after launch forever (Phase 1 proved gone: stable
+>25 min past grace, zero terminations). 3b = a *deliberately* downed
+Neo4j on a *past-grace* node being correctly ELB-replaced. That is the
+intended self-heal, not a regression of the Option 1 fix.
+
+**Operability observation (flagged, NOT fixed — needs design
+discussion).** With `HealthCheckType=ELB` + the 7473/7687 TCP health
+check + standard thresholds (~30 s to unhealthy), any Neo4j restart
+that keeps the port down longer than ~30 s on a past-grace node gets
+that node ELB-replaced. This affects rolling restarts / config changes
+/ in-place upgrades (an operator `systemctl restart neo4j` on a live
+node can trigger a replacement). It is not the kill loop and is out of
+scope of the Option 1 fix; logged here for the "what else needs fixed"
+list as a separate architectural item.
+
 ## Phase 2 — re-test on refined stack `test-ee-1778984306`
 
 Run from `sample-private-app/` (it is its own `uv` project;
@@ -510,3 +558,41 @@ timing. Pre-existing gate design, not in scope of the config fix.
 Verdict: **Phase 2 COMPLETE.** Original product defect resolved by the
 refined Bolt-only fix; gate-timing fragility logged as a separate
 pre-existing item.
+
+### Phase 4: 3b recovery confirmed + release gate (test-ee-1778986767)
+
+The 3b perturbation (Phase 3) had left `test-ee-1778986767` self-healing:
+the replacement node `i-08babf253d9571001` was still bootstrapping
+(https-tg unhealthy) while the drained node finished terminating. Polling
+the https target group, it converged to **3/3 healthy** within ~30 s of the
+replacement finishing its Neo4j+plugin bootstrap and cluster join. This is
+the expected ELB-health behavior post-grace and the inverse of the
+kill-loop: an unhealthy node is replaced, the replacement bootstraps once,
+goes healthy, and stays. No kill loop, no churn beyond the single 3b
+replacement.
+
+Post-recovery state re-verified before the release gate: `preflight
+test-ee-1778986767` 12/12 PASS; default `validate-private` 28-line run
+**All 22 PASSED** (119.1s) including the kill-loop-fixed audit line
+`PASS: 7473 TCP, 7687 TCP`.
+
+Release-gate expected value chosen non-blindly: queried the live cluster
+first with `SHOW SETTINGS YIELD name,value WHERE
+name='db.query.default_language'` -> `CYPHER_25`. The release check
+(`checks.py` ~728-737) does an exact string compare of
+`dbms.listConfig('db.query.default_language')` against
+`--expected-cypher-default`, so the expected value must be the literal
+`CYPHER_25`, not `25` or `5`.
+
+`uv run validate-private --stack test-ee-1778986767 --suite release
+--expected-cypher-default CYPHER_25` -> exit 0, **All 28 tests PASSED**
+(149.6s). The release run carries the full TLS enforcement audit with
+timing (confirms `run_tls_checks` is wired into the release suite, not just
+the default), and the version inventory asserts drift rather than merely
+recording it: `Neo4j Kernel 2026.04.0 (enterprise)`,
+`db.query.default_language=CYPHER_25; expected CYPHER_25`, per-node
+`rpm=2026.04.0-1; java=openjdk 25.0.3 LTS`.
+
+Verdict for the release-gate item: **PASS.** Phase 4 release gate and
+Public-no-TLS items complete. Remaining Phase 4 items (ExistingVpc,
+single-node Private) require fresh deploys.

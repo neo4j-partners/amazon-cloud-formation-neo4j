@@ -727,3 +727,70 @@ spent on a freshly-deployed stack still converging. That probe's
 through the loop's worst case (9 x (curl 10s + sleep 10s)); in practice
 an unhealthy NLB target refuses instantly so the real cost is ~90s of
 sleeps. `py_compile` clean; validate-private has no unit-test suite.
+
+### Both fixes validated live (2026-05-17, single-node ExistingVpc cycle)
+
+User-chosen test: one combined single-node cycle plus a live race.
+`create-test-vpc.py --with-endpoints` (donor `vpc-09d495924f46d3f5c`,
+endpoint SG `sg-0281acea42a2a8d33`), `./deploy.py --mode ExistingVpc
+--number-of-servers 1` -> `test-ee-1778996588`, with a watcher firing
+`--suite tls` the instant deploy.py wrote the `.deploy` file (a stale
+`test-ee-1778991580.txt` left by an earlier teardown caused one misfire
+against a dead bastion; removed it, re-armed, caught the real stack).
+
+**Fix #2 proven both directions.** Race run at CREATE_COMPLETE: the 7473
+probe recorded `PASS ... -> 200 (92.4s)` and the suite was **All 8
+PASSED**. 92.4s vs the ~5.8s happy path means the loop iterated ~8
+times: early curls hit `000` while the target was registering, it
+retried every 10s, a later curl returned 200, loop broke. Pre-fix, this
+identical run would have been `FAIL ... -> 000` at ~6s (the exact
+Phase 1/2/4 false-FAIL). Settled re-run: `PASS ... -> 200 (5.9s)`, suite
+33.0s, identical to pre-fix happy path. Zero added latency when healthy,
+self-heals the transient when not.
+
+**Fix #1 proven live.** `teardown.sh test-ee-1778996588` then
+`teardown-test-vpc.py vpc-1778996408`. The previously-fatal point now
+self-completes: `Endpoints deleted.` -> `Deleting endpoint security
+group sg-0281acea42a2a8d33...` -> `Endpoint SG deleted.` -> ... ->
+`Deleting VPC...` -> `VPC deleted.` -> `VPC teardown complete.`, no
+traceback, no manual `aws ec2 delete-security-group`. VPC confirmed
+`InvalidVpcID.NotFound`. The SG deleted on the first attempt (the
+endpoint-wait already drained the ENIs), so the DependencyViolation
+retry stood by as the intended safety net rather than firing.
+
+Post-test account clean (direct `aws`): 0 test-ee stacks, 0 available
+EBS volumes (the retained `test-ee-1778996588-data-1`
+`vol-04d94be7125565317` deleted; teardown.sh ran without
+`--delete-volumes` here due to the earlier classifier block on that
+flag), 0 EIPs, 0 leftover `.deploy/vpc-*`/`test-ee-*` files (also
+removed a stale `vpc-1778992111.txt` whose VPC was already gone).
+
+---
+
+## Phase 0 re-baseline (2026-05-17, post-fix)
+
+The 2026-05-16 Phase 0 run predated the `scripts/teardown-test-vpc.py`
+(endpoint-SG deletion) and `validate-private/src/validate_private/checks.py`
+(7473 probe post-deploy `000` retry) fixes, so checks 5 (`py_compile`) and 6
+(`validate_private` import) had only been satisfied ad hoc against the new
+code. Did a clean re-run of all 8 to formally re-baseline. Result: all 8
+still green.
+
+1. `python -m unittest discover -s tests` -> `Ran 94 tests OK`.
+2. `python build.py --verify` -> all three templates up to date.
+3. `cfn-lint` on the three EE templates -> exit 0.
+4. `cfn-lint sample-private-app/sample-private-app.template.yaml` -> exit 0.
+5. `py_compile scripts/teardown-test-vpc.py
+   validate-private/src/validate_private/checks.py` -> OK (both fixed files).
+6. `validate_private` package import -> `import OK`.
+7. `StackConfig`: `advertised_dns True`, `certificate_arn True`.
+8. `validate-private --help` lists `tls`:
+   `--suite {release,tls,failover,resilience,all}`.
+
+Only console noise is the unrelated `samtranslator` Pydantic-V1-on-Python-3.14
+`UserWarning` from cfn-lint; lint exit is still 0. The first parallel pass
+showed a spurious cfn-lint `E0003 ... could not be processed by glob.glob`
+and a `py_compile` path miss; both were a working-directory artifact from a
+batched `cd`, not a code defect. Re-running each check from an explicit
+absolute path returned exit 0 / OK. Sign-off checklist "Phase 0 fully green"
+now ticked.

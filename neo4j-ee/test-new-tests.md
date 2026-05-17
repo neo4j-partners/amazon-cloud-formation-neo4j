@@ -84,7 +84,8 @@ timeline + lessons learned in `test-new-tests-audit.md`.
 
 ## Phase 0: Static checks (no AWS account)
 
-**Status: COMPLETE — all 8 checks PASS (run 2026-05-16).**
+**Status: COMPLETE — all 8 checks PASS. Re-baselined 2026-05-17 after the
+`teardown-test-vpc.py` and `checks.py` fixes; all 8 still green.**
 
 These run anywhere and gate every later phase.
 
@@ -389,7 +390,7 @@ The TLS checks must behave correctly across the supported shapes.
 
 ## Sign-off checklist
 
-- [ ] Phase 0 fully green
+- [x] Phase 0 fully green
 - [x] Phase 1 all PASS, exit 0
 - [x] Phase 2 probe PASS on gated path, absent on demo path
 - [x] Every Phase 3 negative test observed flipping to FAIL and back to PASS

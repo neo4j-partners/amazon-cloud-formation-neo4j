@@ -93,10 +93,11 @@ def main() -> None:
     )
     mode_group.add_argument(
         "--suite",
-        choices=["release", "failover", "resilience", "all"],
+        choices=["release", "tls", "failover", "resilience", "all"],
         help=(
             "Run a suite of test cases. "
             "release: default validation plus version inventory. "
+            "tls: end-to-end TLS enforcement audit only. "
             "failover: follower-with-data, leader, rolling, reads. "
             "resilience: single-loss, total-loss. "
             "all: failover then resilience (resilience skipped if failover has any failures)."
@@ -194,6 +195,9 @@ def main() -> None:
                 bastion_id=config.bastion_id,
             )
             sys.exit(exit_code)
+        if args.suite == "tls":
+            from validate_private.checks import run_tls_checks  # noqa: PLC0415
+            run_tls_checks(config, reporter)
         if args.suite in ("failover", "all"):
             _run_failover_suite(config, reporter)
         if args.suite in ("resilience", "all"):

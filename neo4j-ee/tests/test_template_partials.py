@@ -512,8 +512,12 @@ class ShellPartialTests(unittest.TestCase):
             self.assertTrue((certs / proto / "private.key").exists())
             self.assertTrue((certs / proto / "public.crt").exists())
         calls = set_log.read_text()
+        # default_advertised_address stays AdvertisedDNS (Jetty's no-SNI
+        # fallback host for the NLB HTTPS health check). Only Bolt is routed
+        # and advertises the always-resolvable NLB DNS; Bolt has no
+        # sniHostCheck so a non-cert-SAN host is safe there.
         self.assertIn("server.default_advertised_address=neo4j.example.com", calls)
-        self.assertIn("server.bolt.advertised_address=neo4j.example.com:7687", calls)
+        self.assertIn("server.bolt.advertised_address=lb.example.com:7687", calls)
         self.assertIn("server.http.enabled=false", calls)
         self.assertIn("server.https.enabled=true", calls)
         self.assertIn("server.https.listen_address=0.0.0.0:7473", calls)
@@ -560,6 +564,22 @@ class ShellPartialTests(unittest.TestCase):
                 rf"^\s*set_neo4j_conf\s+{re.escape(key)}\b",
                 f"configure-tls.sh sets base-conf key {key} inline",
             )
+
+    def test_configure_tls_does_not_install_packages_at_boot(self) -> None:
+        # NFR-14 / AD-4: openssl is baked into the AMI, never dnf-installed on
+        # the boot path. A package install during ASG self-heal is an
+        # availability failure with no template fix.
+        source = (PARTIALS / "configure-tls.sh").read_text()
+        self.assertNotRegex(source, r"\b(dnf|yum)\s+install\b")
+
+    def test_create_ami_bakes_openssl(self) -> None:
+        # NFR-14 / AD-4: the AMI builder must install openssl so the boot-path
+        # check in configure-tls.sh resolves without a network dependency.
+        ami = REPO_ROOT / "neo4j-ee" / "marketplace" / "create-ami.sh"
+        self.assertRegex(
+            ami.read_text(),
+            r"dnf install -y [^\n]*\bopenssl\b",
+        )
 
     def test_install_plugins_success_and_missing_jar_failures(self) -> None:
         self.write_stub("chown", "echo \"chown $*\" >> \"$COMMAND_LOG\"\n")
@@ -1788,7 +1808,7 @@ class NlbAndRoutingTests(unittest.TestCase):
                         [{"CertificateArn": {"Ref": "CertificateArn"}}],
                     )
                     self.assertEqual(
-                        p["SslPolicy"], "ELBSecurityPolicy-TLS13-1-2-2021-06"
+                        p["SslPolicy"], "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09"
                     )
                 self.assertEqual(set(ports), {7473, 7687})
 
@@ -1799,8 +1819,15 @@ class NlbAndRoutingTests(unittest.TestCase):
                 for r in tgs.values():
                     p = r["Properties"]
                     self.assertEqual(p["Protocol"], "TLS")
-                    self.assertEqual(p["HealthCheckProtocol"], "TCP")
                     tg_ports.add(p["Port"])
+                    # Both target groups use a TCP health check. 7473 cannot
+                    # use HTTPS: the NLB health checker sends no SNI and
+                    # Jetty's sniHostCheck answers GET / with 400 Invalid
+                    # SNI, so the target would never go healthy (kill loop
+                    # under HealthCheckType=ELB). 7687 Bolt is binary.
+                    self.assertEqual(p["HealthCheckProtocol"], "TCP")
+                    self.assertNotIn("HealthCheckPath", p)
+                    self.assertNotIn("Matcher", p)
                 self.assertEqual(tg_ports, {7473, 7687})
                 # No plain-HTTP listener/target group: the {7473,7687} port
                 # sets above already prove 7474 is absent from the data path

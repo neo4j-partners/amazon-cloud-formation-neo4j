@@ -372,6 +372,50 @@ rm -f "${BODY_FILE}"
     print(f"Wrote {script_path}")
 
 
+def assert_tls_conformance(session, function_arn: str) -> None:
+    """Invoke the deployed Lambda and fail the deploy if its in-VPC TLS
+    conformance probe reports a hard failure (plaintext accepted, HTTPS down,
+    or served cert identity != AdvertisedDNS). Skipped for plaintext stacks."""
+    print()
+    print("Running in-VPC TLS conformance probe...")
+    lam = session.client("lambda")
+    resp = lam.invoke(
+        FunctionName=function_arn,
+        Payload=json.dumps({"tls_probe": True}).encode(),
+    )
+    payload = json.loads(resp["Payload"].read())
+
+    if resp.get("FunctionError"):
+        raise SystemExit(
+            f"ERROR: Lambda invocation failed: {payload}"
+        )
+    if payload.get("statusCode") != 200:
+        raise SystemExit(
+            f"ERROR: Lambda returned status {payload.get('statusCode')}: "
+            f"{payload.get('body')}"
+        )
+
+    body = json.loads(payload["body"])
+    probe = body.get("tls_conformance", {})
+
+    if not probe.get("applicable"):
+        print(f"  TLS conformance: skipped — {probe.get('detail', 'plaintext stack')}")
+        return
+
+    for name, result in probe.get("checks", {}).items():
+        status = "PASS" if result["passed"] else "FAIL"
+        print(f"  [{status}] {name}: {result['detail']}")
+    strict = probe.get("strict_tls_info", {})
+    print(f"  [INFO] strict_tls: {strict.get('detail', 'n/a')}")
+
+    if not probe.get("passed"):
+        raise SystemExit(
+            "ERROR: TLS conformance probe FAILED — see [FAIL] lines above. "
+            "TLS is not correctly enforced end-to-end for this stack."
+        )
+    print("  TLS conformance: PASS")
+
+
 def main() -> None:
     os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
@@ -465,6 +509,7 @@ def main() -> None:
         "EnableResilienceTestFunction": str(args.enable_resilience).lower(),
         "NumberOfServers": number_of_servers,
         "BoltTlsEnabled": str(bolt_tls_enabled).lower(),
+        "AdvertisedDNS": fields.get("AdvertisedDNS", ""),
     }
     deploy_stack(
         cfn,
@@ -508,6 +553,8 @@ def main() -> None:
 
     write_invoke_script(SCRIPT_DIR / "invoke.sh")
     write_validate_script(SCRIPT_DIR / "validate.sh")
+
+    assert_tls_conformance(session, function_arn)
 
     print()
     print("=============================================")

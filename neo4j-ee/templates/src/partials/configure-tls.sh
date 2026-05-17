@@ -18,7 +18,11 @@ configure_tls() {
   fi
 
   echo "Configuring TLS for Bolt and HTTPS..."
-  command -v openssl >/dev/null 2>&1 || dnf install -y openssl
+  # openssl is baked into the AMI by marketplace/create-ami.sh (Placement
+  # Decision Rule branch 3). It is intentionally not dnf-installed here: a
+  # package install on the boot path adds a mirror dependency that would turn
+  # ASG self-heal into an availability failure with no template fix.
+  command -v openssl >/dev/null 2>&1 || fail "openssl not found; it must be baked into the AMI."
   local _proto _dir _key _crt
   for _proto in bolt https; do
     _dir="${certsBase}/${_proto}"
@@ -44,8 +48,19 @@ configure_tls() {
     chmod 644 "${_crt}"
   done
 
+  # default_advertised_address MUST stay AdvertisedDNS: it is Jetty's no-SNI
+  # fallback host, and the NLB HTTPS health check on 7473 connects without
+  # sending SNI. If this is not the cert SAN (AdvertisedDNS), Jetty answers
+  # the health check with 400 Invalid SNI and every 7473 target goes
+  # unhealthy. Only Bolt is overridden below.
   set_neo4j_conf server.default_advertised_address "${advertisedDNS}"
-  set_neo4j_conf server.bolt.advertised_address "${advertisedDNS}:7687"
+  # Bolt is a routed protocol: the cluster publishes server.bolt.advertised_address
+  # in its routing table and every neo4j://-style client must resolve it. With
+  # CreatePrivateDns=false (the default) AdvertisedDNS is only a synthetic cert
+  # SAN with no in-VPC record, so advertising it for Bolt breaks routed clients.
+  # The NLB DNS is always resolvable in-VPC and Bolt has no sniHostCheck, so
+  # Bolt (alone) advertises the NLB DNS.
+  set_neo4j_conf server.bolt.advertised_address "${loadBalancerDNSName}:7687"
   set_neo4j_conf server.http.enabled false
   set_neo4j_conf server.https.enabled true
   set_neo4j_conf server.https.listen_address 0.0.0.0:7473

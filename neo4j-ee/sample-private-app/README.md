@@ -111,8 +111,8 @@ The driver is created lazily on first invocation and cached across warm starts. 
 
 ```json
 {
-  "tls_enabled": false,
-  "bolt_scheme": "neo4j",
+  "tls_enabled": true,
+  "bolt_scheme": "neo4j+ssc",
   "edition": "enterprise",
   "nodes_created": 12,
   "relationships_created": 9,
@@ -130,6 +130,27 @@ The driver is created lazily on first invocation and cached across warm starts. 
 ```
 
 Single-server deployments skip the routing-table query because direct Bolt mode is the correct connection mode for a one-node stack.
+
+### TLS conformance probe
+
+The probe opens extra TLS and Bolt connections (one intentionally to a closed port, up to its timeout), so it does not run on the normal demo path. It runs only when the invocation event sets `{"tls_probe": true}`, which `deploy-sample-private-app.py` sends once after deploy as a gate. When it runs, the response gains a `tls_conformance` block:
+
+```json
+"tls_conformance": {
+  "applicable": true,
+  "advertised_dns": "neo4j.example.internal",
+  "passed": true,
+  "checks": {
+    "plaintext_bolt_refused": {"passed": true, "detail": "plaintext neo4j:// rejected (ServiceUnavailable)"},
+    "https_7473_ok": {"passed": true, "detail": "GET https://.../ -> 200"},
+    "plaintext_http_7474_refused": {"passed": true, "detail": "7474 connect refused (ConnectionRefusedError)"},
+    "cert_identity": {"passed": true, "detail": "served cert valid for neo4j.example.internal"}
+  },
+  "strict_tls_info": {"passed": false, "detail": "neo4j+s:// not CA-trusted (ServiceUnavailable)"}
+}
+```
+
+The hard checks fail the probe (`passed: false`) if a plaintext Bolt connection is accepted, HTTPS on 7473 does not answer 200, plaintext HTTP 7474 is reachable, or the served certificate's SAN/CN does not equal `AdvertisedDNS`. `strict_tls_info` records whether `neo4j+s://` verifies against the system CA bundle; it is informational because the auto-imported self-signed certificate is a supported mode and is expected to fail strict verification. For a plaintext stack the probe is skipped with `applicable: false`. `deploy-sample-private-app.py` invokes the Lambda after deploy and exits non-zero if `tls_conformance.passed` is false, so a broken TLS posture fails the deploy rather than going unnoticed.
 
 ## Resilience Test
 

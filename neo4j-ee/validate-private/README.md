@@ -12,9 +12,10 @@ These commands use the Neo4j Python driver and boto3 via SSM to reach the cluste
 
 | Command | What it does | Runtime |
 |---|---|---|
-| `uv run preflight [stack]` | Run 11 required checks (+ 1 informational): stack status, bastion SSM, Python driver, cypher-shell, secret, contract SSM params, VPC endpoints, and endpoint reachability probes. Exits 0 only if all required checks pass. | 45–75s |
-| `uv run validate-private [--stack <name>]` | Run validation checks: Bolt, server edition, listen address, memory config, data directory, APOC, GDS, cluster roles, blocklist | 25–35s |
-| `uv run validate-private --suite release [--stack <name>] --expected-cypher-default <value> [--expected-neo4j-version X] [--min-java-major N]` | Run the default validation checks plus Neo4j RPM, Java, and Cypher default assertions. Optional version flags make the release gate fail on mismatch. | 45–75s |
+| `uv run preflight [stack]` | Run 12 required checks (+ 1 informational): stack status, bastion SSM, Python driver, cypher-shell, secret, TLS params (`CertificateArn`/`AdvertisedDNS`), contract SSM params, VPC endpoints, and endpoint reachability probes. Exits 0 only if all required checks pass. | 45–75s |
+| `uv run validate-private [--stack <name>]` | Run validation checks: Bolt, server edition, listen address, memory config, data directory, APOC, GDS, cluster roles, blocklist, TLS enforcement | 30–45s |
+| `uv run validate-private --suite tls [--stack <name>]` | Run only the end-to-end TLS enforcement audit: elbv2 listener/target-group control-plane audit, in-VPC `openssl`/`curl`/`getent` data-plane probes, and a per-node `neo4j.conf` SSL-key read. Asserts plaintext is refused, not just that TLS is available. | 20–35s |
+| `uv run validate-private --suite release [--stack <name>] --expected-cypher-default <value> [--expected-neo4j-version X] [--min-java-major N]` | Run the default validation checks (including the TLS audit) plus Neo4j RPM, Java, and Cypher default assertions. Optional version flags make the release gate fail on mismatch. | 45–75s |
 | `uv run run-cypher [stack] '<cypher>'` | Execute a Cypher query and print JSON rows to stdout | 5–10s |
 | `uv run admin-shell [stack]` | Open an interactive `cypher-shell` session on the bastion | Interactive |
 | `uv run ssm-check-sessions [stack]` | List active SSM sessions for the stack's Neo4j instance(s) and operator bastion. | <5s |

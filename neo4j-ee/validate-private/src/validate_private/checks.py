@@ -482,12 +482,23 @@ def _probe_tls_dataplane(ssm, config: "StackConfig", reporter: "TestReporter") -
     # raw NLB hostname yields 400. Force SNI/Host to AdvertisedDNS with
     # --resolve against an NLB IP; this works whether or not AdvertisedDNS
     # has an in-VPC record (matches the cert-identity probe's -servername).
+    # Retry up to ~90s: right after deploy the NLB target group has no
+    # healthy target yet and curl returns 000. The check is correct, the
+    # operator just ran early. On a settled stack the first curl returns
+    # 200 and the loop exits immediately, adding no latency.
     cmd = (
         f"IP=$(getent hosts {nlb} | awk '{{print $1; exit}}'); "
-        f"curl -sk -o /dev/null -w '%{{http_code}}' --max-time 10 "
-        f"--resolve {dns}:7473:$IP https://{dns}:7473/"
+        f"for i in $(seq 1 9); do "
+        f"code=$(curl -sk -o /dev/null -w '%{{http_code}}' --max-time 10 "
+        f"--resolve {dns}:7473:$IP https://{dns}:7473/); "
+        f'[ "$code" = "200" ] && break; '
+        f"sleep 10; "
+        f"done; "
+        f'echo "$code"'
     )
-    ok, out, err = run_shell_on_instance(ssm, bastion, cmd)
+    # Cover the loop's worst case (9 x (curl --max-time 10 + sleep 10))
+    # so the client keeps polling until the command finishes.
+    ok, out, err = run_shell_on_instance(ssm, bastion, cmd, timeout_s=210)
     code = out.strip()
     passed = ok and code == "200"
     reporter.record(

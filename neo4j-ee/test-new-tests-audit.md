@@ -682,3 +682,48 @@ Verdict for the ExistingVpc item: **PASS.** Phase 4 fully complete (all
 four items: release gate 28/28, Public-no-TLS refused at config load,
 single-node 8/8 with exactly one TLS-conf line, ExistingVpc 10/10 with
 the non-vacuous stack-owned-DNS branch).
+
+### Lesson: teardown-test-vpc.py leaves the endpoint SG, blocking delete_vpc
+
+Tearing down the donor VPC, `scripts/teardown-test-vpc.py` deleted the
+interface endpoints, NAT gateways, EIPs, subnets, route tables, and IGW,
+then failed on `ec2.delete_vpc` with `DependencyViolation`. Cause: the
+script deletes the four VPC interface endpoints but never deletes the
+shared endpoint security group it created in `create-test-vpc.py`
+(`--with-endpoints` -> `neo4j-test-endpoint-sg-<ts>`,
+`sg-02084a6166f6a0a07` here). A non-default SG is a VPC dependency, so
+`delete_vpc` fails while the SG exists. Manual completion: confirmed via
+`describe-network-interfaces`/`describe-instances`/`describe-vpc-endpoints`
+that only that SG remained, then `aws ec2 delete-security-group
+--group-id sg-02084a6166f6a0a07` followed by `aws ec2 delete-vpc`; VPC
+confirmed gone (`InvalidVpcID.NotFound`). The deploy.py failed-attempt
+unwind is solid by contrast: the first ExistingVpc attempt's SSM ami-id
+param and licence secrets were already gone (`ParameterNotFound`), no
+manual cleanup needed.
+
+**FIXED.** `scripts/teardown-test-vpc.py`: the SG id is already recorded
+by `create-test-vpc.py` as `EndpointSgId` in the vpc-*.txt file, the
+teardown just never used it. Now reads `fields.get("EndpointSgId", "")`
+and, inside the `with_endpoints` branch after the endpoint-deletion wait,
+calls `delete_security_group` with a 12 x 10s `DependencyViolation` retry
+(endpoint ENIs can linger a few seconds after the endpoints report
+deleted) before `delete_vpc`. Non-DependencyViolation ClientErrors
+re-raise; exhausting the retries exits with an actionable message.
+`py_compile` clean.
+
+### Fix: 7473 HTTPS probe post-deploy `000` transient (checks.py)
+
+The `000` seen on the 7473 L7 GET right after CREATE_COMPLETE (Phase 1,
+2, 4) was a single-shot `curl --max-time 10` racing the NLB target group
+before it had a healthy target. **FIXED** (user-approved, ~90s budget):
+`_probe_tls_dataplane` wraps the curl in a bastion-side
+`for i in $(seq 1 9)` loop, 10s apart, `break` on HTTP 200, echoing the
+final code. Reporter semantics unchanged
+(`passed = ok and code == "200"`, detail still shows the code). On a
+settled stack the first curl returns 200 and the loop exits immediately
+(zero added latency on re-runs and the release gate); the budget is only
+spent on a freshly-deployed stack still converging. That probe's
+`run_shell_on_instance` call passes `timeout_s=210` so the client polls
+through the loop's worst case (9 x (curl 10s + sleep 10s)); in practice
+an unhealthy NLB target refuses instantly so the real cost is ~90s of
+sleeps. `py_compile` clean; validate-private has no unit-test suite.

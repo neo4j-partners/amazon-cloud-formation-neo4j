@@ -399,8 +399,18 @@ The TLS checks must behave correctly across the supported shapes.
 - [x] No vacuous PASS found: every check was seen to fail at least once
       (Phase 3 flips + the ExistingVpc `000` -> 200 and the
       synthetic-SAN-skip vs real-resolution distinction)
-- [ ] Throwaway test stacks torn down: `./teardown.sh` then, if needed,
+- [x] Throwaway test stacks torn down: `./teardown.sh` then, if needed,
       `./teardown.sh --delete-volumes`
+      **DONE 2026-05-17.** `test-ee-1778992357` (ExistingVpc) and
+      `test-ee-1778991580` (single-node) deleted with their licence secrets;
+      all 4 retained EBS data volumes deleted (3 via teardown.sh
+      `--delete-volumes`, the single-node `vol-085881d45ab4a386d` deleted
+      manually after a non-`--delete-volumes` teardown left it). Donor VPC
+      `vpc-07f8d2d21acda5563` deleted (helper left endpoint SG
+      `sg-02084a6166f6a0a07`; removed manually then `delete-vpc`, confirmed
+      `InvalidVpcID.NotFound`). Final account state verified via direct
+      `aws`: 0 test-ee stacks, 0 EIPs in use, 0 available EBS volumes,
+      donor VPC gone.
 
 ---
 

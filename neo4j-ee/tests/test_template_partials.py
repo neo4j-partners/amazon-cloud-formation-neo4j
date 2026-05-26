@@ -1503,6 +1503,7 @@ class RenderedTemplateContractTests(unittest.TestCase):
             "number-of-servers",
             "region",
             "stack-name",
+            "tls-self-signed",
         }
         ssm, keys_to_logical = self._ssm_keys_to_logical("public")
         self.assertEqual(set(keys_to_logical), expected_keys)
@@ -1548,6 +1549,7 @@ class RenderedTemplateContractTests(unittest.TestCase):
             "password-secret-arn",
             "external-sg-id",
             "vpc-endpoint-sg-id",
+            "tls-self-signed",
         }
         ssm, keys_to_logical = self._ssm_keys_to_logical("private")
         self.assertEqual(set(keys_to_logical), expected_keys)
@@ -1590,6 +1592,7 @@ class RenderedTemplateContractTests(unittest.TestCase):
             "password-secret-arn",
             "external-sg-id",
             "vpc-endpoint-sg-id",
+            "tls-self-signed",
         }
         ssm, keys_to_logical = self._ssm_keys_to_logical("existing_vpc")
         self.assertEqual(set(keys_to_logical), expected_keys)
@@ -1602,6 +1605,29 @@ class RenderedTemplateContractTests(unittest.TestCase):
         self.assertEqual(
             https_url, {"Fn::Sub": "https://${AdvertisedDNS}:7473"}
         )
+
+    @unittest.skipUnless(yaml is not None, "pyyaml is required")
+    def test_tls_self_signed_value_resolves_from_bolt_tls_scheme(self) -> None:
+        # Private and ExistingVpc derive tls-self-signed from BoltTlsScheme via
+        # the IsSelfSignedTls condition. Public is never self-signed (real ACM
+        # cert or no TLS), so it publishes the literal 'false' for contract
+        # uniformity. Consumers key TLS skip-verify off this single SSM value
+        # rather than parsing the bolt URL scheme.
+        for template_name in ("private", "existing_vpc"):
+            with self.subTest(template=template_name):
+                ssm, keys_to_logical = self._ssm_keys_to_logical(template_name)
+                value = ssm[keys_to_logical["tls-self-signed"]]["Properties"]["Value"]
+                self.assertEqual(
+                    value, {"Fn::If": ["IsSelfSignedTls", "true", "false"]}
+                )
+                conditions = self.docs[template_name].get("Conditions", {})
+                self.assertEqual(
+                    conditions.get("IsSelfSignedTls"),
+                    {"Fn::Equals": [{"Ref": "BoltTlsScheme"}, "neo4j+ssc"]},
+                )
+        ssm, keys_to_logical = self._ssm_keys_to_logical("public")
+        public_value = ssm[keys_to_logical["tls-self-signed"]]["Properties"]["Value"]
+        self.assertEqual(public_value, "false")
 
     @unittest.skipUnless(yaml is not None, "pyyaml is required")
     def test_bolt_tls_scheme_parameter_scoped_to_private_templates(self) -> None:
@@ -1631,6 +1657,11 @@ class RenderedTemplateContractTests(unittest.TestCase):
                 outputs = self.docs[template_name].get("Outputs", {})
                 self.assertIn("Neo4jBoltUrl", outputs)
                 self.assertIn("Neo4jHttpsUrl", outputs)
+                self.assertIn("Neo4jTlsSelfSigned", outputs)
+                self.assertEqual(
+                    outputs["Neo4jTlsSelfSigned"]["Value"],
+                    {"Fn::GetAtt": "Neo4jConfigTlsSelfSignedParameter.Value"},
+                )
                 # Old Public-only names must not survive the rename.
                 self.assertNotIn("Neo4jURI", outputs)
                 self.assertNotIn("Neo4jBrowserURL", outputs)

@@ -208,7 +208,7 @@ Goal: turn every fix-marked observation from Lessons Learned and every failure f
 #### Repo and account hygiene
 
 - [x] Leave the pre-existing `test-ee-1778613386` stack in place. User decision: not part of this testing cycle, do not touch. The two other unrelated stacks (`test-ee-1778614964` and `test-ee-1778621781`) are likewise left alone.
-- [x] Leave the three retained EBS data volumes from the Phase 9 deploy (`vol-009ae032d368ef138`, `vol-0c7c4601c29ca1224`, `vol-0412b3670c2bafa14` in us-east-1) in place. User decision: do not delete.
+- [x] Leave the three retained EBS data volumes from the Phase 9 deploy (in us-east-1) in place. User decision: do not delete.
 
 Validation: A fresh dry run of `test-neo4j --edition ee` against the most recent outputs file resolves cleanly with no import or argument errors. Unit-level confidence is not required at this phase since no live stack is available; the gate is that every checklist item is either Complete or explicitly deferred with a Notes entry.
 
@@ -309,7 +309,7 @@ This section captures observations that surfaced while implementing G1–G6 and 
 - The G3 audit's expected-keys list assumes UserData writes `dbms.bloom.license_file` and `gds.enterprise.license_file` only when a license is supplied. Live inspection shows UserData writes both unconditionally today. The audit and UserData disagree on the contract. **Fix:** in Phase 11, pick one contract, apply it on both sides, and document it.
 - Test 19 (External SG ingress CIDR) and Test 23 (JDWP absent from neo4j.conf) failed on the EE topology even though both pass on CE. Both tests are part of the shared network-security check set and both assume the CE-style single-ASG and single-external-SG shape. **Fix:** in Phase 11, split or extend these checks to fan out across the EE per-node ASG set and to inspect the correct EE external security group.
 - The resilience test for node 2 replacement timed out at 600 seconds. The ASG activity log shows the launch failed repeatedly because the AMI referenced by the launch template no longer exists. Root cause is an AMI lifecycle bug: an unrelated `create-ami.sh` run elsewhere in the account deregistered the AMI while this stack still depended on it. **Fix:** in Phase 11, prevent `create-ami.sh` from deregistering an AMI that a running launch template still references, or tag AMIs with the stacks consuming them so the builder can skip them. Also add a fail-fast pre-test check that asserts every launch template's AMI still exists before any resilience test runs.
-- The teardown left three EBS data volumes retained per `DeletionPolicy: Retain` (`vol-009ae032d368ef138`, `vol-0c7c4601c29ca1224`, `vol-0412b3670c2bafa14` in us-east-1). They were not removed automatically. **Fix:** include this decision in Phase 11 and either delete them or leave a note saying why they were preserved.
+- The teardown left three EBS data volumes retained per `DeletionPolicy: Retain` (in us-east-1). They were not removed automatically. **Fix:** include this decision in Phase 11 and either delete them or leave a note saying why they were preserved.
 
 ### From G6, AMI build-mode tag
 

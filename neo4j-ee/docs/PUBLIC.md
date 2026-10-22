@@ -185,7 +185,7 @@ Single-instance:
 | Instance security group | Sources from NLB SG | Allows both forwarded client traffic and NLB health checks without hardcoding a VPC CIDR |
 | IMDSv2 | Enforced | Instance metadata requires session tokens; IMDSv1 requests are rejected |
 | JDWP (port 5005) | Disabled | Remote debug port is closed and the JVM debug flag is stripped from `neo4j.conf` at boot |
-| Bolt TLS | Optional test flow | `deploy.py --tls` can enable self-signed Bolt TLS on 7687 for local testing. Browser remains HTTP on 7474. |
+| TLS | Optional | Plain TCP by default, with Browser on 7474 and Bolt on 7687. `--enable-public-tls` with `--cert-arn` and `--advertised-dns` terminates TLS at the NLB, and Browser moves to 7473. |
 
 ### NLB Routing
 
@@ -322,9 +322,12 @@ cd neo4j-ee
 # Enable CloudWatch alarm email notifications
 ./deploy.py --mode Public --alert-email you@example.com
 
-# Optional self-signed Bolt TLS test flow
-./deploy.py --mode Public --tls
+# Optional TLS at the NLB (see Certificates above)
+./deploy.py --mode Public --region us-east-1 --enable-public-tls \
+  --cert-arn <arn> --advertised-dns <dns>
 ```
+
+See [LOCAL-TESTING.md](LOCAL-TESTING.md) for AMI selection and the full flag behavior.
 
 `deploy.py` detects your public IP automatically and restricts the security group to `<your-ip>/32`. Pass `--allowed-cidr` to override. The script writes outputs to `.deploy/<stack-name>.txt`.
 

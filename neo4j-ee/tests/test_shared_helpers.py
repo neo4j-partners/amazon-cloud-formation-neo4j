@@ -160,6 +160,30 @@ class CloudFormationHelperTests(unittest.TestCase):
         self.assertEqual(cfn.created_stack["Parameters"], params)
         self.assertEqual(cfn.waited_for, "stack_create_complete")
 
+    def test_create_stack_and_wait_reports_stack_id_before_wait(self) -> None:
+        cfn = FakeCloudFormation(outputs={})
+        seen: list[tuple[str, str]] = []
+
+        def on_created(stack_id: str) -> None:
+            seen.append((stack_id, cfn.waited_for))
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            create_stack_and_wait(
+                cfn,
+                "demo",
+                "https://example.com/template.yaml",
+                [],
+                on_stack_created=on_created,
+            )
+
+        # Called once with the StackId, while no waiter had started yet.
+        self.assertEqual(seen, [(FAKE_STACK_ID, "")])
+
+
+FAKE_STACK_ID = (
+    "arn:aws:cloudformation:us-east-1:123456789012:stack/demo/abc-123"
+)
+
 
 class FakeCloudFormation:
     def __init__(self, outputs: dict[str, str]) -> None:
@@ -179,8 +203,9 @@ class FakeCloudFormation:
             ]
         }
 
-    def create_stack(self, **kwargs: object) -> None:
+    def create_stack(self, **kwargs: object) -> dict[str, str]:
         self.created_stack = kwargs
+        return {"StackId": FAKE_STACK_ID}
 
     def get_waiter(self, name: str) -> "FakeCloudFormation":
         self.waited_for = name

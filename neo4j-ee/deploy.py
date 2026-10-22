@@ -15,11 +15,12 @@ import string
 import subprocess
 import sys
 import time
+from typing import Any
 import urllib.error
 import urllib.request
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR / "src"))
@@ -85,6 +86,13 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     p.add_argument("--region", dest="region_override", metavar="REGION")
+    p.add_argument(
+        "--expected-account", metavar="ACCOUNT_ID",
+        default=os.environ.get("EXPECTED_AWS_ACCOUNT", ""),
+        help="12-digit AWS account id the credentials must resolve to; the "
+             "deploy stops on mismatch. Falls back to EXPECTED_AWS_ACCOUNT; "
+             "the flag wins. Unset means no check.",
+    )
     p.add_argument("--number-of-servers", type=int, default=3, choices=[1, 3])
     p.add_argument("--marketplace", action="store_true")
     p.add_argument("--cert-arn", metavar="ACM_ARN", default="",
@@ -174,6 +182,60 @@ def _resolve_vpc_file(explicit: str | None, deploy_dir: Path) -> str | None:
 
 def _parse_vpc_file(path: str) -> dict[str, str]:
     return parse_key_value_text(Path(path).read_text())
+
+
+def get_caller_identity(
+    region: str | None = None, client: Any = None
+) -> dict[str, str]:
+    """Fail fast with a clear message when credentials or the SSO session are bad.
+
+    botocore raises TokenRetrievalError deep into the run otherwise (e.g. at the
+    first cfn call). The profile comes from AWS_PROFILE, set at the top of main.
+    """
+    if client is None:
+        # A fixed fallback region keeps a profile without one from raising
+        # NoRegionError, which would be misreported as an expired session.
+        client = boto3.client("sts", region_name=region or "us-east-1")
+    try:
+        resp = client.get_caller_identity()
+    except (BotoCoreError, ClientError) as exc:
+        profile = os.environ.get("AWS_PROFILE", "default")
+        sys.exit(
+            f"ERROR: could not verify AWS credentials for profile '{profile}' "
+            f"({type(exc).__name__}). If the session expired, run: "
+            f"aws sso login --profile {profile}"
+        )
+    return {"Account": resp["Account"], "Arn": resp["Arn"]}
+
+
+def format_record(
+    output_lines: list[str],
+    extra: list[tuple[str, str]],
+    *,
+    secret_keys: tuple[str, ...] = (),
+    mask: str = "",
+) -> str:
+    """Render the deploy record text; secret_keys values are replaced by mask."""
+    lines = list(output_lines)
+    for key, value in extra:
+        shown = mask if key in secret_keys else value
+        lines.append(f"{key:<20} = {shown}")
+    return "\n".join(lines) + "\n"
+
+
+def write_record_file(path: Path, text: str) -> None:
+    """Write text to path with mode 0600, never exposing it at a wider mode."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        # os.open's mode only applies on creation; fix up a pre-existing file
+        # before any secret is written to it.
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as f:
+            fd = -1
+            f.write(text)
+    finally:
+        if fd != -1:
+            os.close(fd)
 
 
 def generate_password() -> str:
@@ -391,10 +453,89 @@ def build_cfn_parameters(
     return params
 
 
+def check_expected_account(actual: str, expected: str) -> None:
+    """Stop when the resolved AWS account is not the one the operator expects.
+
+    An empty `expected` disables the check. A non-empty value must be a
+    12-digit account id so a typo cannot silently weaken the guard.
+    """
+    expected = expected.strip()
+    if not expected:
+        return
+    if not (len(expected) == 12 and expected.isdigit()):
+        raise SystemExit(
+            f"ERROR: --expected-account / EXPECTED_AWS_ACCOUNT must be a "
+            f"12-digit account id, got '{expected}'."
+        )
+    if actual.strip() != expected:
+        raise SystemExit(
+            f"ERROR: AWS account mismatch: credentials resolve to account "
+            f"{actual}, expected {expected}. Check AWS_PROFILE and re-run."
+        )
+
+
+def format_account_banner(account: str, arn: str, profile: str, region: str) -> str:
+    """Return the identity lines printed before any AWS resource is touched."""
+    return (
+        f"Account: {account}  Profile: {profile}  Region: {region}\n"
+        f"Caller:  {arn}"
+    )
+
+
+def write_partial_record(
+    deploy_dir: Path,
+    stack_name: str,
+    region: str,
+    mode: str,
+    ssm_param_path: str = "",
+    copied_ami_id: str = "",
+    license_secret_arns: list[str] | None = None,
+    auto_imported_cert_arn: str = "",
+    stack_id: str = "",
+) -> Path:
+    """Write .deploy/<stack>.failed with what teardown.sh needs, no secrets.
+
+    The .failed suffix keeps operator tooling that picks the newest .txt from
+    treating an unfinished deploy as the latest stack. deploy.py removes it
+    once the normal .txt record is written; teardown.sh accepts it when no
+    .txt exists for the named stack.
+    """
+    fields = [
+        ("StackName", stack_name),
+        ("Region", region),
+        ("DeploymentMode", mode),
+        ("SSMParamPath", ssm_param_path),
+        ("CopiedAmiId", copied_ami_id),
+        ("AutoCreatedLicenseSecretArns", ",".join(license_secret_arns or [])),
+        ("AutoImportedCertificateArn", auto_imported_cert_arn),
+        ("StackID", stack_id),
+    ]
+    text = "".join(f"{k:<20} = {v}\n" for k, v in fields if v)
+    deploy_dir.mkdir(parents=True, exist_ok=True)
+    path = deploy_dir / f"{stack_name}.failed"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    path.chmod(0o600)
+    return path
+
+
 def main() -> None:
+    if not os.environ.get("AWS_PROFILE"):
+        print("WARNING: AWS_PROFILE not set, using default", file=sys.stderr)
     os.environ.setdefault("AWS_PROFILE", "default")
     args = parse_args()
     verify_rendered_templates()
+    identity = get_caller_identity(args.region_override or None)
+    print(
+        format_account_banner(
+            identity["Account"],
+            identity["Arn"],
+            os.environ["AWS_PROFILE"],
+            args.region_override or "(random supported region)",
+        )
+    )
+    check_expected_account(identity["Account"], args.expected_account)
 
     if args.mode == "ExistingVpc":
         deploy_dir = SCRIPT_DIR / ".deploy"
@@ -675,7 +816,44 @@ def main() -> None:
     )
 
     cfn = boto3.client("cloudformation", region_name=region)
-    create_stack_and_wait(cfn, stack_name, template_url, cfn_params)
+
+    def _write_failed_record(stack_id: str = "") -> None:
+        write_partial_record(
+            SCRIPT_DIR / ".deploy",
+            stack_name,
+            region,
+            args.mode,
+            ssm_param_path=ssm_param_path or "",
+            copied_ami_id=cleanup_state["copied_ami_id"] or "",
+            license_secret_arns=created_license_secret_arns,
+            auto_imported_cert_arn=cleanup_state["auto_imported_cert_arn"] or "",
+            stack_id=stack_id,
+        )
+
+    # Leave a teardown-able .failed record if the create fails or is
+    # interrupted. The record is rewritten with the StackId as soon as
+    # create_stack returns; the describe_stacks lookup below is a fallback
+    # for an interrupt before that response arrives.
+    _write_failed_record()
+    try:
+        create_stack_and_wait(
+            cfn,
+            stack_name,
+            template_url,
+            cfn_params,
+            on_stack_created=_write_failed_record,
+        )
+    except (Exception, KeyboardInterrupt):
+        try:
+            stack_id = cfn.describe_stacks(StackName=stack_name)["Stacks"][0][
+                "StackId"
+            ]
+            _write_failed_record(stack_id)
+        except (ClientError, BotoCoreError):
+            # create_stack was rejected (no stack to record) or the session
+            # died during the wait; either way keep the original exception.
+            pass
+        raise
 
     # TLS is configured in the single create_stack call above (no two-phase
     # update / instance refresh). An auto-imported self-signed cert is left in
@@ -745,11 +923,12 @@ def main() -> None:
         extra.append(("AutoCreatedLicenseSecretArns", ",".join(created_license_secret_arns)))
     extra.append(("StackID", stack_data["StackId"]))
 
-    lines += [f"{k:<20} = {v}" for k, v in extra]
-    output = "\n".join(lines) + "\n"
-    print(output, end="")
-    outputs_file.write_text(output)
+    # The password goes to the 0600 record file only, never to the terminal.
+    mask = f"<stored in {outputs_file}, mode 0600>"
+    print(format_record(lines, extra, secret_keys=("Password",), mask=mask), end="")
+    write_record_file(outputs_file, format_record(lines, extra))
     cleanup_state["license_secret_arns"] = []
+    (deploy_dir / f"{stack_name}.failed").unlink(missing_ok=True)
 
     print()
     print(f"Outputs saved to {outputs_file}")

@@ -1083,6 +1083,7 @@ _EXPECTED_BASE_CONF = {
     "dbms.security.procedures.unrestricted": "gds.*,apoc.*,bloom.*",
     "dbms.security.http_auth_allowlist": "/,/browser.*,/bloom.*",
     "dbms.security.procedures.allowlist": "apoc.*,gds.*,bloom.*",
+    "dbms.databases.seed_from_uri_providers": "CloudSeedProvider,ServerSeedProvider",
 }
 
 

@@ -78,16 +78,23 @@ def create_stack_and_wait(
     stack_name: str,
     template_url: str,
     cfn_params: list[dict[str, str]],
+    on_stack_created: Callable[[str], None] | None = None,
 ) -> None:
-    """Create a stack and wait for CREATE_COMPLETE."""
+    """Create a stack and wait for CREATE_COMPLETE.
+
+    on_stack_created, when given, receives the new StackId right after
+    create_stack returns and before the (long) wait starts.
+    """
     print(f"Creating stack {stack_name}...")
-    cfn.create_stack(
+    resp = cfn.create_stack(
         StackName=stack_name,
         TemplateURL=template_url,
         Capabilities=["CAPABILITY_IAM"],
         DisableRollback=True,
         Parameters=cfn_params,
     )
+    if on_stack_created is not None:
+        on_stack_created(resp["StackId"])
     print("Waiting for stack to complete (this takes a few minutes)...")
     cfn.get_waiter("stack_create_complete").wait(
         StackName=stack_name,

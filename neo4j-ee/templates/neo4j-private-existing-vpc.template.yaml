@@ -1363,6 +1363,7 @@ Resources:
                 dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*
                 dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*
                 dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*
+                dbms.databases.seed_from_uri_providers=CloudSeedProvider,ServerSeedProvider
     Properties:
       LaunchTemplateData:
         ImageId: !Ref ImageId
@@ -1476,7 +1477,7 @@ Resources:
         Timeout: PT10M
     Properties:
       ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}'
-      InstanceType: t4g.nano
+      InstanceType: t4g.small
       SubnetId: !Ref PrivateSubnet1Id
       SecurityGroupIds:
         - !Ref Neo4jBastionSecurityGroup

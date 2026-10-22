@@ -94,13 +94,13 @@ The template creates the following inside your VPC. It does **not** create: VPC,
 
 | AWS Resource | What it creates |
 |---|---|
-| Internal NLB | Listeners on port 7474 (HTTP Browser) and 7687 (Bolt); deployed into the subnets you supply |
+| Internal NLB | TLS listeners on port 7473 (HTTPS Browser) and 7687 (Bolt); deployed into the subnets you supply |
 | EC2 instances | 1 or 3 Neo4j nodes in your private subnets; no public IPs |
 | ASG per node | One Auto Scaling Group per Neo4j node, fixed at `MinSize=MaxSize=DesiredCapacity=1`, for self-healing |
 | EBS data volumes | One GP3 volume per node with `DeletionPolicy: Retain`; survives stack deletion |
-| Operator bastion | `t4g.nano` in your private subnet, not registered as an NLB target; receives SSM sessions for operator access |
+| Operator bastion | `t4g.small` in your private subnet, not registered as an NLB target; receives SSM sessions for operator access |
 | VPC interface endpoints | `ssm`, `ssmmessages`, `logs`, `secretsmanager` with `PrivateDnsEnabled: true`; created when `CreateVpcEndpoints=true` (the default), skipped when `CreateVpcEndpoints=false` |
-| Security groups | NLB SG (AllowedCIDR on 7474/7687 to the NLB); External SG (NLB SG as source on 7474/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
+| Security groups | NLB SG (AllowedCIDR on 7473/7687 to the NLB); External SG (NLB SG as source on 7473/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
 | SSM parameters | `/neo4j-ee/<stack>/` prefix; publishes VPC ID, NLB DNS, security group IDs, and secret ARN |
 | Secrets Manager | Neo4j admin password at `neo4j/<stack>/password` |
 | CloudWatch | Log group, VPC flow logs, failed-auth alarm, CloudTrail trail |
@@ -141,6 +141,8 @@ Identical to the Private template. See [Platform Contract in PRIVATE.md](PRIVATE
 
 ## Local Deployment and Testing
 
+See [LOCAL-TESTING.md](LOCAL-TESTING.md) for AMI selection, the self-signed certificate, and the private DNS options. This section covers the Existing VPC specifics.
+
 ### Build
 
 Regenerate the output template after editing any file in `templates/src/`:
@@ -154,7 +156,7 @@ Commit both the edited partial and the regenerated `neo4j-private-existing-vpc.t
 
 ### Deploy
 
-Pass the VPC and subnet IDs at deploy time:
+Pass the VPC, subnet, and route table IDs at deploy time. `--private-route-table-1` is required, and a three-node cluster also needs `--subnet-2` and `--subnet-3`:
 
 ```bash
 cd neo4j-ee
@@ -165,6 +167,7 @@ cd neo4j-ee
   --region us-east-2 \
   --vpc-id vpc-0123456789abcdef0 \
   --subnet-1 subnet-0123456789abcdef0 \
+  --private-route-table-1 rtb-0123456789abcdef0 \
   r8i.xlarge
 
 # 3-node (three subnets required, one per AZ)
@@ -172,16 +175,19 @@ cd neo4j-ee
   --vpc-id vpc-0123456789abcdef0 \
   --subnet-1 subnet-11111111111111111 \
   --subnet-2 subnet-22222222222222222 \
-  --subnet-3 subnet-33333333333333333
+  --subnet-3 subnet-33333333333333333 \
+  --private-route-table-1 rtb-0123456789abcdef0
 
 # With Marketplace AMI
 ./deploy.py --marketplace --mode ExistingVpc \
   --vpc-id vpc-0123456789abcdef0 \
-  --subnet-1 subnet-0123456789abcdef0
+  --subnet-1 subnet-0123456789abcdef0 \
+  --private-route-table-1 rtb-0123456789abcdef0
 
 # VPC already has interface endpoints; skip endpoint creation
 ./deploy.py --mode ExistingVpc \
   --vpc-id vpc-0123456789abcdef0 --subnet-1 subnet-0123456789abcdef0 \
+  --private-route-table-1 rtb-0123456789abcdef0 \
   --create-vpc-endpoints false \
   --existing-endpoint-sg-id sg-0123456789abcdef0
 ```
@@ -235,7 +241,7 @@ scripts/create-test-vpc.py --region us-east-1
 
 # 2. Deploy 3-node cluster (auto-detects vpc-*.txt)
 ./deploy.py --mode ExistingVpc --number-of-servers 3
-STACK=$(ls -t .deploy/ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
+STACK=$(ls -t .deploy/test-ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
 
 # 3. Preflight (11 checks: stack, bastion, endpoints)
 cd validate-private
@@ -264,7 +270,7 @@ scripts/create-test-vpc.py --region us-east-1 --with-endpoints
 # 2. Deploy 1-node cluster (auto-detects VPC file and reads EndpointSgId)
 ./deploy.py --mode ExistingVpc --number-of-servers 1 \
   --create-vpc-endpoints false
-STACK=$(ls -t .deploy/ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
+STACK=$(ls -t .deploy/test-ee-*.txt | head -1 | xargs basename | sed 's/\.txt$//')
 
 # 3. Preflight: endpoint reachability confirms the wiring the template added
 cd validate-private

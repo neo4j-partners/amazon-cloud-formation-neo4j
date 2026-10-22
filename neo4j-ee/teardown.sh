@@ -13,9 +13,18 @@
 
 set -euo pipefail
 
+# Remember whether the caller chose a profile so the identity banner can say
+# so; falling back to `default` silently is how the wrong account gets hit.
+PROFILE_WAS_SET=true
+[ -n "${AWS_PROFILE:-}" ] || PROFILE_WAS_SET=false
 export AWS_PROFILE="${AWS_PROFILE:-default}"
+# 12-digit account id the credentials must resolve to (env or --expected-account).
+EXPECTED_ACCOUNT="${EXPECTED_AWS_ACCOUNT:-}"
 
 DELETE_VOLUMES=false
+# Set to true when a cleanup step fails; the record file is then kept so the
+# script can be re-run with the same StackID / cert ARN.
+TEARDOWN_FAILED=false
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="${SCRIPT_DIR}/.deploy"
@@ -30,9 +39,17 @@ while [[ $# -gt 0 ]]; do
       DELETE_VOLUMES=true
       shift
       ;;
+    --expected-account)
+      if [ $# -lt 2 ]; then
+        echo "ERROR: --expected-account requires an account id." >&2
+        exit 1
+      fi
+      EXPECTED_ACCOUNT="$2"
+      shift 2
+      ;;
     -*)
       echo "ERROR: Unknown option '$1'." >&2
-      echo "Usage: $0 [--delete-volumes] [stack-name]" >&2
+      echo "Usage: $0 [--delete-volumes] [--expected-account <id>] [stack-name]" >&2
       exit 1
       ;;
     *)
@@ -200,6 +217,11 @@ force_delete_vpc() {
 # ---------------------------------------------------------------------------
 if [ -n "${STACK_ARG}" ]; then
   OUTPUTS_FILE="${DEPLOY_DIR}/${STACK_ARG}.txt"
+  # A deploy that failed or was interrupted leaves only <stack>.failed. It is
+  # accepted when named explicitly, never by the no-argument default below.
+  if [ ! -f "${OUTPUTS_FILE}" ] && [ -f "${DEPLOY_DIR}/${STACK_ARG}.failed" ]; then
+    OUTPUTS_FILE="${DEPLOY_DIR}/${STACK_ARG}.failed"
+  fi
 elif [ -d "${DEPLOY_DIR}" ]; then
   OUTPUTS_FILE=$(ls -t "${DEPLOY_DIR}"/*.txt 2>/dev/null | head -1 || true)
 else
@@ -209,7 +231,7 @@ fi
 if [ -z "${OUTPUTS_FILE}" ] || [ ! -f "${OUTPUTS_FILE}" ]; then
   echo "ERROR: No deployment found." >&2
   if [ -n "${STACK_ARG}" ]; then
-    echo "File not found: ${DEPLOY_DIR}/${STACK_ARG}.txt" >&2
+    echo "File not found: ${DEPLOY_DIR}/${STACK_ARG}.txt (or .failed)" >&2
   else
     echo "No .txt files in ${DEPLOY_DIR}/" >&2
   fi
@@ -232,6 +254,35 @@ if [ -z "${STACK_NAME}" ] || [ -z "${REGION}" ]; then
   echo "ERROR: Could not read StackName or Region from ${OUTPUTS_FILE}." >&2
   exit 1
 fi
+
+# ---------------------------------------------------------------------------
+# Account guard: show which account/profile/region will be touched, and stop
+# before any delete call if it is not the expected account. Needs REGION, so it
+# runs right after the record file is loaded.
+# ---------------------------------------------------------------------------
+if [ "${PROFILE_WAS_SET}" = false ]; then
+  echo "WARNING: AWS_PROFILE not set, using default" >&2
+fi
+if ! CALLER_ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null) \
+    || [ -z "${CALLER_ACCOUNT}" ]; then
+  echo "ERROR: could not resolve AWS credentials for profile '${AWS_PROFILE}'." >&2
+  echo "Run: aws sso login --profile ${AWS_PROFILE}" >&2
+  exit 1
+fi
+CALLER_ARN=$(aws sts get-caller-identity --query Arn --output text 2>/dev/null || echo "unknown")
+echo "Account: ${CALLER_ACCOUNT}  Profile: ${AWS_PROFILE}  Region: ${REGION}"
+echo "Caller:  ${CALLER_ARN}"
+if [ -n "${EXPECTED_ACCOUNT}" ]; then
+  if ! [[ "${EXPECTED_ACCOUNT}" =~ ^[0-9]{12}$ ]]; then
+    echo "ERROR: expected account must be a 12-digit id, got '${EXPECTED_ACCOUNT}'." >&2
+    exit 1
+  fi
+  if [ "${CALLER_ACCOUNT}" != "${EXPECTED_ACCOUNT}" ]; then
+    echo "ERROR: AWS account mismatch: credentials resolve to ${CALLER_ACCOUNT}, expected ${EXPECTED_ACCOUNT}." >&2
+    exit 1
+  fi
+fi
+echo ""
 
 echo "=== Neo4j EE Stack Teardown ==="
 echo ""
@@ -305,10 +356,12 @@ else
     else
       echo "  WARNING: stack still not deleted — inspect it in the" \
            "CloudFormation console: ${STACK_NAME} (${REGION})." >&2
+      TEARDOWN_FAILED=true
     fi
   else
     echo "  No stack VPC discovered to force-delete — inspect the stack in" \
          "the CloudFormation console: ${STACK_NAME} (${REGION})." >&2
+    TEARDOWN_FAILED=true
   fi
 fi
 
@@ -349,17 +402,37 @@ echo "Password secret cleanup done."
 # AutoImportedCertificateArn) and is deliberately left untouched here. The
 # cert can only be deleted once the stack (and its NLB listeners) are gone,
 # so this runs after stack-delete-complete; ACM briefly reports the cert as
-# in use right after deletion, so failure is tolerated.
+# in use right after deletion, so the delete is retried. A cert that is already
+# gone counts as success; any other failure keeps the record file.
 # ---------------------------------------------------------------------------
 AUTO_IMPORTED_CERT_ARN=$(read_field "${OUTPUTS_FILE}" "AutoImportedCertificateArn" 2>/dev/null || true)
 if [ -n "${AUTO_IMPORTED_CERT_ARN}" ]; then
   echo ""
   echo "Deleting auto-imported ACM certificate ${AUTO_IMPORTED_CERT_ARN}..."
-  aws acm delete-certificate \
-    --region "${REGION}" \
-    --certificate-arn "${AUTO_IMPORTED_CERT_ARN}" 2>/dev/null \
-    || echo "  WARNING: Could not delete ACM certificate (it may still be" \
-            "detaching from the NLB) — check the ACM console."
+  CERT_GONE=false
+  for attempt in 1 2 3 4 5; do
+    if CERT_ERR=$(aws acm delete-certificate \
+        --region "${REGION}" \
+        --certificate-arn "${AUTO_IMPORTED_CERT_ARN}" 2>&1); then
+      CERT_GONE=true
+      break
+    fi
+    # deploy.py's own failure cleanup may already have deleted the cert.
+    if [[ "${CERT_ERR}" == *ResourceNotFoundException* ]]; then
+      echo "  Certificate already deleted."
+      CERT_GONE=true
+      break
+    fi
+    if [ "${attempt}" -lt 5 ]; then
+      echo "  Certificate still in use, retrying in 10s (${attempt}/5)..."
+      sleep 10
+    fi
+  done
+  if [ "${CERT_GONE}" = false ]; then
+    echo "  WARNING: Could not delete ACM certificate (it may still be" \
+         "detaching from the NLB) — check the ACM console."
+    TEARDOWN_FAILED=true
+  fi
   echo "ACM certificate cleanup done."
 fi
 
@@ -403,11 +476,18 @@ if [ -n "${STACK_ID}" ]; then
     echo "Deleting retained data volumes..."
     while IFS=$'\t' read -r vol_id size az created; do
       echo "  Deleting ${vol_id} (${size}GB, ${az}, created ${created})..."
-      aws ec2 delete-volume --region "${REGION}" --volume-id "${vol_id}" \
-        || echo "  WARNING: Failed to delete ${vol_id} — check AWS console."
-      echo "  Deleted ${vol_id}."
+      if aws ec2 delete-volume --region "${REGION}" --volume-id "${vol_id}"; then
+        echo "  Deleted ${vol_id}."
+      else
+        echo "  WARNING: Failed to delete ${vol_id} — check AWS console."
+        TEARDOWN_FAILED=true
+      fi
     done <<< "${VOLUME_IDS}"
-    echo "All data volumes deleted."
+    if [ "${TEARDOWN_FAILED}" = true ]; then
+      echo "Some cleanup steps failed (see warnings above)."
+    else
+      echo "All data volumes deleted."
+    fi
   else
     echo "Retained data volumes (not deleted — pass --delete-volumes to remove):"
     while IFS=$'\t' read -r vol_id size az created; do
@@ -418,11 +498,22 @@ if [ -n "${STACK_ID}" ]; then
   fi
 fi
 
-echo ""
-echo "Removing ${OUTPUTS_FILE}..."
-rm -f "${OUTPUTS_FILE}"
+if [ "${TEARDOWN_FAILED}" = true ]; then
+  echo ""
+  echo "Keeping ${OUTPUTS_FILE} because a cleanup step failed."
+  echo "Fix the warnings above, then re-run: ./teardown.sh ${STACK_NAME}"
+  echo ""
+  echo "============================================="
+  echo "  Teardown finished with warnings."
+  echo "============================================="
+  exit 1
+else
+  echo ""
+  echo "Removing ${OUTPUTS_FILE}..."
+  rm -f "${OUTPUTS_FILE}"
 
-echo ""
-echo "============================================="
-echo "  Teardown complete."
-echo "============================================="
+  echo ""
+  echo "============================================="
+  echo "  Teardown complete."
+  echo "============================================="
+fi

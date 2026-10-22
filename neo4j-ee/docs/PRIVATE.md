@@ -4,7 +4,7 @@
 
 - **What it deploys:** Neo4j EE cluster (1 or 3 nodes) in private subnets behind an internal NLB
 - **Public exposure:** none — no instance has a public IP
-- **Operator access:** dedicated `t4g.nano` bastion via AWS Systems Manager Session Manager
+- **Operator access:** dedicated `t4g.small` bastion via AWS Systems Manager Session Manager
 - **When to use:** production, staging, and regulated workloads
 
 > **Marketplace operator** (deployed from AWS Marketplace, running stack):
@@ -37,7 +37,6 @@
 - [Local Deployment and Testing](#local-deployment-and-testing)
   - [Build](#build)
   - [Deploy](#deploy)
-  - [Add Bolt TLS (Optional)](#add-bolt-tls-optional)
   - [Preflight and Basic Validation](#preflight-and-basic-validation)
   - [Smoke Test](#smoke-test)
   - [Failover Suite](#failover-suite)
@@ -138,7 +137,7 @@ If the bastion SSM check fails immediately after a fresh deploy, the bastion Use
 
 ### Access via Bastion
 
-All operator access goes through the `t4g.nano` bastion via SSM. Tunnels are only needed when your laptop talks to the NLB directly. Run `uv run` commands from `neo4j-ee/validate-private/`.
+All operator access goes through the `t4g.small` bastion via SSM. Tunnels are only needed when your laptop talks to the NLB directly. Run `uv run` commands from `neo4j-ee/validate-private/`.
 
 | Tool | How it connects | Tunnel needed? |
 |---|---|---|
@@ -147,7 +146,7 @@ All operator access goes through the `t4g.nano` bastion via SSM. Tunnels are onl
 | `uv run validate-private` | SSM `RunShellScript` on the bastion | No |
 | `uv run scripts/smoke-write.py` | SSM `RunShellScript` on the bastion | No |
 | Local driver or client tool | Bolt connection from your laptop | Yes — Bolt tunnel (7687) |
-| Neo4j Browser | HTTP for the web UI + Bolt for queries | Yes — both tunnels (7474 + 7687) |
+| Neo4j Browser | HTTPS for the web UI + Bolt for queries | Yes — both tunnels (7473 + 7687) |
 
 ### Bolt Tunnel
 
@@ -157,13 +156,13 @@ Use the Bolt tunnel when you want to connect a local driver, client tool, or scr
 uv run scripts/bolt-tunnel.py      # localhost:7687 -> NLB:7687  (blocks; Ctrl-C to close)
 ```
 
-Connect with `bolt://localhost:7687`, or `bolt+ssc://localhost:7687` when using the optional self-signed `--tls` test flow. Use direct `bolt` mode rather than `neo4j` routing mode from a laptop tunnel because routed mode returns the NLB's internal DNS name, which is not reachable from your laptop.
+Connect with `bolt://localhost:7687`, or `bolt+ssc://localhost:7687` when the NLB serves the self-signed certificate that `deploy.py` imports by default. Use direct `bolt` mode rather than `neo4j` routing mode from a laptop tunnel because routed mode returns the NLB's internal DNS name, which is not reachable from your laptop.
 
 The Bolt tunnel is also required alongside the Browser Tunnel when using Neo4j Browser.
 
 ### Browser Tunnel
 
-Use this to open the Neo4j Browser web UI. The browser makes two connections: HTTP to load the UI (port 7474) and Bolt to run queries (port 7687). Both tunnels must be open simultaneously.
+Use this to open the Neo4j Browser web UI. The browser makes two connections: HTTPS to load the UI (port 7473) and Bolt to run queries (port 7687). Both tunnels must be open simultaneously.
 
 **Single-command option** — run from `neo4j-ee/`:
 
@@ -172,16 +171,16 @@ uv run browse.py                   # most recent deployment
 uv run browse.py <stack-name>      # specific deployment
 ```
 
-`browse.py` reads `.deploy/<stack-name>.txt`, opens both SSM port-forward tunnels in the same shell (7474 and 7687), and prints the URL and credentials. Press Ctrl+C to close both tunnels.
+`browse.py` reads `.deploy/<stack-name>.txt`, opens both SSM port-forward tunnels in the same shell, and prints the URL and credentials. Add the `/etc/hosts` line it prints, then open the `https://<AdvertisedDNS>:7473` URL. Press Ctrl+C to close both tunnels.
 
 **Two-terminal option** — run from `neo4j-ee/validate-private/`:
 
 ```bash
-uv run scripts/browser-tunnel.py   # localhost:7474 -> NLB:7474  (blocks; Ctrl-C to close)
+uv run scripts/browser-tunnel.py   # localhost:7473 -> NLB:7473  (blocks; Ctrl-C to close)
 uv run scripts/bolt-tunnel.py      # localhost:7687 -> NLB:7687  (blocks; Ctrl-C to close)
 ```
 
-Open `http://localhost:7474`. When prompted for a connection URL, enter the Bolt URI printed by `uv run browse.py` or `uv run scripts/bolt-tunnel.py`. For the password, see [Retrieve the Password](#retrieve-the-password).
+The certificate SAN is the stack's `AdvertisedDNS`, so add `127.0.0.1 <AdvertisedDNS>` to your laptop's `/etc/hosts`. `browser-tunnel.py` prints the exact line. Then open `https://<AdvertisedDNS>:7473`. The self-signed certificate triggers a browser warning that you must accept. When prompted for a connection URL, enter the Bolt URI printed by `uv run browse.py` or `uv run scripts/bolt-tunnel.py`. For the password, see [Retrieve the Password](#retrieve-the-password).
 
 > **Note:** Connection strings inside Neo4j Browser show the internal NLB DNS hostname. Substitute `localhost` when connecting through the tunnel.
 
@@ -210,7 +209,7 @@ uv run admin-shell                     # most recent deployment
 uv run admin-shell <stack-name>        # specific deployment
 ```
 
-Opens `cypher-shell` on the bastion with a `neo4j://` URI, or `neo4j+ssc://` when the EE output file contains `BoltTlsSecretArn` from the optional self-signed `--tls` test flow. The Neo4j driver fetches the routing table and directs writes to the current leader automatically. The password is resolved on the bastion using the bastion's IAM role. It does not appear on the local machine or in CloudTrail.
+Opens `cypher-shell` on the bastion with a `neo4j+ssc://` URI, because Private stacks always terminate TLS at the NLB. The Neo4j driver fetches the routing table and directs writes to the current leader automatically. The password is resolved on the bastion using the bastion's IAM role. It does not appear on the local machine or in CloudTrail.
 
 ```
 neo4j@neo4j> CREATE (n:Test {msg: "hello"}) RETURN n;
@@ -257,17 +256,17 @@ cd neo4j-ee
 
 **Three-node cluster:**
 - VPC with three public subnets (one per AZ) hosting NAT Gateways, and three private subnets (one per AZ) hosting the Neo4j instances
-- Internal NLB with listeners on 7474 (HTTP Browser) and 7687 (Bolt), targets spread across all three private subnets
+- Internal NLB with TLS listeners on 7473 (HTTPS Browser) and 7687 (Bolt), targets spread across all three private subnets
 - Three Neo4j EC2 instances in private subnets, forming a Raft cluster
 - Three NAT Gateways for outbound traffic from the cluster members
-- One `t4g.nano` operator bastion in a private subnet, not registered as an NLB target
+- One `t4g.small` operator bastion in a private subnet, not registered as an NLB target
 - VPC interface endpoints for `ssm`, `ssmmessages`, `logs`, and `secretsmanager` with `PrivateDnsEnabled: true`
 
 **Single instance:**
 - VPC with one public subnet (NAT Gateway) and one private subnet (EC2 instance)
 - Internal NLB in the private subnet
 - One NAT Gateway
-- One `t4g.nano` operator bastion
+- One `t4g.small` operator bastion
 
 ### AWS Resources Created
 
@@ -275,13 +274,13 @@ cd neo4j-ee
 |---|---|
 | VPC | New VPC with public subnets (NAT Gateways) and private subnets (Neo4j instances); 3 AZs for a cluster, 1 AZ for a single instance |
 | NAT Gateways | One per AZ for outbound internet access from the cluster nodes |
-| Internal NLB | Listeners on port 7474 (HTTP Browser) and 7687 (Bolt); routable from inside the VPC only |
+| Internal NLB | TLS listeners on port 7473 (HTTPS Browser) and 7687 (Bolt); routable from inside the VPC only |
 | EC2 instances | 1 or 3 Neo4j nodes in private subnets; no public IPs |
 | ASG per node | One Auto Scaling Group per Neo4j node, fixed at `MinSize=MaxSize=DesiredCapacity=1`, for self-healing |
 | EBS data volumes | One GP3 volume per node with `DeletionPolicy: Retain`; survives stack deletion |
-| Operator bastion | `t4g.nano` in a private subnet, not registered as an NLB target; receives SSM sessions for operator access |
+| Operator bastion | `t4g.small` in a private subnet, not registered as an NLB target; receives SSM sessions for operator access |
 | VPC interface endpoints | `ssm`, `ssmmessages`, `logs`, `secretsmanager` with `PrivateDnsEnabled: true`; no NAT required for AWS service calls |
-| Security groups | NLB SG (AllowedCIDR on 7474/7687 to the NLB); External SG (NLB SG as source on 7474/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
+| Security groups | NLB SG (AllowedCIDR on 7473/7687 to the NLB); External SG (NLB SG as source on 7473/7687 to instances); Internal SG (cluster ports 5000/6000/7000/7688 between members only); Endpoint SG (gating access to the VPC endpoints) |
 | SSM parameters | `/neo4j-ee/<stack>/` prefix; publishes VPC ID, NLB DNS, security group IDs, and secret ARN for downstream consumers |
 | Secrets Manager | Neo4j admin password at `neo4j/<stack>/password` |
 | CloudWatch | Log group, VPC flow logs, failed-auth alarm, CloudTrail trail |
@@ -310,7 +309,7 @@ Every routing table entry points back to the NLB. A driver connecting with `neo4
 
 > **Why a dedicated bastion?** To prevent NLB hairpin failures where a cluster node tunneling SSM through itself sees its own IP as the source and silently drops the reply — a 1-in-3 connection failure rate.
 
-The bastion is `t4g.nano`, sits in the same private subnet as the cluster, and is not registered as an NLB target.
+The bastion is `t4g.small`, sits in the same private subnet as the cluster, and is not registered as an NLB target.
 
 **The failure.** When SSM tunnels ran through a Neo4j cluster member instead of a dedicated bastion, every third connection timed out. NLB target health was fine; VPC endpoints, security groups, and routing all checked out.
 
@@ -337,7 +336,7 @@ The stack publishes resource IDs via SSM under `/neo4j-ee/<stack-name>/` so that
 |---|---|
 | `/neo4j-ee/<stack>/vpc-id` | VPC the application should attach to |
 | `/neo4j-ee/<stack>/nlb-dns` | Internal NLB DNS for Bolt connections |
-| `/neo4j-ee/<stack>/external-sg-id` | Security group that accepts client/app ingress on 7474 and 7687 |
+| `/neo4j-ee/<stack>/external-sg-id` | Security group that accepts client/app ingress on 7473 and 7687 |
 | `/neo4j-ee/<stack>/password-secret-arn` | Secrets Manager ARN for the Neo4j password |
 | `/neo4j-ee/<stack>/vpc-endpoint-sg-id` | Security group attached to the VPC interface endpoints |
 | `/neo4j-ee/<stack>/tls-self-signed` | `true` when the NLB serves the self-signed cert auto-imported by `deploy.py`; `false` for real ACM certs. HTTPS Query API consumers key TLS skip-verify off this flag |
@@ -368,17 +367,15 @@ See [`sample-private-app/README.md`](../sample-private-app/README.md) for the fu
 
 ### Bolt TLS
 
-When `BoltCertificateSecretArn` is set, Neo4j configures `server.bolt.tls_level=REQUIRED` using the cert and key from the named Secrets Manager secret. The secret must be JSON with `certificate` and `private_key` keys.
+The NLB terminates TLS on the Browser port (7473) and the Bolt port (7687) using the ACM certificate named by the `CertificateArn` parameter. The stack also requires `AdvertisedDNS`, and the certificate SAN and CN must both equal that name. The NLB re-encrypts traffic to the instances, which serve a self-signed certificate.
 
-`deploy.py --tls` provides a local self-signed test flow. It creates the stack, reads the generated NLB DNS, creates a self-signed certificate for that DNS name, stores the cert and key in Secrets Manager, updates the stack with `BoltCertificateSecretArn`, and refreshes the node ASGs so Neo4j starts with Bolt TLS enabled.
+For local testing, `deploy.py` imports a self-signed ACM certificate when you pass no `--cert-arn`. Clients connect with `neo4j+ssc://`. See [TLS and DNS in LOCAL-TESTING.md](LOCAL-TESTING.md#tls-and-dns).
 
 For production, use a stable customer-owned DNS name rather than the generated NLB DNS:
 
-1. Create a private DNS record that points to the internal NLB.
-2. Obtain a certificate for that DNS name.
-3. Store the cert and key in Secrets Manager using the JSON format above.
-4. Set `BoltAdvertisedDNS` and `BoltCertificateSecretArn` as CloudFormation parameters when deploying or updating the stack.
-5. Rotate by updating the secret value and refreshing the ASGs.
+1. Obtain or import an ACM certificate whose SAN and CN are that DNS name.
+2. Create a private DNS record that points the name to the internal NLB, or pass `--create-private-dns` to `deploy.py`.
+3. Set `CertificateArn` and `AdvertisedDNS` as CloudFormation parameters when deploying the stack.
 
 **Residual risk.** Cluster-internal ports (5000, 6000, 7000, 7688) remain plaintext between cluster members, protected by the cluster security group. An actor with `ec2:RunInstances` permission to launch into the cluster subnet with the cluster security group, `ec2:CreateTrafficMirrorSession` targeting a cluster ENI, or root on any cluster node can observe replication traffic on the wire. For regulated workloads or shared-tenancy accounts where IAM blast radius extends beyond the cluster operator team, request cluster TLS before deploying.
 
@@ -401,38 +398,7 @@ Commit both the edited partial and the regenerated `neo4j-private.template.yaml`
 
 ### Deploy
 
-```bash
-cd neo4j-ee
-
-# 3-node cluster, t3.medium, pin region to avoid AMI copy
-./deploy.py --region us-east-1
-
-# Single instance
-./deploy.py --number-of-servers 1 --region us-east-1
-
-# Memory-optimized instance
-./deploy.py r8i.xlarge --region us-east-1
-
-# Use the published Marketplace AMI:
-./deploy.py --marketplace
-
-# Enable CloudWatch alarm email notifications:
-./deploy.py --alert-email you@example.com
-```
-
-The default mode is Private. No `--mode` flag needed. Stack creation takes 5-10 minutes. The script writes outputs to `.deploy/<stack-name>.txt`.
-
-> **Cost note.** Private mode provisions 3 NAT Gateways for a cluster (~$0.045/hr each) or 1 for a single instance. Tear down promptly after testing.
-
-### Add Bolt TLS (Optional)
-
-Bolt TLS encrypts port 7687 using a self-signed certificate in the local test flow:
-
-```bash
-./deploy.py --number-of-servers 3 --region us-east-1 --tls
-```
-
-The deployer creates the stack without TLS, reads the generated NLB DNS, creates a self-signed certificate for that DNS name, stores it in Secrets Manager, updates the stack with `BoltCertificateSecretArn`, and triggers an ASG instance refresh. The refresh takes 5-10 minutes.
+See [LOCAL-TESTING.md](LOCAL-TESTING.md) for deploy commands, AMI selection, and the TLS and DNS options. The default mode is Private, so no `--mode` flag is needed.
 
 For a deeper local check after template edits, run:
 

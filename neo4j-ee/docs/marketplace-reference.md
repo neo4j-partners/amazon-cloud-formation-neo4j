@@ -29,7 +29,7 @@ References:
 
 ### Bolt TLS availability
 
-All three templates include optional Bolt TLS parameters (`BoltCertificateSecretArn`, `BoltAdvertisedDNS`). When `BoltCertificateSecretArn` is set, Neo4j enables TLS on Bolt port 7687 using the certificate and private key stored in Secrets Manager. Neo4j Browser remains HTTP on port 7474 in the current templates.
+Private and Private Existing VPC require `CertificateArn` and `AdvertisedDNS`. The NLB terminates TLS on Browser port 7473 and Bolt port 7687 using that ACM certificate. Public is plain TCP on 7474 and 7687 unless TLS is enabled with a certificate, in which case Browser moves to 7473.
 
 ### Plugin licenses and default-off contract
 
@@ -50,7 +50,7 @@ Template 2 defaults `AllowedCIDR` to `10.0.0.0/16` because it creates that VPC. 
 
 ### Operator bastion in private templates
 
-Both Template 2 and Template 3 create a `t4g.nano` bastion instance reachable only through AWS Systems Manager Session Manager. It has no ingress rules. The bastion is not optional: the NLB is internal and cluster nodes have no public IPs, so there is no direct path from an operator's machine without it. Template descriptions must explain that the bastion is created, what it does, and that it uses SSM rather than SSH. Buyers in environments with strict instance provisioning policies need this information before they launch.
+Both Template 2 and Template 3 create a `t4g.small` bastion instance reachable only through AWS Systems Manager Session Manager. It has no ingress rules. The bastion is not optional: the NLB is internal and cluster nodes have no public IPs, so there is no direct path from an operator's machine without it. Template descriptions must explain that the bastion is created, what it does, and that it uses SSM rather than SSH. Buyers in environments with strict instance provisioning policies need this information before they launch.
 
 ### VPC endpoint creation in Template 3
 
@@ -86,7 +86,7 @@ EC2 instances must use an IAM role, not long-term access keys. Each permission m
 - CloudFormation signaling: restrict to the current stack ARN using `!Sub`.
 - EBS operations (`ec2:AttachVolume`, `ec2:DescribeVolumes`, `ec2:DescribeInstances`): resource `*` is acceptable because EBS volumes lack ARN-level scoping on all relevant APIs.
 - Auto Scaling discovery (`autoscaling:DescribeAutoScalingGroups`): required for cluster node discovery; resource `*` is unavoidable.
-- Secrets Manager (`secretsmanager:GetSecretValue`): scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`). When optional Bolt TLS is configured, the role gets a second statement scoped to `BoltCertificateSecretArn`. When `InstallBloom=true` and `BloomLicenseSecretArn` is non-empty, an `Fn::If` statement adds a third grant scoped to that ARN; the same pattern applies to GDS via `GdsLicenseSecretArn`. Each license grant collapses to `AWS::NoValue` when the matching plugin is off or the ARN is empty, so a default Marketplace launch grants no Secrets Manager access for licenses.
+- Secrets Manager (`secretsmanager:GetSecretValue`): scoped to the password secret ARN (`!Ref Neo4jPasswordSecret`). When `InstallBloom=true` and `BloomLicenseSecretArn` is non-empty, an `Fn::If` statement adds a grant scoped to that ARN; the same pattern applies to GDS via `GdsLicenseSecretArn`. Each license grant collapses to `AWS::NoValue` when the matching plugin is off or the ARN is empty, so a default Marketplace launch grants no Secrets Manager access for licenses.
 
 ### Auto Scaling groups for all topologies
 
@@ -177,10 +177,10 @@ Metadata:
           - InstallGDS
           - GdsLicenseSecretArn
       - Label:
-          default: "Bolt TLS"
+          default: "TLS"
         Parameters:
-          - BoltCertificateSecretArn
-          - BoltAdvertisedDNS
+          - CertificateArn
+          - AdvertisedDNS
 ```
 
 ### Architectural diagrams

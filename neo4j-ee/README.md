@@ -57,7 +57,8 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 ./deploy.py --mode Public --region us-east-1
 
 # Existing VPC
-./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx
+./deploy.py --mode ExistingVpc --vpc-id <vpc-id> --subnet-1 <subnet-1-id> \
+  --subnet-2 <subnet-2-id> --subnet-3 <subnet-3-id> --private-route-table-1 <route-table-id>
 
 # Common flags (apply to all modes)
 ./deploy.py --number-of-servers 1           # single instance instead of 3-node
@@ -70,6 +71,8 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 # Public is plain TCP unless TLS is opted in:
 ./deploy.py --mode Public --enable-public-tls --cert-arn <acm-arn> --advertised-dns <dns>
 ```
+
+For AMI selection, the self-signed certificate, private DNS, and validation steps, see [docs/LOCAL-TESTING.md](docs/LOCAL-TESTING.md). Always pass `--region`, because `deploy.py` picks a random region otherwise.
 
 > **`deploy.py` defaults differ from Marketplace template defaults.** `deploy.py` installs both Bloom and Graph Data Science by default so local validation exercises the same plugin surface customers tend to enable. The Marketplace templates default `InstallBloom=false` and `InstallGDS=false`. The buyer-facing flow is covered in the topology guides ([Public](docs/PUBLIC.md#prerequisites), [Private](docs/PRIVATE.md#prerequisites), [Private Existing VPC](docs/PRIVATE-EXISTING-VPC.md#prerequisites)).
 
@@ -139,7 +142,7 @@ python build.py --verify
 | `templates/neo4j-private-existing-vpc.template.yaml` | CloudFormation template for private, existing VPC deployments |
 | `templates/src/` | Source partials assembled by `build.py` |
 | `templates/build.py` | Assembles the three templates from `templates/src/` partials |
-| `deploy.py` | Deploy helper: creates stack, waits, writes outputs to `.deploy/` |
+| `deploy.py` | Deploy helper: creates stack, waits, writes outputs to `.deploy/`. See [docs/LOCAL-TESTING.md](docs/LOCAL-TESTING.md) |
 | `teardown.sh` | Deletes the stack, SSM parameter, copied AMI, secrets, and deployment file |
 | `test-observability.sh` | Observability checks: CloudWatch, logs, flow logs, alarm, CloudTrail |
 | `validate-private/` | Operator tooling for Private and ExistingVpc stacks |

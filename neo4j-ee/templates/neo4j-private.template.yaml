@@ -555,7 +555,7 @@ Resources:
 
   # ---------------------------------------------------------------------------
   # Operator bastion (Private mode only)
-  # A non-Neo4j-target t4g.nano used as the SSM Session Manager entry point
+  # A non-Neo4j-target t4g.small used as the SSM Session Manager entry point
   # for operator port-forwarding to the internal NLB. It is deliberately NOT
   # registered in any NLB target group — that topology makes NAT-loopback
   # (hairpin) failures impossible for flows originating from the bastion, so
@@ -1268,6 +1268,7 @@ Resources:
                 dbms.security.procedures.unrestricted=gds.*,apoc.*,bloom.*
                 dbms.security.http_auth_allowlist=/,/browser.*,/bloom.*
                 dbms.security.procedures.allowlist=apoc.*,gds.*,bloom.*
+                dbms.databases.seed_from_uri_providers=CloudSeedProvider,ServerSeedProvider
     Properties:
       LaunchTemplateData:
         ImageId: !Ref ImageId
@@ -1876,7 +1877,7 @@ Resources:
         Timeout: PT10M
     Properties:
       ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}'
-      InstanceType: t4g.nano
+      InstanceType: t4g.small
       SubnetId: !Ref Neo4jPrivateSubnet1
       SecurityGroupIds:
         - !Ref Neo4jBastionSecurityGroup

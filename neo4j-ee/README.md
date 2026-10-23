@@ -74,6 +74,19 @@ export AWS_PROFILE=<your-profile>   # omit to use your default profile
 
 For AMI selection, the self-signed certificate, private DNS, and validation steps, see [docs/LOCAL-TESTING.md](docs/LOCAL-TESTING.md). Always pass `--region`, because `deploy.py` picks a random region otherwise.
 
+`--marketplace` uses the region-local AWS Marketplace AMI for the live Neo4j EE
+listing, resolved by Marketplace product code, with this repo's selected
+template. It does not launch through the live Marketplace CloudFormation
+delivery option, so it can test repo-only topologies such as Private before
+those templates are published on the listing.
+
+`--marketplace` requires a listing AMI built by the current
+`marketplace/create-ami.sh`. A listing AMI built before that change lacks the
+`neo4j` user, the Neo4j yum repo, `python3.11`, and the CloudWatch agent, so
+bootstrap fails. The account must also be subscribed to the listing. See
+[Choose an AMI](docs/LOCAL-TESTING.md#choose-an-ami) for the lookup and the
+observed failure.
+
 > **`deploy.py` defaults differ from Marketplace template defaults.** `deploy.py` installs both Bloom and Graph Data Science by default so local validation exercises the same plugin surface customers tend to enable. The Marketplace templates default `InstallBloom=false` and `InstallGDS=false`. The buyer-facing flow is covered in the topology guides ([Public](docs/PUBLIC.md#prerequisites), [Private](docs/PRIVATE.md#prerequisites), [Private Existing VPC](docs/PRIVATE-EXISTING-VPC.md#prerequisites)).
 
 For licensed local validation, place the license files at

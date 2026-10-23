@@ -7,6 +7,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "neo4j-ee" / "src"))
@@ -89,20 +90,87 @@ class OutputHelperTests(unittest.TestCase):
 
 class AmiHelperTests(unittest.TestCase):
     def test_marketplace_mode_does_not_require_local_ami_file(self) -> None:
-        args = types.SimpleNamespace(marketplace=True)
-
-        info = resolve_ami(
-            args,
-            region="us-east-1",
-            stack_name="demo",
-            script_dir=Path("/does/not/exist"),
-            source_region="us-east-1",
+        args = types.SimpleNamespace(
+            marketplace=True,
+            marketplace_product_code="prod-code",
+            allow_old_marketplace_ami=False,
         )
+        ec2 = mock.Mock()
+        ec2.describe_images.return_value = {
+            "Images": [
+                {"ImageId": "ami-old", "CreationDate": "2026-06-01T00:00:00Z"},
+                {
+                    "ImageId": "ami-new",
+                    "CreationDate": "2026-07-01T00:00:00Z",
+                    "OwnerId": "111122223333",
+                    "Name": "neo4j-ee-new",
+                },
+            ]
+        }
+        ssm = mock.Mock()
+        clients = {"ec2": ec2, "ssm": ssm}
+
+        with mock.patch("neo4j_ee.amis.boto3.client") as client:
+            client.side_effect = lambda service, **_: clients[service]
+            info = resolve_ami(
+                args,
+                region="us-east-1",
+                stack_name="demo",
+                script_dir=Path("/does/not/exist"),
+                source_region="us-east-1",
+            )
 
         self.assertEqual(info.source, "marketplace")
-        self.assertEqual(info.ami_id, "")
-        self.assertEqual(info.ssm_param_path, "")
+        self.assertEqual(info.ami_id, "ami-new")
+        self.assertEqual(info.ssm_param_path, "/neo4j-ee/test/demo/ami-id")
+        self.assertEqual(info.marketplace_product_code, "prod-code")
+        self.assertEqual(info.marketplace_ami_owner, "111122223333")
+        self.assertEqual(info.marketplace_ami_name, "neo4j-ee-new")
         self.assertIsNone(info.copied_ami_id)
+        ssm.put_parameter.assert_called_once_with(
+            Name="/neo4j-ee/test/demo/ami-id",
+            Type="String",
+            Value="ami-new",
+            Overwrite=True,
+        )
+
+
+    def _resolve_with_listing_image(self, created: str, allow_old: bool):
+        args = types.SimpleNamespace(
+            marketplace=True,
+            marketplace_product_code="prod-code",
+            allow_old_marketplace_ami=allow_old,
+        )
+        ec2 = mock.Mock()
+        ec2.describe_images.return_value = {
+            "Images": [{"ImageId": "ami-listing", "CreationDate": created}]
+        }
+        clients = {"ec2": ec2, "ssm": mock.Mock()}
+        with mock.patch("neo4j_ee.amis.boto3.client") as client:
+            client.side_effect = lambda service, **_: clients[service]
+            return resolve_ami(
+                args,
+                region="us-east-1",
+                stack_name="demo",
+                script_dir=Path("/does/not/exist"),
+                source_region="us-east-1",
+            )
+
+    def test_marketplace_mode_rejects_ami_older_than_bootstrap_contract(self) -> None:
+        with self.assertRaises(SystemExit) as ctx:
+            self._resolve_with_listing_image(
+                "2025-12-17T10:00:00.000Z", allow_old=False
+            )
+
+        self.assertIn("ami-listing", str(ctx.exception))
+        self.assertIn("2025-12-17", str(ctx.exception))
+
+    def test_marketplace_mode_allows_old_ami_with_override(self) -> None:
+        info = self._resolve_with_listing_image(
+            "2025-12-17T10:00:00.000Z", allow_old=True
+        )
+
+        self.assertEqual(info.ami_id, "ami-listing")
 
 
 class ValidatePrivateHelperTests(unittest.TestCase):

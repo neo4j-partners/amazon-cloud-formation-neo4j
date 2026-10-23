@@ -221,18 +221,23 @@ COMMAND_ID=$(aws ssm send-command \
     "rpm -q kernel 2>&1 || echo FAIL: kernel package not installed",
     "rpm -q kernel-core 2>&1 || echo INFO: kernel-core package not installed separately",
     "echo \"\"",
-    "echo \"=== CHECK 6: AWS CLI v2 installed, v1 package absent ===\"",
+    "echo \"=== CHECK 6: AWS CLI v2 installed at /usr/local/bin, distro awscli-2 package absent ===\"",
     "aws --version 2>&1 || echo FAIL: aws command missing",
-    "rpm -q awscli && echo FAIL: awscli v1 package present || echo PASS: awscli v1 package absent",
+    "test \"$(command -v aws)\" = /usr/local/bin/aws && echo PASS: aws resolves to /usr/local/bin/aws || echo FAIL: aws resolves to $(command -v aws)",
+    "rpm -q awscli-2 > /dev/null 2>&1 && echo FAIL: awscli-2 package present || echo PASS: awscli-2 package absent",
     "echo \"\"",
     "echo \"=== CHECK 7: Pre-baked tools ===\"",
     "command -v jq && jq --version",
     "command -v python3.11 && python3.11 --version",
     "command -v unzip && unzip -v | head -1",
     "test -x /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl && echo PASS: CloudWatch agent control binary present",
+    "test -d /opt/aws/amazon-cloudwatch-agent/etc && echo PASS: CloudWatch agent etc directory present",
+    "command -v openssl && echo PASS: openssl present",
+    "command -v find && command -v hostname && echo PASS: findutils and hostname present",
     "echo \"\"",
     "echo \"=== CHECK 8: Neo4j repo and system user ===\"",
     "test -f /etc/yum.repos.d/neo4j.repo && echo PASS: Neo4j repo present",
+    "rpm -qa --qf \"%{SUMMARY}\\n\" gpg-pubkey* | grep -qi neo4j && echo PASS: Neo4j GPG key imported",
     "getent passwd neo4j",
     "getent group neo4j",
     "echo \"\"",
@@ -342,16 +347,27 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 
-if echo "${COMMAND_OUTPUT}" | grep -q "PASS: awscli v1 package absent"; then
-  echo "  PASS: awscli v1 package is absent"
+if echo "${COMMAND_OUTPUT}" | grep -q "PASS: aws resolves to /usr/local/bin/aws"; then
+  echo "  PASS: aws resolves to the AWS CLI v2 installer path"
 else
-  echo "  FAIL: awscli v1 package may still be present"
+  echo "  FAIL: aws does not resolve to /usr/local/bin/aws"
+  FAILURES=$((FAILURES + 1))
+fi
+
+if echo "${COMMAND_OUTPUT}" | grep -q "PASS: awscli-2 package absent"; then
+  echo "  PASS: distro awscli-2 package is absent"
+else
+  echo "  FAIL: distro awscli-2 package may still be present"
   FAILURES=$((FAILURES + 1))
 fi
 
 for expected in \
   "PASS: CloudWatch agent control binary present" \
+  "PASS: CloudWatch agent etc directory present" \
+  "PASS: openssl present" \
+  "PASS: findutils and hostname present" \
   "PASS: Neo4j repo present" \
+  "PASS: Neo4j GPG key imported" \
   "neo4j:x:500:500" \
   "neo4j:x:500:" \
   "PASS: lsblk present" \

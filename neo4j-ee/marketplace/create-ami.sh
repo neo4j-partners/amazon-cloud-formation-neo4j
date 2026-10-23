@@ -24,7 +24,9 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 REGION="us-east-1"
-AMI_NAME="neo4j-ee-base-$(date +%Y%m%d)"
+# Set AMI_NAME_SUFFIX to build a second AMI on the same day while the first is
+# still referenced by a launch template.
+AMI_NAME="neo4j-ee-base-$(date +%Y%m%d)${AMI_NAME_SUFFIX:+-${AMI_NAME_SUFFIX}}"
 INSTANCE_TYPE="t3.medium"
 MARKETPLACE_ACCOUNT_ID="385155106615"
 
@@ -186,7 +188,7 @@ dnf update -y
 # uses it to generate the per-instance self-signed cert, so a missing openssl
 # must fail at AMI build, not on the ASG self-heal path with no template fix.
 echo "Installing static deployment tooling..."
-dnf remove -y awscli 2>/dev/null || true
+dnf remove -y awscli-2 2>/dev/null || true
 dnf install -y unzip python3.11 jq openssl amazon-cloudwatch-agent aws-cfn-bootstrap
 
 ARCH="x86_64"
@@ -266,9 +268,33 @@ echo "Instance running. Build in progress (typically 3-5 minutes)..."
 echo "Waiting for instance to stop (build shuts down when done)..."
 echo ""
 
-aws ec2 wait instance-stopped \
-  --region "${REGION}" \
-  --instance-ids "${INSTANCE_ID}"
+# The build script only reaches shutdown when every step succeeded, because of
+# set -e. A failed step leaves the instance running, so a timeout here means the
+# bake failed. The builder has no IAM profile, so it cannot report why.
+BUILD_STOPPED=false
+for _ in $(seq 1 48); do
+  STATE=$(aws ec2 describe-instances \
+    --region "${REGION}" \
+    --instance-ids "${INSTANCE_ID}" \
+    --query "Reservations[0].Instances[0].State.Name" \
+    --output text)
+  if [ "${STATE}" = "stopped" ]; then
+    BUILD_STOPPED=true
+    break
+  fi
+  echo "  build instance is ${STATE}..."
+  sleep 15
+done
+
+if [ "${BUILD_STOPPED}" != "true" ]; then
+  echo "ERROR: Build instance ${INSTANCE_ID} did not stop within 12 minutes."
+  echo "A build step in the UserData script most likely failed."
+  echo "Terminating the build instance. No AMI was created."
+  aws ec2 terminate-instances \
+    --region "${REGION}" \
+    --instance-ids "${INSTANCE_ID}" > /dev/null
+  exit 1
+fi
 
 echo "Instance stopped. Build complete."
 

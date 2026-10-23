@@ -366,7 +366,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Delete the SSM parameter (local AMI mode only)
+# Step 2: Delete the temporary ImageId SSM parameter
 # ---------------------------------------------------------------------------
 if [ -n "${SSM_PARAM_PATH}" ]; then
   echo ""

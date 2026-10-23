@@ -35,6 +35,7 @@ from neo4j_ee.licenses import resolve_license_secret_arns  # noqa: E402
 from neo4j_ee.outputs import parse_key_value_text  # noqa: E402
 
 SOURCE_REGION = "us-east-1"
+MARKETPLACE_PRODUCT_CODE = "4t4a9h39qkq4tbo3n9zd51p25"
 SUPPORTED_REGIONS = [
     "us-east-1", "us-east-2", "us-west-2",
     "eu-west-1", "eu-central-1",
@@ -95,6 +96,9 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--number-of-servers", type=int, default=3, choices=[1, 3])
     p.add_argument("--marketplace", action="store_true")
+    p.add_argument("--allow-old-marketplace-ami", action="store_true",
+                   help="With --marketplace: deploy even if the listing AMI "
+                        "predates the contents the bootstrap needs.")
     p.add_argument("--cert-arn", metavar="ACM_ARN", default="",
                    help="Existing ACM certificate ARN for the NLB TLS listeners. "
                         "If omitted for Private/ExistingVpc (and not Public), a "
@@ -119,6 +123,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--private-dns-hosted-zone-id", metavar="ZONE_ID", default="",
                    help="Existing Route 53 private hosted zone ID to receive the "
                         "AdvertisedDNS alias record.")
+    p.add_argument(
+        "--marketplace-product-code",
+        default=MARKETPLACE_PRODUCT_CODE,
+        help=(
+            "AWS Marketplace product code used with --marketplace to resolve "
+            f"the region-local AMI (default: {MARKETPLACE_PRODUCT_CODE})."
+        ),
+    )
     p.add_argument("--alert-email", metavar="EMAIL")
     p.add_argument("--mode", default="Private", choices=["Public", "Private", "ExistingVpc"])
     p.add_argument("--allowed-cidr", metavar="CIDR")
@@ -655,6 +667,9 @@ def main() -> None:
     source_ami_id = ami_info.source_ami_id
     ami_source = ami_info.source
     ssm_param_path = ami_info.ssm_param_path
+    marketplace_product_code = ami_info.marketplace_product_code
+    marketplace_ami_owner = ami_info.marketplace_ami_owner
+    marketplace_ami_name = ami_info.marketplace_ami_name
     cleanup_state["copied_ami_id"] = ami_info.copied_ami_id
 
     bloom_license_secret_arn, gds_license_secret_arn, created_license_secret_arns = (
@@ -763,10 +778,15 @@ def main() -> None:
     print(f"  Install GDS:    {install_gds}")
     print(f"  Bloom licence:  {'yes' if bloom_license_secret_arn else 'no'}")
     print(f"  GDS licence:    {'yes' if gds_license_secret_arn else 'no'}")
-    if not args.marketplace:
-        print(f"  AMI:            {ami_id}")
-        if cleanup_state["copied_ami_id"]:
-            print(f"  AMI original:   {source_ami_id} (copied from {SOURCE_REGION})")
+    print(f"  AMI:            {ami_id}")
+    if args.marketplace:
+        print(f"  Product code:   {marketplace_product_code}")
+    if marketplace_ami_name:
+        print(f"  AMI name:       {marketplace_ami_name}")
+    if marketplace_ami_owner:
+        print(f"  AMI owner:      {marketplace_ami_owner}")
+    if cleanup_state["copied_ami_id"]:
+        print(f"  AMI original:   {source_ami_id} (copied from {SOURCE_REGION})")
     if args.alert_email:
         print(f"  Alert email:    {args.alert_email}")
     print("=============================================")
@@ -900,6 +920,12 @@ def main() -> None:
             extra.append(("ExistingEndpointSgId", args.existing_endpoint_sg_id))
     if ssm_param_path:
         extra.extend([("SSMParamPath", ssm_param_path), ("AmiId", ami_id)])
+    if marketplace_product_code:
+        extra.append(("MarketplaceProductCode", marketplace_product_code))
+    if marketplace_ami_name:
+        extra.append(("MarketplaceAmiName", marketplace_ami_name))
+    if marketplace_ami_owner:
+        extra.append(("MarketplaceAmiOwner", marketplace_ami_owner))
     if cleanup_state["copied_ami_id"]:
         extra.extend([("CopiedAmiId", cleanup_state["copied_ami_id"]), ("SourceRegion", SOURCE_REGION)])
     # Recorded so the validate-private tooling resolves the +ssc Bolt scheme

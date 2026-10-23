@@ -52,7 +52,7 @@ cfn-lint templates/neo4j-private-existing-vpc.template.yaml   # clean; W1030 sco
 # Deploy (deploy.py defaults to Private, 3-node, t3.medium; installs Bloom+GDS — differs from Marketplace defaults of false/false)
 ./deploy.py --region us-east-1
 ./deploy.py --mode Public --region us-east-1
-./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx
+./deploy.py --mode ExistingVpc --vpc-id vpc-xxxx --subnet-1 subnet-xxxx --subnet-2 subnet-xxxx --subnet-3 subnet-xxxx --private-route-table-1 rtb-xxxx
 ./deploy.py --number-of-servers 1            # single node
 ./deploy.py --marketplace                    # use published Marketplace AMI
 # Private/ExistingVpc terminate TLS at the NLB by default: with no --cert-arn a

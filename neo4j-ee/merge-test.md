@@ -8,6 +8,37 @@ The primary test is a `./deploy.py --marketplace` deployment. That path is where
 
 All commands run from `neo4j-ee/` unless a step says otherwise.
 
+## Status summary (2026-10-22, end of session)
+
+**The merge is not signed off.** Everything that can be tested without a new listing AMI passes. The real Phase 1 (`./deploy.py --marketplace`) is still FAIL because the published listing AMI `ami-0a6984262620899b5` (2025-12-17) predates the current `create-ami.sh`.
+
+| Phase | Result |
+|---|---|
+| 0 Offline gates | PASS |
+| 1 `--marketplace` deploy | FAIL (listing AMI too old). Local-AMI rerun in `385155106615` PASS: preflight, default and release suites, TLS, resilience, teardown |
+| 2 Failure paths | 2.1, 2.4, 2.5 PASS. 2.2 and 2.6 BLOCKED on the listing AMI. 2.3 skipped |
+| 3 Branch features | 3.1 to 3.5 and 3.7 PASS. 3.6 PASS except an expired Bloom licence file |
+| 4 Main-side | 4.1 and 4.2 PASS. 4.3 not run |
+| 5 Orphan sweep | PASS in `385155106615`. Recheck of `159878781974` outstanding (SSO expired) |
+
+**Still to do**
+
+1. When the listing carries an AMI newer than 2026-05-15, re-run Phase 1 with `./deploy.py --marketplace --region us-east-1 --no-bloom --no-gds` in `159878781974`, then 2.2 and 2.6. The user submits to the listing by hand in the Marketplace Portal. Check with the lookup in `src/neo4j_ee/amis.py`.
+2. Replace the expired `.licenses/bloom.license`, then re-run step 3.6 to confirm the Bloom check.
+3. Recheck `159878781974` (`aws sso login --profile default`): no `test-ee-*` stacks, no `/neo4j-ee/test/` parameters, no available test volumes.
+4. Optional: CE unit tests (4.1) and `test-cve.md` (4.3).
+
+**Findings to discuss (no code was changed for any of them)**
+
+1. **SSM parameter leak. Fixed and verified live (2026-10-23).** `cleanup()` now deletes `/neo4j-ee/test/<stack>/ami-id` on any exit before `create_stack` returns. Once the stack exists the parameter is kept, because the launch templates resolve the AMI through it. Live results in `385155106615`, `us-east-1`: `--create-private-dns` without a zone and `--cert-arn` that does not cover `--advertised-dns` each printed `Cleaning up SSM parameter ...` and left `/neo4j-ee/test/` unchanged. A successful 1-node Private deploy (`test-ee-1792771376`) kept its parameter, and `teardown.sh --delete-volumes` then deleted it with the stack, secret, certificate and volume. The missing-licence trigger was not run live because local licence files exist. It takes the same `cleanup()` path.
+2. **Stack name collision. Documented, not fixed.** The stack name is `test-ee-<unix seconds>`. Two `deploy.py` runs started in the same second get the same stack name and the same SSM path. This happened once when I launched 3.6 and 3.7 together. `docs/LOCAL-TESTING.md` now tells operators to start runs at least a second apart.
+3. **Plan error in 3.7. Fixed.** The step 3.7 command now passes `--private-dns-zone neo4j.local`, the zone that contains the default AdvertisedDNS `neo4j-<stack>.neo4j.local`.
+4. **Plan error in 4.2. Fixed.** Step 4.2 now runs only `git check-ignore -v .licenses/bloom.license`, so it no longer risks deleting a real licence file.
+5. **Elastic IP quota and `create-test-vpc.py` rollback. Rollback fixed and verified live (2026-10-23).** `us-east-1` in `385155106615` is at its EIP limit from other workloads, so `create-test-vpc.py` and a Private stack can still fail there with `AddressLimitExceeded`. The script now records each resource as it creates it and deletes them in reverse order when a later step fails. A live run in `us-east-1` hit `AddressLimitExceeded` on the first EIP. It rolled back the VPC, IGW, six subnets and three route tables, and the account was back to two VPCs and 13 EIPs.
+6. **Redirected output. Fixed and verified live (2026-10-23).** Cause confirmed: Python block-buffers stdout when it is a pipe or file. `deploy.py` now calls `sys.stdout.reconfigure(line_buffering=True)` at the start of `main()`. During the live deploy, the redirected log held 10 lines while the stack was still creating.
+
+**Left alone:** stack `test-ee-1792647880` and its `/neo4j-ee/test-ee-1792647880/*` parameters, certificate and secret in `385155106615`. Six older `neo4j-test-ee-17789*.neo4j.local` certificates in `159878781974`. Unassociated EBS volumes and EIP `eipalloc-0c515de1d7598d4fe` in `us-east-1` that predate this work. The `marketplace/ami-id.txt` AMI `ami-0f92649f24792a2a3` and the `ami-0343e14cf79009051` AMI.
+
 ## What the merge changed
 
 The merge touched three conflicting files and one auto-merged script. Each row below maps to a test phase.
@@ -640,7 +671,7 @@ Without licence files, run the same command with the `.licenses/` directory move
 
 ```bash
 ./deploy.py --mode Private --region us-east-1 --number-of-servers 1 --no-bloom --no-gds \
-  --create-private-dns
+  --create-private-dns --private-dns-zone neo4j.local
 ```
 
 **Expected:** The record has `Neo4jPrivateDnsRecord` and `Neo4jPrivateDnsHostedZoneId`. The name resolves from the bastion to the NLB.
@@ -672,12 +703,10 @@ cd ../neo4j-ce && uv run python -m unittest discover -s test_ce
 ### 4.2 Licence files stay out of git
 
 ```bash
-mkdir -p .licenses && touch .licenses/bloom.license
 git check-ignore -v .licenses/bloom.license
-rm .licenses/bloom.license
 ```
 
-**Expected:** `git check-ignore` prints the `.gitignore` rule that matches.
+**Expected:** `git check-ignore` prints the `.gitignore` rule that matches. The check reads the path and does not need the file to exist, so do not `touch` and `rm` it. That would delete a real licence file.
 
 ### 4.3 CVE remediation guidance
 
@@ -739,25 +768,26 @@ Fill in during the run.
 | 1.2, 1.4, 1.5, 1.7 | 2026-10-22 | | Not run | No working cluster. |
 | 1.3, 1.6 | 2026-10-22 | `test-ee-1792716760` | Partly run, pass | SSM parameter, `ResolvedValue`, node AMI ids, AMI product code, and certificate all correct. |
 | 1.8 | | | Not run | Stack still running. Awaiting a decision. |
-| 2.1 | | | | |
-| 2.2 | | | | |
-| 2.3 | | | | |
-| 2.4 | | | | |
-| 2.5 | | | | |
-| 2.6 | | | | |
-| 3.1 | | | | |
-| 3.2 | | | | |
-| 3.3 | | | | |
-| 3.4 | | | | |
-| 3.5 | | | | |
-| 3.6 | | | | |
-| 3.7 | | | | |
-| 4.1 to 4.3 | | | | |
-| 5 | | | | |
+| 1.1 to 1.8 (local-AMI rerun) | 2026-10-22 | `test-ee-1792722574`, account `385155106615`, local AMI `ami-0f92649f24792a2a3`, Private, 3 nodes, `--no-bloom --no-gds` | PASS (listing lookup not tested) | Stack `CREATE_COMPLETE`. Record fields correct for local mode (`AmiSource=local`, SSM path, `Neo4jTlsSelfSigned=true`, `neo4j+ssc://` Bolt URL). SSM parameter and `ResolvedValue` equal the AMI id. All three nodes run the AMI. Cert `IMPORTED`/`ISSUED`, SAN correct, in use by the NLB. `preflight` 12 passed, 0 failed. Default suite 20/20, release suite 26/26 (`--expected-cypher-default CYPHER_25`; Neo4j 2026.10.0, Java 25.0.4.1). `dbms.components()` edition `enterprise`. `SHOW SERVERS` 3 `Enabled`/`Available`. `smoke-write.py` 5/5. Resilience: terminated `i-01e7daf4850d6e493`, three servers `Available` again after about 3.5 minutes, replacement `i-0f4d946f15a4f2653` on the same AMI. Teardown with `--delete-volumes`: stack, SSM parameter, certificate, secret and 3 volumes deleted and verified. Proves merged templates, bootstrap, TLS and operator tooling on the new AMI. Real Phase 1 (`--marketplace`) still FAIL until the listing carries a new AMI. |
+| 2.1 | 2026-10-22 | `--marketplace --marketplace-product-code does-not-exist`, account `159878781974` | PASS | Exited with the expected "Could not find an available AWS Marketplace AMI" error naming the code and region. No stack, no SSM parameter under `/neo4j-ee/test/`, no new `.deploy/` record. Only the six older `.neo4j.local` certificates remain. |
+| 2.2 | 2026-10-22 | `--marketplace --marketplace-product-code 4t4a9h39qkq4tbo3n9zd51p25`, account `159878781974` | BLOCKED | Exited 1 at the `MIN_BOOTSTRAP_AMI_DATE` guard: listing AMI `ami-0a6984262620899b5` is dated 2025-12-17. Nothing created. This confirms the guard, not the success path. Re-run when the listing carries a new AMI. |
+| 2.3 | 2026-10-22 | | SKIPPED | Every region printed a listing row in step 0.6. |
+| 2.4 | 2026-10-22 | `--marketplace --allow-old-marketplace-ami`, no `.licenses/`, account `159878781974` | PASS (leak recorded) | Exited with `InstallBloom=true requires a Bloom licence`, no stack, no new `.deploy/` record. The SSM parameter `/neo4j-ee/test/test-ee-1792724216/ami-id` leaked, as predicted. Two more triggers also leaked it (account `385155106615`): `--cert-arn` that does not cover `--advertised-dns` (step 3.4 mismatch case) and `--create-private-dns` without a zone name. Orphans deleted by hand. Follow-up item 2 stands. `.licenses/` restored. |
+| 2.5 | 2026-10-22 | `test-ee-1792724228`, `--marketplace --allow-old-marketplace-ami --mode ExistingVpc` with fake ids, account `159878781974` | PASS | Stack `CREATE_FAILED` on the fake VPC id. `cleanup()` removed the certificate and S3 bucket. The `.failed` record listed `SSMParamPath`. `teardown.sh --delete-volumes` removed the SSM parameter, volumes and record. Needed the override flag because the guard fires first. |
+| 2.6 | | | BLOCKED | Needs a listing AMI newer than 2026-05-15. |
+| 3.1 | 2026-10-22 | Covered by the Phase 1 rerun `test-ee-1792722574` | PASS | `AmiSource=local`, SSM path, `AmiId` equals `marketplace/ami-id.txt`. No `Marketplace*` fields. Banner has an `AMI:` line and no `Product code:` line. Preflight and default suite passed. |
+| 3.2 | 2026-10-22 | `test-ee-1792724619` and `test-ee-1792725458`, us-east-2, 1 node, account `385155106615` | PASS | First run copied `ami-0f92649f24792a2a3` to `ami-02e176d9e7afbc789`. Record has `CopiedAmiId` and `SourceRegion`. Copy carries tags `SourceAmiId` and `SourceRegion`. Banner prints `AMI original:`. Second run printed `Reusing existing copied AMI`. Both stacks torn down. AMI copy and snapshot deleted afterward. |
+| 3.3 | 2026-10-22 | `test-ee-1792724620`, Public, 1 node | PASS | Banner `TLS: disabled (plain TCP)`. Bolt URL `bolt://`. No `AutoImportedCertificateArn`. Torn down. Assertions only; no functional validation (`validate-private` is for Private stacks). |
+| 3.4 | 2026-10-22 | `test-ee-1792726440`, Public with `--enable-public-tls`, self-signed imported cert | PASS | Banner `TLS: enabled`. Record has `CertificateArn` and `AdvertisedDNS`, no `AutoImportedCertificateArn`. The cert survived teardown (`ISSUED`, not in use). Mismatch case (`--advertised-dns other.example.com`) exited 1 before stack creation with the SAN mismatch error, leaking the SSM parameter. The test cert was deleted afterward. |
+| 3.5 | 2026-10-22 | `test-ee-1792731067`, ExistingVpc, us-east-2, 1 node, `scripts/create-test-vpc.py` VPC | PASS | Self-signed TLS applied. Preflight 12/12. Default suite 16/16. Stack and test VPC torn down. us-east-1 could not be used: the account is at its Elastic IP quota from other workloads. |
+| 3.6 | 2026-10-22 | `test-ee-1792727248`, Private, 1 node, Bloom + GDS | PASS with 1 data failure | `InstallBloom` and `InstallGDS` true. `AutoCreatedLicenseSecretArns` recorded. Preflight 12/12. GDS 2026.10.0 loaded. 17 of 18 checks passed. The Bloom licence check failed because the local `.licenses/bloom.license` expired on 2026-10-21 (`-1 days remaining`). Needs a fresh licence file. Teardown deleted the licence secrets. The missing-licence early exit is the same path as step 2.4. Note: I deleted this stack's SSM parameter by mistake while cleaning an orphan (see Notes), so ASG self-heal was not tested on it. |
+| 3.7 | 2026-10-22 | `test-ee-1792729780`, Private, 1 node, `--create-private-dns --private-dns-zone neo4j.local` | PASS | Record has `Neo4jPrivateDnsRecord` and `Neo4jPrivateDnsHostedZoneId`. From the bastion, the name resolves to `10.0.10.207`, the same IP as the NLB DNS name. Preflight 12/12, suite 16/16. The plan's command omits `--private-dns-zone`, which is required. |
+| 4.1 to 4.3 | 2026-10-22 | | PASS (4.3 not run) | 4.1: `cfn-lint` clean on the CE template, CE `pc:w4wy...` count 9, CE `pc:4t4a...` count 0, EE private template `pc:4t4a...` count 25. CE unit tests not run. 4.2: `.gitignore:58 neo4j-ee/.licenses/` matches. 4.3 is a follow-on and was not run. |
+| 5 | 2026-10-22 | Sweep of us-east-1 and us-east-2, account `385155106615` | PASS | No test stacks (other than `test-ee-1792647880`, which belongs to someone else), no SSM parameters, certificates, secrets, volumes, VPCs or AMI copies left from this run. Unassociated volumes and the unassociated EIP `eipalloc-0c515de1d7598d4fe` predate this run and are not mine. Account `159878781974` was last checked after step 2.5 (clean); its SSO token expired afterward, so a final recheck there is outstanding. |
 
 ## Follow-ups after sign-off
 
-1. Update `docs/LOCAL-TESTING.md` lines 61 and 78 to describe the product-code lookup and the SSM parameter in marketplace mode.
-2. If step 2.4 shows a leaked SSM parameter, discuss the fix before changing any code. The options are deleting the parameter in `cleanup()`, creating it just before stack creation, or writing the partial record earlier. Land the fix in a separate commit after the merge.
-3. Fix the stale `.gitignore` comment that mentions `deploy.sh --tls`.
+1. Done: `docs/LOCAL-TESTING.md` already describes the product-code lookup and the SSM parameter in marketplace mode. It now also documents the stack name collision.
+2. Done in code: the SSM leak fix in `cleanup()`. Land it in a separate commit after the merge, and verify it against AWS with the three triggers listed in finding 1.
+3. Done: the stale `.gitignore` comment that mentioned `deploy.sh --tls`.
 4. Commit the merge. Keep the uncommitted `CLAUDE.md` edit out of the merge commit.

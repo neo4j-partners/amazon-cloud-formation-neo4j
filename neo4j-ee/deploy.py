@@ -533,6 +533,8 @@ def write_partial_record(
 
 
 def main() -> None:
+    # Stack creation takes minutes; flush each line so a redirect or tee shows progress.
+    sys.stdout.reconfigure(line_buffering=True)
     if not os.environ.get("AWS_PROFILE"):
         print("WARNING: AWS_PROFILE not set, using default", file=sys.stderr)
     os.environ.setdefault("AWS_PROFILE", "default")
@@ -618,6 +620,7 @@ def main() -> None:
     cleanup_state = {
         "cfn_bucket": None,
         "copied_ami_id": None,
+        "ssm_param_path": None,
         "auto_imported_cert_arn": None,
         "license_secret_arns": [],
     }
@@ -635,6 +638,13 @@ def main() -> None:
                 s3.delete_bucket(Bucket=bucket)
             except Exception as e:
                 print(f"  Warning: could not fully clean up S3 bucket {bucket}: {e}")
+        if cleanup_state["ssm_param_path"]:
+            path = cleanup_state["ssm_param_path"]
+            print(f"\nCleaning up SSM parameter {path}...")
+            try:
+                boto3.client("ssm", region_name=region).delete_parameter(Name=path)
+            except Exception as e:
+                print(f"  Warning: could not delete SSM parameter {path}: {e}")
         if cleanup_state["auto_imported_cert_arn"]:
             arn = cleanup_state["auto_imported_cert_arn"]
             print(f"\nCleaning up auto-imported ACM certificate {arn}...")
@@ -671,6 +681,9 @@ def main() -> None:
     marketplace_ami_owner = ami_info.marketplace_ami_owner
     marketplace_ami_name = ami_info.marketplace_ami_name
     cleanup_state["copied_ami_id"] = ami_info.copied_ami_id
+    # Deleted on any exit before create_stack succeeds. Once the stack exists
+    # its launch templates resolve the AMI through this path, so it is kept.
+    cleanup_state["ssm_param_path"] = ssm_param_path
 
     bloom_license_secret_arn, gds_license_secret_arn, created_license_secret_arns = (
         resolve_license_secret_arns(args, region, stack_name, LOCAL_LICENSE_FILES)
@@ -854,6 +867,10 @@ def main() -> None:
     # interrupted. The record is rewritten with the StackId as soon as
     # create_stack returns; the describe_stacks lookup below is a fallback
     # for an interrupt before that response arrives.
+    def _on_stack_created(stack_id: str) -> None:
+        cleanup_state["ssm_param_path"] = None
+        _write_failed_record(stack_id)
+
     _write_failed_record()
     try:
         create_stack_and_wait(
@@ -861,14 +878,14 @@ def main() -> None:
             stack_name,
             template_url,
             cfn_params,
-            on_stack_created=_write_failed_record,
+            on_stack_created=_on_stack_created,
         )
     except (Exception, KeyboardInterrupt):
         try:
             stack_id = cfn.describe_stacks(StackName=stack_name)["Stacks"][0][
                 "StackId"
             ]
-            _write_failed_record(stack_id)
+            _on_stack_created(stack_id)
         except (ClientError, BotoCoreError):
             # create_stack was rejected (no stack to record) or the session
             # died during the wait; either way keep the original exception.

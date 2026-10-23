@@ -87,6 +87,8 @@ Run all commands from `neo4j-ee/`.
 
 Stack creation typically takes 5 to 10 minutes. Private mode creates NAT Gateways that bill hourly. A running stack costs money, so tear it down when you finish.
 
+The stack name is `test-ee-<unix seconds>`. Do not start two `deploy.py` runs in the same second. They get the same stack name and the same SSM parameter path, so one run overwrites the other's parameter and a teardown of one removes the parameter the other needs. Start the second run at least a second later.
+
 ### Existing VPC
 
 Pass the VPC, the subnets, and the route table. For three nodes, all three subnets are required:

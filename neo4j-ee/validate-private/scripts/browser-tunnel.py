@@ -16,7 +16,7 @@ from private_tools import (
     read_outputs,
     require_field,
     require_private_mode,
-    resolve_bolt_scheme,
+    resolve_direct_bolt_scheme,
     resolve_outputs_file,
 )
 
@@ -40,7 +40,7 @@ def main() -> None:
     bastion_id = require_field(fields, "Neo4jOperatorBastionId", outputs_file)
     nlb_dns = require_field(fields, "Neo4jInternalDNS", outputs_file)
     advertised_dns = require_field(fields, "AdvertisedDNS", outputs_file)
-    bolt_scheme = resolve_bolt_scheme(fields)
+    bolt_scheme = resolve_direct_bolt_scheme(fields)
 
     print("=== Neo4j Browser Tunnel ===")
     print()

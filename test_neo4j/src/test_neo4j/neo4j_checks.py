@@ -156,7 +156,7 @@ def check_bloom_license(config: StackConfig, reporter: TestReporter) -> None:
     the JWT validates. Without a licence it reports "missing" — gds.version()
     style smoke tests would not catch this regression.
     """
-    if not config.bloom_licensed:
+    if not (config.bloom_expected and config.bloom_licensed):
         return
     with reporter.test("Bloom Enterprise licence") as ctx:
         try:
@@ -180,7 +180,7 @@ def check_gds_license(config: StackConfig, reporter: TestReporter) -> None:
     checks are required: gds.isLicensed() must return TRUE, and the gdsEdition
     sysInfo key must report "Licensed".
     """
-    if not config.gds_licensed:
+    if not (config.gds_expected and config.gds_licensed):
         return
     with reporter.test("GDS Enterprise licence") as ctx:
         try:

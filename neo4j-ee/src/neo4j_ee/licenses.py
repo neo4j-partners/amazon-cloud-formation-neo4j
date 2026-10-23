@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 
 def create_local_license_secret(
@@ -43,11 +44,38 @@ def resolve_license_secret_arns(
     stack_name: str,
     local_license_files: dict[str, Path],
 ) -> tuple[str, str, list[str]]:
-    """Resolve explicit or local licence inputs to Secrets Manager ARNs."""
+    """Resolve explicit or local licence inputs to Secrets Manager ARNs.
+
+    Secrets created from local licence files are deleted again if any later
+    step fails, because the caller never receives their ARNs in that case.
+    """
     sm = boto3.client("secretsmanager", region_name=region)
+    created_secret_arns: list[str] = []
+    # BaseException so SystemExit (empty licence file) and Ctrl-C also roll
+    # back. The exception is always re-raised.
+    try:
+        return _resolve_license_secret_arns(
+            sm, args, stack_name, local_license_files, created_secret_arns
+        )
+    except BaseException:
+        for arn in created_secret_arns:
+            try:
+                sm.delete_secret(SecretId=arn, ForceDeleteWithoutRecovery=True)
+            except (ClientError, BotoCoreError) as exc:
+                print(f"  Warning: could not delete licence secret {arn}: {exc}")
+        raise
+
+
+def _resolve_license_secret_arns(
+    sm,
+    args: argparse.Namespace,
+    stack_name: str,
+    local_license_files: dict[str, Path],
+    created_secret_arns: list[str],
+) -> tuple[str, str, list[str]]:
+    """Append each secret created here to created_secret_arns as it is made."""
     bloom_input = args.bloom_license_secret_id
     gds_input = args.gds_license_secret_id
-    created_secret_arns: list[str] = []
 
     if not args.no_local_licenses:
         local_specs = [

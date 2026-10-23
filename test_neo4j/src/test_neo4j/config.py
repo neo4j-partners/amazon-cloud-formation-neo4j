@@ -109,20 +109,34 @@ def load_config(
             f"Required field(s) missing from {outputs_path.name}: {', '.join(missing)}"
         )
 
-    if "Neo4jBrowserURL" not in fields or "Neo4jURI" not in fields:
+    # EE publishes Neo4jHttpsUrl / Neo4jBoltUrl; CE still publishes the older
+    # Neo4jBrowserURL / Neo4jURI names.
+    browser_key = "Neo4jHttpsUrl" if edition == "ee" else "Neo4jBrowserURL"
+    uri_key = "Neo4jBoltUrl" if edition == "ee" else "Neo4jURI"
+    if browser_key not in fields or uri_key not in fields:
         if edition == "ee":
             raise ValueError(
                 "This test runner only supports public EE stacks (internet-facing NLB). "
-                "The deploy output is missing Neo4jBrowserURL and Neo4jURI — "
-                "private EE stacks require SSM tunneling and are not supported here."
+                f"The deploy output is missing {browser_key} and {uri_key}. "
+                "Private EE stacks require SSM tunneling and are not supported here."
             )
         raise ValueError(
             f"Required field(s) missing from {outputs_path.name}: "
-            + ", ".join(f for f in ("Neo4jBrowserURL", "Neo4jURI") if f not in fields)
+            + ", ".join(f for f in (browser_key, uri_key) if f not in fields)
         )
 
-    browser_url = fields["Neo4jBrowserURL"]
-    neo4j_uri = fields["Neo4jURI"]
+    # Private and ExistingVpc EE stacks publish the same URL keys, so the
+    # deployment mode is the only thing that keeps them out of this runner.
+    if edition == "ee" and fields.get("DeploymentMode", "Public") != "Public":
+        raise ValueError(
+            "This test runner only supports public EE stacks (internet-facing NLB). "
+            f"Stack {fields['StackName']!r} has "
+            f"DeploymentMode={fields['DeploymentMode']}; private EE stacks "
+            "require SSM tunneling and are not supported here."
+        )
+
+    browser_url = fields[browser_key]
+    neo4j_uri = fields[uri_key]
     host = urlparse(browser_url).hostname or browser_url
 
     install_apoc = fields.get("InstallAPOC", "no").lower() == "yes"
@@ -130,7 +144,8 @@ def load_config(
     # TLS is signalled by a non-empty AdvertisedDNS (the NLB terminates TLS and
     # the stack enforces server.bolt.tls_level=REQUIRED), so the runner uses the
     # +ssc scheme to tolerate the self-signed cert imported at deploy time. This
-    # mirrors neo4j_ee.outputs.resolve_bolt_scheme.
+    # mirrors neo4j_ee.outputs.resolve_bolt_scheme. Test-only: +ssc skips
+    # certificate verification, so do not copy it into production clients.
     bolt_tls_enabled = bool(fields.get("AdvertisedDNS"))
     if bolt_tls_enabled and neo4j_uri.startswith("neo4j://"):
         neo4j_uri = "neo4j+ssc://" + neo4j_uri[len("neo4j://"):]

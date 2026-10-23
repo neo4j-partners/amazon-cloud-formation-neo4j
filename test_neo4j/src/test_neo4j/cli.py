@@ -208,14 +208,20 @@ def _run_ee(args, config, reporter, session, resource_map) -> None:
             session, config, reporter, resource_map,
             run_security=args.infra_security,
         )
-        run_robust_tests_checks(session, config, reporter, resource_map)
+        amis_exist = run_robust_tests_checks(session, config, reporter, resource_map)
         run_cluster_checks(config, reporter, session, resource_map)
         run_ee_volume_checks(config, reporter, session, resource_map)
-        run_ee_cluster_resilience_tests(
-            config, reporter, session,
-            replacement_timeout=args.timeout,
-            resource_map=resource_map,
-        )
+        if amis_exist:
+            run_ee_cluster_resilience_tests(
+                config, reporter, session,
+                replacement_timeout=args.timeout,
+                resource_map=resource_map,
+            )
+        else:
+            log.error(
+                "Skipping resilience tests: a launch template AMI is missing, "
+                "so the ASG could not replace a terminated node."
+            )
     elif args.infra_security:
         from test_neo4j.security_checks import run_network_security_checks  # noqa: PLC0415
 

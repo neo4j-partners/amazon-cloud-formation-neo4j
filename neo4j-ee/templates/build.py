@@ -317,7 +317,7 @@ _PUBLIC_SPEC = TemplateSpec(
         "parameters-tls.yaml",
         "parameters-public.yaml",
     ),
-    rule_partials=("rules-common.yaml",),
+    rule_partials=("rules-common.yaml", "rules-public-tls.yaml"),
     conditions_partial="conditions-public.yaml",
     resource_partials=(
         "iam-public.yaml",

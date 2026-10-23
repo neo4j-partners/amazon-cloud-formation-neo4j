@@ -750,6 +750,8 @@ def main() -> None:
     # For the default test path (Private/ExistingVpc, no --cert-arn) import a
     # self-signed cert into ACM with SAN=AdvertisedDNS so tooling connects with
     # neo4j+ssc://. The resulting ARN is the only cert teardown may delete.
+    # Test-only: +ssc skips certificate verification, so do not copy it into
+    # production clients.
     if tls.needs_self_signed_import:
         print(
             f"No --cert-arn given; importing a self-signed ACM cert with "

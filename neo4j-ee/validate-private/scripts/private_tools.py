@@ -16,6 +16,7 @@ from neo4j_ee.outputs import (  # noqa: E402
     require_field as _require_field,
     require_private_mode as _require_private_mode,
     resolve_bolt_scheme,
+    resolve_direct_bolt_scheme,
     resolve_outputs_file as _resolve_outputs_file,
 )
 

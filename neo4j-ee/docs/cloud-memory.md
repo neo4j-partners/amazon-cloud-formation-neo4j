@@ -35,11 +35,20 @@ aws cloudwatch list-metrics \
   --region <region>
 ```
 
-## Installing CloudWatch Agent on a running stack
+## Enabling memory metrics on a running stack
 
-The Neo4j IAM role only includes `AmazonSSMManagedInstanceCore` by default. Three steps:
+The AMI already contains the CloudWatch Agent, and the bootstrap starts it with a config that
+ships the security, debug, and cloud-init logs. The agent does not collect memory metrics,
+and the instance role has no permission to publish them. Two steps add them.
 
-**1. Attach the CloudWatch policy to the instance role**
+Do not replace the agent config with `fetch-config` or the `AmazonCloudWatch-ManageAgent`
+`configure` action. Either one overwrites the bootstrap config and stops the log collection
+that the failed-authentication alarm depends on. Append a second config instead.
+
+**1. Allow the instance role to publish agent metrics**
+
+Add an inline policy limited to the `CWAgent` namespace. This is narrower than the managed
+`CloudWatchAgentServerPolicy`, which also grants log group creation and SSM parameter reads.
 
 ```bash
 # Get the role name from the instance profile
@@ -48,69 +57,46 @@ ROLE=$(aws iam get-instance-profile \
   --instance-profile-name $PROFILE_NAME \
   --query 'InstanceProfile.Roles[0].RoleName' --output text)
 
-aws iam attach-role-policy \
+aws iam put-role-policy \
   --role-name $ROLE \
-  --policy-arn arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+  --policy-name Neo4jCWAgentMetrics \
+  --policy-document '{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": "cloudwatch:PutMetricData",
+    "Resource": "*",
+    "Condition": { "StringEquals": { "cloudwatch:namespace": "CWAgent" } }
+  }]
+}'
 ```
 
-**2. Install the agent via SSM**
+**2. Append the metrics config on each instance**
 
 ```bash
 aws ssm send-command \
   --instance-ids <instance-id> \
-  --document-name AWS-ConfigureAWSPackage \
-  --parameters '{"action":["Install"],"name":["AmazonCloudWatchAgent"]}' \
+  --document-name AWS-RunShellScript \
+  --parameters '{"commands": [
+    "cat > /tmp/cw-memory.json <<EOF",
+    "{\"metrics\": {\"append_dimensions\": {\"InstanceId\": \"\\${aws:InstanceId}\"}, \"metrics_collected\": {\"mem\": {\"measurement\": [\"mem_used_percent\"]}, \"disk\": {\"measurement\": [\"disk_used_percent\"], \"resources\": [\"/\"]}}}}",
+    "EOF",
+    "/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a append-config -m ec2 -s -c file:/tmp/cw-memory.json",
+    "rm -f /tmp/cw-memory.json"
+  ]}' \
   --region <region>
 ```
 
-Wait for completion:
-
-```bash
-aws ssm get-command-invocation \
-  --command-id <command-id> \
-  --instance-id <instance-id> \
-  --region <region> \
-  --query '[StatusDetails,StandardErrorContent]'
-```
-
-**3. Push config and start the agent**
-
-```bash
-aws ssm put-parameter \
-  --name /neo4j-ee/<stack-name>/cw-agent-config \
-  --type String \
-  --overwrite \
-  --value '{
-  "metrics": {
-    "append_dimensions": { "InstanceId": "${aws:InstanceId}" },
-    "metrics_collected": {
-      "mem": { "measurement": ["mem_used_percent"] },
-      "disk": { "measurement": ["disk_used_percent"], "resources": ["/"] }
-    }
-  }
-}' \
-  --region <region>
-
-aws ssm send-command \
-  --instance-ids <instance-id> \
-  --document-name AmazonCloudWatch-ManageAgent \
-  --parameters '{
-    "action": ["configure"],
-    "mode": ["ec2"],
-    "optionalConfigurationSource": ["ssm"],
-    "optionalConfigurationLocation": ["/neo4j-ee/<stack-name>/cw-agent-config"],
-    "optionalRestart": ["yes"]
-  }' \
-  --region <region>
-```
+Check the result with the `get-command-invocation` call shown earlier, then query the metric.
+Nodes that the ASG replaces start from the bootstrap config, so repeat step 2 on a new node.
 
 ## Why this matters for Neo4j EE
 
 Neo4j's page cache and GDS in-memory graph projections consume most available RAM. The EC2
-`mem_used_percent` metric is the only way to observe this from outside the instance — the
+`mem_used_percent` metric is the only way to observe this from outside the instance. The
 standard EC2 CloudWatch namespace does not include memory. At 88%+ utilization on an
 `r8i.xlarge` (32 GB), there is insufficient headroom for concurrent GDS workloads.
 
-The CloudWatch Agent is not installed by default in the CloudFormation templates. It must be
-added manually per stack (as above), or `CloudWatchAgentServerPolicy` must be added to the
-IAM role in the template and the agent installed via UserData.
+The templates do not collect memory metrics by default. Adding that to the template would need
+`cloudwatch:PutMetricData` in the instance role and a metrics section in the bootstrap agent
+config.

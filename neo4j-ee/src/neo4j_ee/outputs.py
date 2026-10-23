@@ -95,6 +95,20 @@ def resolve_bolt_scheme(fields: dict[str, str]) -> str:
     return base
 
 
+def resolve_direct_bolt_scheme(fields: dict[str, str]) -> str:
+    """Return the non-routing Bolt scheme for a local port-forward.
+
+    A routed ``neo4j`` scheme makes the driver follow the routing table to the
+    NLB's private DNS name, which a laptop cannot reach. A direct ``bolt``
+    connection stays on the forwarded port and the cluster's server-side
+    routing (``dbms.routing.default_router=SERVER``) directs writes to the
+    leader. TLS handling matches ``resolve_bolt_scheme``.
+    """
+    if fields.get("AdvertisedDNS", ""):
+        return "bolt+ssc"
+    return "bolt"
+
+
 def require_private_mode(fields: dict[str, str]) -> None:
     """Validate that output fields describe a private EE deployment."""
     mode = fields.get("DeploymentMode", "Public")

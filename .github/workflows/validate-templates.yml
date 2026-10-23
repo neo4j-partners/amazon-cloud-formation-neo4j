@@ -7,6 +7,9 @@ on:
       - 'neo4j-ee/tests/**'
       - 'neo4j-ee/src/**'
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -19,7 +22,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install cfn-lint and test dependencies
-        run: pip install cfn-lint pyyaml
+        run: pip install cfn-lint pyyaml boto3
 
       - name: Verify template output is up to date
         run: python neo4j-ee/templates/build.py --verify

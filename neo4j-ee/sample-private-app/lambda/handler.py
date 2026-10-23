@@ -138,6 +138,7 @@ def _unverified_ctx():
     """NLB re-encrypts to the instance self-signed cert by design (AD-4), so
     these probes connect with TLS but without trust verification."""
     ctx = ssl.create_default_context()
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
     return ctx
@@ -182,6 +183,7 @@ def _probe_cert_identity(nlb_dns, advertised_dns):
         pem = ssl.DER_cert_to_PEM_cert(der)
 
         verify_ctx = ssl.create_default_context(cadata=pem)
+        verify_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         with socket.create_connection((nlb_dns, 7473), timeout=10) as raw:
             with verify_ctx.wrap_socket(raw, server_hostname=advertised_dns):
                 pass

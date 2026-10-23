@@ -486,6 +486,9 @@ def _probe_tls_dataplane(ssm, config: "StackConfig", reporter: "TestReporter") -
     # healthy target yet and curl returns 000. The check is correct, the
     # operator just ran early. On a settled stack the first curl returns
     # 200 and the loop exits immediately, adding no latency.
+    # Test-only: curl -k skips certificate verification because the default
+    # test path serves a self-signed cert. Identity is checked separately by
+    # the cert-identity probe.
     cmd = (
         f"IP=$(getent hosts {nlb} | awk '{{print $1; exit}}'); "
         f"for i in $(seq 1 9); do "

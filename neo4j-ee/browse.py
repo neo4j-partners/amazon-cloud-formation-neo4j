@@ -23,7 +23,7 @@ sys.path.insert(0, str(SCRIPT_DIR / "src"))
 from neo4j_ee.outputs import (  # noqa: E402
     read_outputs,
     require_field,
-    resolve_bolt_scheme,
+    resolve_direct_bolt_scheme,
     resolve_outputs_file,
 )
 
@@ -89,7 +89,7 @@ def main() -> None:
     except (FileNotFoundError, ValueError) as exc:
         raise SystemExit(f"ERROR: {exc}") from exc
     username = fields.get("Username", "neo4j")
-    bolt_scheme = resolve_bolt_scheme(fields)
+    bolt_scheme = resolve_direct_bolt_scheme(fields)
 
     print(f"Stack:         {stack_name}")
     print(f"Region:        {region}")

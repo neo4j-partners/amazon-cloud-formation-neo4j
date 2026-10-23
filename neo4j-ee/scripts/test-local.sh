@@ -28,14 +28,17 @@ python3 -m unittest discover -s neo4j-ee/tests
 
 echo
 echo "== Shell syntax checks =="
-bash -n \
+# bash -n checks only its first file argument, so check each file separately.
+for script in \
   neo4j-ee/templates/src/userdata.sh \
   neo4j-ee/templates/src/bootstrap/neo4j-bootstrap.sh \
   neo4j-ee/templates/src/partials/*.sh \
   neo4j-ee/*.sh \
   neo4j-ee/scripts/*.sh \
   neo4j-ee/marketplace/*.sh \
-  neo4j-ee/sample-private-app/*.sh
+  neo4j-ee/sample-private-app/*.sh; do
+  bash -n "${script}"
+done
 
 echo
 echo "== Diff whitespace check =="

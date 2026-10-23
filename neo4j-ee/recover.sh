@@ -5,7 +5,9 @@
 # Falls back to querying AWS directly when no deploy artifact exists.
 set -euo pipefail
 
-DEPLOY_DIR="$(cd "$(dirname "$0")/.deploy" && pwd)"
+# .deploy may not exist on a fresh checkout, so resolve the script directory
+# and append .deploy without changing into it.
+DEPLOY_DIR="$(cd "$(dirname "$0")" && pwd)/.deploy"
 
 STACK=""
 REGION=""
@@ -15,7 +17,7 @@ if [[ $# -ge 1 ]]; then
   DEPLOY_FILE="$DEPLOY_DIR/$1.txt"
   STACK="$1"
 else
-  DEPLOY_FILE=$(ls -t "$DEPLOY_DIR"/*.txt 2>/dev/null | head -1)
+  DEPLOY_FILE=$(ls -t "$DEPLOY_DIR"/*.txt 2>/dev/null | head -1 || true)
 fi
 
 if [[ -n "${DEPLOY_FILE:-}" && -f "$DEPLOY_FILE" ]]; then
@@ -60,14 +62,13 @@ echo ""
 
 # ── cloud-init log ────────────────────────────────────────────────────────────
 echo "=== cloud-init-output.log (last 60 lines) ==="
-aws ssm send-command \
+CMD_ID=$(aws ssm send-command \
   --region "$REGION" \
   --instance-ids "$INSTANCE_ID" \
   --document-name AWS-RunShellScript \
   --parameters 'commands=["tail -60 /var/log/cloud-init-output.log"]' \
   --output text \
-  --query 'Command.CommandId' > /tmp/recover-cmd-id.txt 2>&1
-CMD_ID=$(cat /tmp/recover-cmd-id.txt)
+  --query 'Command.CommandId')
 sleep 5
 aws ssm get-command-invocation \
   --region "$REGION" \

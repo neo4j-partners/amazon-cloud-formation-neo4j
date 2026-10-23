@@ -834,7 +834,10 @@ def check_nlb_dns_matches_outputs(
 
         outputs_host: str | None = None
         source_key: str | None = None
-        if outputs.get("Neo4jURI"):
+        if outputs.get("Neo4jHttpsUrl"):
+            outputs_host = urlparse(outputs["Neo4jHttpsUrl"]).hostname
+            source_key = "Neo4jHttpsUrl"
+        elif outputs.get("Neo4jURI"):
             outputs_host = urlparse(outputs["Neo4jURI"]).hostname
             source_key = "Neo4jURI"
         elif outputs.get("Neo4jBrowserURL"):
@@ -846,9 +849,9 @@ def check_nlb_dns_matches_outputs(
 
         if not outputs_host:
             ctx.fail(
-                "Stack outputs do not expose any of Neo4jURI, Neo4jBrowserURL, "
-                "or Neo4jInternalDNS — deploy.py and the test runner cannot "
-                "resolve the NLB DNS name."
+                "Stack outputs do not expose any of Neo4jHttpsUrl, Neo4jURI, "
+                "Neo4jBrowserURL, or Neo4jInternalDNS — deploy.py and the test "
+                "runner cannot resolve the NLB DNS name."
             )
             return
 
@@ -1058,9 +1061,10 @@ def check_launch_template_amis_exist(
     config: StackConfig,
     reporter: TestReporter,
     resource_map: dict[str, str],
-) -> None:
+) -> bool:
     """Fail-fast guard: every launch template in the stack must reference an AMI
-    that still exists in EC2.
+    that still exists in EC2. Returns True only when every AMI exists, so the
+    caller can skip destructive tests that depend on ASG self-heal.
 
     Without this, an unrelated `create-ami.sh` run that deregistered the AMI
     out from under a live stack only shows up as a 600-second timeout in the
@@ -1075,7 +1079,7 @@ def check_launch_template_amis_exist(
                 lt_ids.append((logical_id, physical_id))
         if not lt_ids:
             ctx.fail("No launch templates found in stack resources")
-            return
+            return False
 
         failures: list[str] = []
         passes: list[str] = []
@@ -1113,8 +1117,9 @@ def check_launch_template_amis_exist(
 
         if failures:
             ctx.fail("; ".join(failures))
-        else:
-            ctx.pass_(f"All launch template AMIs exist: " + ", ".join(passes))
+            return False
+        ctx.pass_(f"All launch template AMIs exist: " + ", ".join(passes))
+        return True
 
 
 def run_robust_tests_checks(
@@ -1122,12 +1127,19 @@ def run_robust_tests_checks(
     config: StackConfig,
     reporter: TestReporter,
     resource_map: dict[str, str],
-) -> None:
-    """Run the gap-closure checks introduced by the robust-tests plan."""
+) -> bool:
+    """Run the gap-closure checks introduced by the robust-tests plan.
+
+    Returns False when the launch template AMI guard fails, so the caller can
+    skip destructive resilience tests.
+    """
     check_template_plugin_license_contract(reporter)
-    check_launch_template_amis_exist(session, config, reporter, resource_map)
+    amis_exist = check_launch_template_amis_exist(
+        session, config, reporter, resource_map
+    )
     check_neo4j_conf_keys(session, config, reporter, resource_map)
     check_license_files_on_disk(session, config, reporter, resource_map)
     check_nlb_dns_matches_outputs(session, config, reporter, resource_map)
     check_cloudwatch_log_delivery(session, config, reporter, resource_map)
     check_ami_build_mode_tag(session, config, reporter, resource_map)
+    return amis_exist

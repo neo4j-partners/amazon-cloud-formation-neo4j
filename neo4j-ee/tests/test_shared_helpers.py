@@ -21,6 +21,7 @@ from neo4j_ee.outputs import (
     read_outputs,
     require_field,
     resolve_bolt_scheme,
+    resolve_direct_bolt_scheme,
     resolve_outputs_file,
     truthy,
 )
@@ -85,6 +86,22 @@ class OutputHelperTests(unittest.TestCase):
         self.assertEqual(
             resolve_bolt_scheme({"NumberOfServers": "3", "AdvertisedDNS": ""}),
             "neo4j",
+        )
+
+    def test_resolve_direct_bolt_scheme_never_routes(self) -> None:
+        # A laptop port-forward cannot follow routing tables to the NLB's
+        # private DNS name, so the scheme is always direct, 1 node or 3.
+        self.assertEqual(resolve_direct_bolt_scheme({"NumberOfServers": "1"}), "bolt")
+        self.assertEqual(resolve_direct_bolt_scheme({"NumberOfServers": "3"}), "bolt")
+        self.assertEqual(
+            resolve_direct_bolt_scheme(
+                {"NumberOfServers": "3", "AdvertisedDNS": "neo4j.example.com"}
+            ),
+            "bolt+ssc",
+        )
+        self.assertEqual(
+            resolve_direct_bolt_scheme({"NumberOfServers": "3", "AdvertisedDNS": ""}),
+            "bolt",
         )
 
 
